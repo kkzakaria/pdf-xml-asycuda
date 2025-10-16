@@ -1,0 +1,64 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Cache bust on dev to always rebuild
+      args:
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+
+    image: pdf-xml-asycuda-api:dev
+    container_name: pdf-xml-asycuda-api-dev
+
+    # Enable debug mode
+    environment:
+      - API_DEBUG=True
+      - API_PORT=8000
+
+    # Mount source code for hot reload
+    volumes:
+      - ./src:/app/src:ro
+      - ./run_api.py:/app/run_api.py:ro
+      - ./tests:/app/tests:ro
+      # Keep data volumes
+      - pdf-uploads-dev:/app/uploads
+      - pdf-outputs-dev:/app/output
+
+    # Override command to enable hot reload
+    command: >
+      sh -c "pip install watchfiles &&
+             python -m watchfiles 'python run_api.py' src/"
+
+    # Additional ports for debugging
+    ports:
+      - "8000:8000"
+      - "5678:5678"  # Python debugger port
+
+    # Interactive mode for debugging
+    stdin_open: true
+    tty: true
+
+    # Override logging for more verbose output
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    labels:
+      - "com.pdf-xml-asycuda.environment=development"
+      - "com.pdf-xml-asycuda.hot-reload=enabled"
+
+volumes:
+  pdf-uploads-dev:
+    driver: local
+    name: pdf-xml-asycuda-uploads-dev
+
+  pdf-outputs-dev:
+    driver: local
+    name: pdf-xml-asycuda-outputs-dev

@@ -56,3 +56,15 @@ test_results.json
 
 # Zone identifiers (Windows)
 *:Zone.Identifier
+
+# Docker
+.env
+.env.local
+.env.*.local
+docker-compose.override.yml
+*.tar
+*.tar.gz
+
+# Docker volumes
+uploads/
+!uploads/.gitkeep

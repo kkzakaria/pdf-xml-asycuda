@@ -1,0 +1,82 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.installed.cfg
+*.egg
+pip-log.txt
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+test_results.json
+test_results.md
+
+# Documentation (will be in image if needed)
+*.md
+!README_DOCKER.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Build artifacts
+build/
+dist/
+*.tar
+
+# Data files (too large for image)
+*.pdf
+*.xml
+output/
+uploads/
+
+# Logs
+*.log
+debug_extraction.txt
+
+# OS
+Thumbs.db
+.DS_Store
+*:Zone.Identifier
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Scripts (for development only)
+scripts/
+
+# Config (use .env.example as template)
+config/
