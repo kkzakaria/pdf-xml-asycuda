@@ -150,9 +150,9 @@ class RFCVParser:
 
     def _parse_declarant(self) -> Trader:
         """Parse les informations du déclarant"""
-        # Pour RFCV, souvent le déclarant = importateur
-        # À adapter selon structure exacte du document
-        return self._parse_consignee()
+        # Le RFCV ne contient pas les informations du déclarant
+        # Ces informations seront saisies manuellement dans ASYCUDA
+        return Trader()
 
     def _parse_country(self) -> Country:
         """Parse les informations sur les pays"""
