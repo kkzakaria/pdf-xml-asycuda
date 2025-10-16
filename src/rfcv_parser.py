@@ -112,15 +112,32 @@ class RFCVParser:
         if code_match:
             consignee.code = code_match
 
-        # Nom et adresse importateur (section 1)
-        name_pattern = r'1\.\s*Nom et Adresse de l\'Importateur.*?Code.*?\n(.*?)(?:\n\n|\n[0-9]\.|$)'
-        name_match = re.search(name_pattern, self.text, re.DOTALL | re.IGNORECASE)
+        # Nom et adresse importateur (section 1) - Pattern pour structure réelle
+        # Structure: "1. Nom et Adresse de l'Importateur Code : XXX ..." sur une ligne
+        # Puis le nom sur la ligne suivante avec RCS, dates, etc.
+        # Note: caractère apostrophe peut être ' ou ' (U+2019)
+        name_pattern = r"1\.\s*Nom et Adresse de l['\u2019]Importateur[^\n]*\n([^\n]+)"
+        name_match = re.search(name_pattern, self.text, re.IGNORECASE)
+
         if name_match:
-            lines = name_match.group(1).strip().split('\n')
-            if lines:
-                consignee.name = lines[0].strip()
-                if len(lines) > 1:
-                    consignee.address = '\n'.join(lines[1:]).strip()
+            first_line = name_match.group(1).strip()
+            # Extraire le nom avant RCS, dates, ou autre data
+            # Pattern: nom jusqu'à RCS ou date (DD/MM/YYYY) ou TOT/PART
+            name_parts = re.split(r'\s+RCS|\s+\d{2}/\d{2}/\d{4}|\s+TOT|\s+PART', first_line)
+            if name_parts and name_parts[0].strip():
+                consignee.name = name_parts[0].strip()
+
+        # Chercher l'adresse (ligne avec BP)
+        if consignee.name:
+            # Chercher après le nom
+            address_pattern = r"1\.\s*Nom et Adresse de l['\u2019]Importateur[^\n]*\n[^\n]+\n[^\n]*\n([^\n]*BP[^\n]+)"
+            address_match = re.search(address_pattern, self.text, re.IGNORECASE)
+            if address_match:
+                # Nettoyer l'adresse (enlever les numéros de suivi)
+                addr = address_match.group(1).strip()
+                # Prendre jusqu'au premier numéro long (>6 chiffres) qui est probablement un numéro de doc
+                addr_parts = re.split(r'\s+-\s+\d{7,}', addr)
+                consignee.address = addr_parts[0].strip()
 
         return consignee
 
@@ -128,23 +145,33 @@ class RFCVParser:
         """Parse les informations de l'exportateur"""
         exporter = Trader()
 
-        # Nom et adresse exportateur (section 2)
-        name_pattern = r'2\.\s*Nom et Adresse de l\'Exportateur[:\s]+(.*?)(?:\n\n|\n[0-9]\.|Emirats|United)'
-        name_match = re.search(name_pattern, self.text, re.DOTALL | re.IGNORECASE)
+        # Nom et adresse exportateur (section 2) - Pattern pour structure réelle
+        # Structure: "2. Nom et Adresse de l'Exportateur 11. Poids Total NET..." sur une ligne
+        # Puis le nom sur la ligne suivante avec poids
+        # Note: caractère apostrophe peut être ' ou ' (U+2019)
+        name_pattern = r"2\.\s*Nom et Adresse de l['\u2019]Exportateur[^\n]*\n([^\n]+)"
+        name_match = re.search(name_pattern, self.text, re.IGNORECASE)
+
         if name_match:
-            lines = name_match.group(1).strip().split('\n')
-            if lines:
-                # Première ligne = nom
-                exporter.name = lines[0].strip()
-                # Lignes suivantes = adresse
-                if len(lines) > 1:
-                    address_parts = []
-                    for line in lines[1:]:
-                        clean_line = line.strip()
-                        if clean_line and not clean_line.startswith('Emirats'):
-                            address_parts.append(clean_line)
-                    if address_parts:
-                        exporter.address = '\n'.join(address_parts)
+            first_line = name_match.group(1).strip()
+            # Extraire le nom avant les chiffres de poids (format: "XX XXX,XX")
+            # Le pattern de poids est typiquement: espace + nombres + espace + nombres avec virgule/point
+            name_parts = re.split(r'\s+\d+\s+\d[\d\s,\.]+', first_line)
+            if name_parts and name_parts[0].strip():
+                exporter.name = name_parts[0].strip()
+
+        # Chercher l'adresse (généralement 1-2 lignes après le nom)
+        if exporter.name:
+            # Pattern pour l'adresse qui peut contenir: ville, pays, etc.
+            address_pattern = r"2\.\s*Nom et Adresse de l['\u2019]Exportateur[^\n]*\n[^\n]+\n[^\n]*\n([^\n]+)"
+            address_match = re.search(address_pattern, self.text, re.IGNORECASE)
+            if address_match:
+                addr = address_match.group(1).strip()
+                # Nettoyer: prendre jusqu'à la fin ou jusqu'à un pattern de section suivante
+                # Arrêter avant les numéros de section (13., 14., etc.)
+                addr_clean = re.split(r'\s+\d{2}\.\s+', addr)[0]
+                if addr_clean and not addr_clean.startswith('13.') and not addr_clean.startswith('14.'):
+                    exporter.address = addr_clean.strip()
 
         return exporter
 
@@ -261,8 +288,15 @@ class RFCVParser:
         # Assurance
         insurance = self._extract_field(r'21\.\s*Assurance Attestée[:\s]+([\d\s,\.]+)')
 
-        # CIF
-        cif = self._extract_field(r'23\.\s*Valeur CIF Attestée[:\s]+([\d\s,\.]+)')
+        # CIF - Pattern amélioré pour capturer les valeurs avec espaces et formats variés
+        cif = self._extract_field(r'23\.\s*Valeur CIF Attestée[:\s]+([\d][\d\s,\.]+)')
+
+        # Si le pattern simple ne marche pas, chercher dans le contexte plus large
+        if not cif:
+            cif_pattern = r'Valeur CIF[^\d]*([\d][\d\s,\.]+)'
+            match = re.search(cif_pattern, self.text, re.IGNORECASE)
+            if match:
+                cif = match.group(1).strip()
 
         # Créer les CurrencyAmount
         valuation.invoice = CurrencyAmount(
@@ -382,8 +416,16 @@ class RFCVParser:
 
     def _extract_value_details(self) -> Optional[float]:
         """Extrait la valeur totale des détails"""
-        # Utilise la valeur CIF totale
-        cif = self._extract_field(r'23\.\s*Valeur CIF Attestée[:\s]+([\d\s,\.]+)')
+        # Utilise la valeur CIF totale avec pattern amélioré
+        cif = self._extract_field(r'23\.\s*Valeur CIF Attestée[:\s]+([\d][\d\s,\.]+)')
+
+        # Fallback si le pattern simple ne marche pas
+        if not cif:
+            cif_pattern = r'Valeur CIF[^\d]*([\d][\d\s,\.]+)'
+            match = re.search(cif_pattern, self.text, re.IGNORECASE)
+            if match:
+                cif = match.group(1).strip()
+
         if cif:
             return self._parse_number(cif)
         return None
