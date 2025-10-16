@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     build:
@@ -23,7 +21,7 @@ services:
       - API_PORT=8000
 
       # CORS Configuration
-      - API_CORS_ORIGINS=${API_CORS_ORIGINS:-*}
+      - API_CORS_ORIGINS=${API_CORS_ORIGINS:-["*"]}
       - API_CORS_ALLOW_CREDENTIALS=${API_CORS_ALLOW_CREDENTIALS:-True}
 
       # File Storage
