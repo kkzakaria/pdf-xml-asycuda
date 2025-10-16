@@ -1,5 +1,10 @@
 # Convertisseur PDF RFCV → XML ASYCUDA
 
+[![Tests](https://github.com/kkzakaria/pdf-xml-asycuda/actions/workflows/test.yml/badge.svg)](https://github.com/kkzakaria/pdf-xml-asycuda/actions/workflows/test.yml)
+[![Docker Build](https://github.com/kkzakaria/pdf-xml-asycuda/actions/workflows/docker.yml/badge.svg)](https://github.com/kkzakaria/pdf-xml-asycuda/actions/workflows/docker.yml)
+[![Release](https://github.com/kkzakaria/pdf-xml-asycuda/actions/workflows/release.yml/badge.svg)](https://github.com/kkzakaria/pdf-xml-asycuda/actions/workflows/release.yml)
+[![Docker Image](https://ghcr-badge.egpl.dev/kkzakaria/pdf-xml-asycuda/latest_tag?trim=major&label=Docker)](https://github.com/kkzakaria/pdf-xml-asycuda/pkgs/container/pdf-xml-asycuda)
+
 Outil d'automatisation pour la conversion des Rapports Finaux de Contrôle et de Vérification (RFCV) PDF vers le format XML ASYCUDA, éliminant la saisie manuelle dans le système douanier.
 
 ## 📋 Description
