@@ -58,6 +58,60 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 pip install -r requirements.txt
 ```
 
+## 🌐 Déploiement Production
+
+### Déploiement sur Render (Recommandé)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+Le projet est configuré pour un déploiement automatique sur Render :
+
+1. **Connectez-vous à Render** avec votre compte GitHub
+2. **Créez un Blueprint** depuis le repository
+3. Render détectera automatiquement `render.yaml` et déploiera l'application
+
+#### Configuration Rapide
+
+```bash
+# 1. Connectez votre repository GitHub à Render
+# 2. Render créera automatiquement le service depuis render.yaml
+# 3. Votre API sera disponible sur: https://votre-app.onrender.com
+```
+
+#### Déploiement Automatique
+
+- ✅ Déploiement automatique à chaque push sur `main`
+- ✅ Déploiement automatique à chaque nouvelle release (`v*.*.*`)
+- ✅ Images Docker récupérées depuis `ghcr.io`
+- ✅ SSL/HTTPS automatique
+- ✅ Health checks configurés
+
+#### Plans Disponibles
+
+- **Free** : Gratuit, parfait pour débuter (mise en veille après 15min d'inactivité)
+- **Starter** : $7/mois, sans mise en veille, stockage persistant
+- **Standard** : $25/mois, 2GB RAM, scaling horizontal
+
+📖 **Documentation complète** : [README_DEPLOY.md](README_DEPLOY.md)
+
+### Autres Options de Déploiement
+
+- **Railway** : Déploiement Docker simple
+- **Fly.io** : Excellent pour latence globale
+- **DigitalOcean App Platform** : Stable et abordable
+- **AWS ECS/Fargate** : Production enterprise
+
+### Docker (Auto-hébergé)
+
+```bash
+# Utiliser l'image publiée
+docker pull ghcr.io/kkzakaria/pdf-xml-asycuda:latest
+docker run -p 8000:8000 ghcr.io/kkzakaria/pdf-xml-asycuda:latest
+
+# Ou avec docker-compose
+docker-compose up -d
+```
+
 ## 💻 Utilisation
 
 ### API REST (Mode Service)

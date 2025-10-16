@@ -1,0 +1,106 @@
+name: Deploy to Render
+
+on:
+  # Déploiement automatique après build Docker réussi
+  workflow_run:
+    workflows: ["Docker Build & Push"]
+    types:
+      - completed
+    branches: [main]
+
+  # Déploiement manuel
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  deploy:
+    name: Trigger Render Deploy
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Render
+        run: |
+          echo "🚀 Déploiement automatique sur Render..."
+          echo "Render détectera automatiquement la nouvelle image Docker"
+          echo "Image: ghcr.io/${{ github.repository }}:latest"
+
+          # Note: Avec render.yaml et autoDeploy: true, Render détecte
+          # automatiquement les nouvelles images Docker sans webhook
+
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Attendre 2 minutes pour le déploiement Render..."
+          sleep 120
+
+      - name: Verify deployment
+        run: |
+          # Remplacez par votre URL Render une fois déployé
+          RENDER_URL="https://pdf-xml-asycuda-api.onrender.com"
+
+          echo "🔍 Vérification du déploiement sur $RENDER_URL..."
+
+          # Retry logic pour gérer le cold start
+          for i in {1..5}; do
+            if curl -f -s "$RENDER_URL/api/v1/health" > /dev/null; then
+              echo "✅ API disponible!"
+              curl -s "$RENDER_URL/api/v1/health" | jq .
+              exit 0
+            else
+              echo "Tentative $i/5 - En attente..."
+              sleep 30
+            fi
+          done
+
+          echo "⚠️  Impossible de vérifier le déploiement"
+          echo "Vérifiez manuellement: $RENDER_URL/api/v1/health"
+          exit 1
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "📊 Résumé du déploiement"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Repository: ${{ github.repository }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Trigger: ${{ github.event_name }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔗 Dashboard Render: https://dashboard.render.com"
+          echo "📖 Documentation: $RENDER_URL/docs"
+          echo "❤️  Health Check: $RENDER_URL/api/v1/health"
+
+  # Optionnel: Notifier l'équipe
+  notify:
+    name: Notification
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Deployment notification
+        run: |
+          STATUS="${{ needs.deploy.result }}"
+
+          if [ "$STATUS" == "success" ]; then
+            echo "✅ Déploiement réussi sur Render!"
+          elif [ "$STATUS" == "failure" ]; then
+            echo "❌ Échec du déploiement sur Render"
+          else
+            echo "⚠️  Statut de déploiement: $STATUS"
+          fi
+
+          # Ici vous pouvez ajouter des notifications Slack, Discord, Email, etc.
+          # Exemple Slack webhook:
+          # curl -X POST $SLACK_WEBHOOK -d '{"text":"Déploiement '$STATUS'"}'

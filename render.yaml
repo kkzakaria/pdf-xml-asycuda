@@ -1,0 +1,84 @@
+services:
+  # API Service - FastAPI application
+  - type: web
+    name: pdf-xml-asycuda-api
+    runtime: image
+    image:
+      url: ghcr.io/kkzakaria/pdf-xml-asycuda:latest
+    region: frankfurt # Or: oregon, ohio, singapore
+    plan: free # Options: free, starter, standard, pro
+
+    # Health check configuration
+    healthCheckPath: /api/v1/health
+
+    # Environment variables
+    envVars:
+      - key: API_TITLE
+        value: API Convertisseur PDF RFCV → XML ASYCUDA
+
+      - key: API_VERSION
+        value: 1.0.0
+
+      - key: API_DEBUG
+        value: false
+
+      - key: API_HOST
+        value: 0.0.0.0
+
+      - key: API_PORT
+        value: 8000
+
+      # CORS Configuration
+      - key: API_CORS_ORIGINS
+        value: '["*"]'
+
+      - key: API_CORS_ALLOW_CREDENTIALS
+        value: true
+
+      # File Storage - Using ephemeral disk (free plan)
+      - key: API_UPLOAD_DIR
+        value: /app/uploads
+
+      - key: API_OUTPUT_DIR
+        value: /app/output
+
+      - key: API_MAX_UPLOAD_SIZE
+        value: 52428800 # 50MB
+
+      # Job Management
+      - key: API_JOB_EXPIRY_HOURS
+        value: 24
+
+      - key: API_CLEANUP_INTERVAL_HOURS
+        value: 6
+
+      # Batch Processing
+      - key: API_DEFAULT_WORKERS
+        value: 2 # Reduced for free plan
+
+      - key: API_MAX_WORKERS
+        value: 4 # Reduced for free plan
+
+      # Rate Limiting
+      - key: API_RATE_LIMIT_ENABLED
+        value: true
+
+      - key: API_RATE_LIMIT_PER_MINUTE
+        value: 60
+
+    # Disk configuration (ephemeral on free plan)
+    # For persistent storage, upgrade to starter plan and uncomment:
+    # disk:
+    #   name: pdf-storage
+    #   mountPath: /app/data
+    #   sizeGB: 1
+
+    # Auto-deploy configuration
+    autoDeploy: true
+
+    # Number of instances
+    numInstances: 1
+
+    # Custom domains (optional - add after deployment)
+    # domains:
+    #   - pdf-converter.example.com
