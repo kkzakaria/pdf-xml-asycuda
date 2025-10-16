@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
+from batch_processor import BatchProcessor, BatchConfig
+from batch_report import BatchReportGenerator
 
 
 def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = False) -> bool:
@@ -94,23 +96,40 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples d'utilisation:
+  # Fichier unique
   %(prog)s "DOSSIER 18236.pdf"
   %(prog)s "DOSSIER 18236.pdf" -o output/dossier_18236.xml
-  %(prog)s "DOSSIER 18236.pdf" -v
+
+  # Batch simple
   %(prog)s *.pdf --batch
+  %(prog)s "DOSSIER 18236.pdf" "DOSSIER 18237.pdf" --batch
+
+  # Batch avec dossier
+  %(prog)s -d tests/ --batch
+  %(prog)s -d tests/ --recursive --batch
+
+  # Batch parallèle avec rapport
+  %(prog)s -d pdfs/ --batch --workers 4 --report batch_results
+  %(prog)s -d tests/ --pattern "RFCV*.pdf" --batch --workers 2
         """
     )
 
     parser.add_argument(
         'pdf_files',
-        nargs='+',
+        nargs='*',
         help='Fichier(s) PDF RFCV à convertir'
     )
 
     parser.add_argument(
-        '-o', '--output',
-        help='Chemin de sortie pour le fichier XML (un seul fichier seulement)',
+        '-d', '--directory',
+        help='Dossier contenant les fichiers PDF à traiter',
         default=None
+    )
+
+    parser.add_argument(
+        '-o', '--output',
+        help='Chemin de sortie pour le fichier XML (un seul fichier) ou dossier (batch)',
+        default='output'
     )
 
     parser.add_argument(
@@ -125,33 +144,108 @@ Exemples d'utilisation:
         help='Mode batch: convertir plusieurs fichiers'
     )
 
+    parser.add_argument(
+        '-r', '--recursive',
+        action='store_true',
+        help='Recherche récursive dans les sous-dossiers (avec -d)'
+    )
+
+    parser.add_argument(
+        '--pattern',
+        default='*.pdf',
+        help='Pattern pour filtrer les fichiers PDF (défaut: *.pdf)'
+    )
+
+    parser.add_argument(
+        '--workers',
+        type=int,
+        default=1,
+        help='Nombre de workers pour traitement parallèle (défaut: 1)'
+    )
+
+    parser.add_argument(
+        '--report',
+        default=None,
+        help='Générer un rapport batch (formats: .json, .csv, .md ou sans extension pour tous)'
+    )
+
+    parser.add_argument(
+        '--no-progress',
+        action='store_true',
+        help='Désactiver la barre de progression'
+    )
+
     args = parser.parse_args()
 
-    # Mode batch ou fichier unique
-    if len(args.pdf_files) > 1 or args.batch:
-        if args.output:
-            print("Avertissement: L'option -o est ignorée en mode batch.", file=sys.stderr)
+    # Déterminer le mode d'opération
+    is_batch_mode = args.batch or args.directory or len(args.pdf_files) > 1 or args.workers > 1
 
-        success_count = 0
-        total_count = len(args.pdf_files)
+    if is_batch_mode:
+        # MODE BATCH
+        if args.output and not Path(args.output).is_dir() and len(args.pdf_files) <= 1 and not args.directory:
+            print("Avertissement: En mode batch, -o spécifie un dossier, pas un fichier.", file=sys.stderr)
 
-        print(f"Conversion de {total_count} fichier(s)...")
-        print("=" * 60)
+        # Construire la liste des inputs
+        input_paths = []
+        if args.directory:
+            input_paths.append(args.directory)
+        if args.pdf_files:
+            input_paths.extend(args.pdf_files)
 
-        for pdf_file in args.pdf_files:
-            print(f"\n[{success_count + 1}/{total_count}] {pdf_file}")
-            if convert_pdf_to_xml(pdf_file, verbose=args.verbose):
-                success_count += 1
+        if not input_paths:
+            print("Erreur: Aucun fichier ou dossier spécifié.", file=sys.stderr)
+            print("Utilisez -d pour un dossier ou spécifiez des fichiers PDF.", file=sys.stderr)
+            sys.exit(1)
 
-        print("\n" + "=" * 60)
-        print(f"Résultat: {success_count}/{total_count} conversions réussies")
+        # Créer la configuration batch
+        config = BatchConfig(
+            input_paths=input_paths,
+            output_dir=args.output,
+            recursive=args.recursive,
+            pattern=args.pattern,
+            workers=args.workers,
+            continue_on_error=True,
+            verbose=args.verbose,
+            progress_bar=not args.no_progress
+        )
 
-        sys.exit(0 if success_count == total_count else 1)
+        # Exécuter le traitement batch
+        processor = BatchProcessor(config)
+        batch_results = processor.process()
+
+        # Générer les rapports si demandé
+        if args.report:
+            report_gen = BatchReportGenerator(batch_results)
+
+            # Déterminer le format
+            report_path = Path(args.report)
+            if report_path.suffix:
+                # Format spécifique
+                if report_path.suffix == '.json':
+                    report_gen.generate_json(str(report_path))
+                elif report_path.suffix == '.csv':
+                    report_gen.generate_csv(str(report_path))
+                elif report_path.suffix == '.md':
+                    report_gen.generate_markdown(str(report_path))
+                else:
+                    print(f"Warning: Format '{report_path.suffix}' non supporté. Utilisation de tous les formats.", file=sys.stderr)
+                    report_gen.generate_all(report_path.stem)
+            else:
+                # Tous les formats
+                report_gen.generate_all(args.report)
+
+        # Code de sortie
+        sys.exit(0 if batch_results['success'] else 1)
 
     else:
-        # Conversion d'un seul fichier
+        # MODE FICHIER UNIQUE
+        if not args.pdf_files:
+            print("Erreur: Aucun fichier PDF spécifié.", file=sys.stderr)
+            parser.print_help()
+            sys.exit(1)
+
         pdf_file = args.pdf_files[0]
-        success = convert_pdf_to_xml(pdf_file, args.output, args.verbose)
+        success = convert_pdf_to_xml(pdf_file, args.output if args.output != 'output' else None, args.verbose)
         sys.exit(0 if success else 1)
 
 

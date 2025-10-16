@@ -8,12 +8,20 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 
 ## ✨ Fonctionnalités
 
+### Extraction et Conversion
 - ✅ **Extraction automatique** des données RFCV depuis PDF
 - ✅ **Génération XML ASYCUDA** conforme au schéma officiel
 - ✅ **Validation complète** des données extraites
 - ✅ **Système de métriques** pour évaluer la qualité de conversion
 - ✅ **Tests automatisés** avec rapports détaillés
-- ✅ **Support batch** pour traitement de masse
+
+### Traitement par Lot
+- ✅ **Batch processing** avec support dossiers et recherche récursive
+- ✅ **Traitement parallèle** avec multiprocessing (jusqu'à N workers)
+- ✅ **Filtrage par patterns** pour sélectionner des fichiers spécifiques
+- ✅ **Barre de progression** avec tqdm pour visualiser l'avancement
+- ✅ **Rapports batch** en JSON, CSV et Markdown
+- ✅ **Gestion d'erreurs robuste** avec continuation automatique
 
 ## 📊 Résultats
 
@@ -40,25 +48,101 @@ pip install -r requirements.txt
 ### Conversion d'un seul fichier
 
 ```bash
-python converter.py input.pdf -o output.xml
-```
+# Conversion simple
+python converter.py input.pdf
 
-### Conversion batch
+# Avec fichier de sortie personnalisé
+python converter.py input.pdf -o output/custom.xml
 
-```bash
-python converter.py --batch input_directory/ -o output_directory/
-```
-
-### Mode verbeux
-
-```bash
+# Mode verbeux
 python converter.py input.pdf -v
 ```
+
+### Traitement par lot (Batch)
+
+Le système supporte plusieurs modes de traitement par lot :
+
+#### Mode batch simple (fichiers multiples)
+
+```bash
+# Traiter plusieurs fichiers spécifiés
+python converter.py file1.pdf file2.pdf file3.pdf --batch
+
+# Avec pattern shell
+python converter.py tests/*.pdf --batch
+```
+
+#### Mode batch avec dossier
+
+```bash
+# Traiter tous les PDFs d'un dossier
+python converter.py -d tests/ --batch
+
+# Recherche récursive dans sous-dossiers
+python converter.py -d pdfs/ --recursive --batch
+
+# Avec pattern de filtrage
+python converter.py -d tests/ --pattern "RFCV*.pdf" --batch
+```
+
+#### Traitement parallèle
+
+```bash
+# Traiter avec 4 workers (plus rapide)
+python converter.py -d tests/ --batch --workers 4
+
+# Optimisation automatique selon CPU
+python converter.py -d tests/ --batch --workers 8
+```
+
+#### Génération de rapports batch
+
+```bash
+# Rapport complet (JSON + CSV + Markdown)
+python converter.py -d tests/ --batch --report batch_report
+
+# Rapport JSON uniquement
+python converter.py -d tests/ --batch --report results.json
+
+# Rapport CSV uniquement
+python converter.py -d tests/ --batch --report results.csv
+
+# Rapport Markdown uniquement
+python converter.py -d tests/ --batch --report results.md
+```
+
+#### Options avancées
+
+```bash
+# Dossier de sortie personnalisé
+python converter.py -d tests/ --batch -o output/batch_results/
+
+# Sans barre de progression
+python converter.py -d tests/ --batch --no-progress
+
+# Combinaison complète
+python converter.py -d pdfs/ --recursive --pattern "*.pdf" \
+  --batch --workers 4 --report full_report -o output/
+```
+
+### Performance batch
+
+Le traitement par lot offre des gains de performance significatifs :
+
+| Mode | Fichiers | Temps | Performance |
+|------|----------|-------|-------------|
+| Séquentiel | 7 PDFs | 3.64s | 0.52s/fichier |
+| Parallèle (4 workers) | 7 PDFs | 2.40s | 0.34s/fichier |
+| **Gain** | - | **-34%** | **-35%** |
 
 ### Exécuter les tests
 
 ```bash
+# Tests complets avec rapport
 python tests/test_converter.py -d tests/ -v
+
+# Tests rapides
+python tests/test_converter.py -d tests/
 ```
 
 ## 📁 Structure du projet
@@ -66,16 +150,18 @@ python tests/test_converter.py -d tests/ -v
 ```
 pdf-xml-asycuda/
 ├── src/
-│   ├── models.py           # Modèles de données (15+ dataclasses)
-│   ├── pdf_extractor.py    # Extraction PDF avec pdfplumber
-│   ├── rfcv_parser.py      # Parsing des données RFCV
-│   ├── xml_generator.py    # Génération XML ASYCUDA
-│   └── metrics.py          # Système de métriques
+│   ├── models.py            # Modèles de données (15+ dataclasses)
+│   ├── pdf_extractor.py     # Extraction PDF avec pdfplumber
+│   ├── rfcv_parser.py       # Parsing des données RFCV
+│   ├── xml_generator.py     # Génération XML ASYCUDA
+│   ├── metrics.py           # Système de métriques
+│   ├── batch_processor.py   # 🆕 Traitement par lot parallèle
+│   └── batch_report.py      # 🆕 Génération rapports batch
 ├── tests/
-│   └── test_converter.py   # Tests automatisés
+│   └── test_converter.py    # Tests automatisés
 ├── scripts/
-│   └── generate_report.py  # Générateur de rapports
-├── converter.py            # CLI principal
+│   └── generate_report.py   # Générateur de rapports
+├── converter.py             # CLI principal (batch-enabled)
 └── requirements.txt
 ```
 
@@ -93,11 +179,21 @@ pdf-xml-asycuda/
 
 ## 🛠️ Technologies
 
+### Extraction et Parsing
 - **pdfplumber** : Extraction de texte et tables depuis PDF
 - **pandas** : Traitement des données tabulaires
-- **xml.etree.ElementTree** : Génération XML
-- **dataclasses** : Modélisation des données
 - **regex** : Parsing avancé avec patterns Unicode
+- **dataclasses** : Modélisation des données
+
+### Génération et Validation
+- **xml.etree.ElementTree** : Génération XML
+- **Système de métriques** : Validation et qualité
+
+### Traitement par Lot
+- **multiprocessing** : Traitement parallèle
+- **tqdm** : Barres de progression interactives
+- **concurrent.futures** : Gestion asynchrone des workers
+- **JSON/CSV** : Export des rapports batch
 
 ## 📈 Métriques de qualité
 
