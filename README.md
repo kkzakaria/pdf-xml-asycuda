@@ -1,100 +1,147 @@
 # Convertisseur PDF RFCV → XML ASYCUDA
 
-Convertit automatiquement les fichiers PDF RFCV (Rapport Final de Contrôle et de Vérification) en format XML ASYCUDA pour éviter la saisie manuelle dans le système douanier.
+Outil d'automatisation pour la conversion des Rapports Finaux de Contrôle et de Vérification (RFCV) PDF vers le format XML ASYCUDA, éliminant la saisie manuelle dans le système douanier.
 
-## 🚀 Démarrage Rapide
+## 📋 Description
 
-```bash
-# Installation
-pip install -r requirements.txt
-
-# Conversion simple
-python converter.py "DOSSIER 18236.pdf"
-
-# Conversion avec détails
-python converter.py "DOSSIER 18236.pdf" -v
-
-# Conversion multiple (batch)
-python converter.py *.pdf --batch
-```
+Ce convertisseur automatise l'extraction de données structurées depuis les documents PDF RFCV et génère des fichiers XML compatibles avec le système ASYCUDA (Automated System for Customs Data) utilisé en Côte d'Ivoire pour les opérations d'import/export.
 
 ## ✨ Fonctionnalités
 
-- ✅ Extraction automatique des données depuis PDF RFCV
-- ✅ Génération XML conforme au format ASYCUDA
-- ✅ Conversion batch de plusieurs fichiers
-- ✅ Support des conteneurs et articles multiples
-- ✅ Gestion des devises et taux de change
-- ✅ Mode verbeux pour debugging
-- ✅ Structure XML avec éléments `<null/>` pour conformité ASYCUDA
+- ✅ **Extraction automatique** des données RFCV depuis PDF
+- ✅ **Génération XML ASYCUDA** conforme au schéma officiel
+- ✅ **Validation complète** des données extraites
+- ✅ **Système de métriques** pour évaluer la qualité de conversion
+- ✅ **Tests automatisés** avec rapports détaillés
+- ✅ **Support batch** pour traitement de masse
 
 ## 📊 Résultats
 
-```txt
-✓ 3/3 conversions réussies
-- DOSSIER 17745.pdf → output/DOSSIER 17745.xml (1.6MB, 150+ articles)
-- DOSSIER 18236.pdf → output/DOSSIER 18236.xml (663KB, 75 articles)
-- DOSSIER 18237.pdf → output/DOSSIER 18237.xml (533KB, 60 articles)
+- **Taux de réussite** : 100% (7/7 PDFs testés)
+- **Taux de remplissage** : 68.5% en moyenne
+- **Performance** : ~636ms par conversion
+- **Warnings** : 0
+
+## 🚀 Installation
+
+### Prérequis
+
+- Python 3.8+
+- pip
+
+### Installation des dépendances
+
+```bash
+pip install -r requirements.txt
 ```
 
-## 📖 Documentation
+## 💻 Utilisation
 
-Consultez [GUIDE_UTILISATION.md](GUIDE_UTILISATION.md) pour :
+### Conversion d'un seul fichier
 
-- Guide d'utilisation complet
-- Exemples détaillés
-- Personnalisation et dépannage
-- Importation dans ASYCUDA
+```bash
+python converter.py input.pdf -o output.xml
+```
 
-## 🏗️ Structure du Projet
+### Conversion batch
 
-```text
+```bash
+python converter.py --batch input_directory/ -o output_directory/
+```
+
+### Mode verbeux
+
+```bash
+python converter.py input.pdf -v
+```
+
+### Exécuter les tests
+
+```bash
+python tests/test_converter.py -d tests/ -v
+```
+
+## 📁 Structure du projet
+
+```
 pdf-xml-asycuda/
 ├── src/
-│   ├── models.py           # Modèles de données
-│   ├── pdf_extractor.py    # Extraction PDF
-│   ├── rfcv_parser.py      # Parsing RFCV
-│   └── xml_generator.py    # Génération XML
-├── output/                 # XMLs générés
-├── converter.py            # Script principal
-├── requirements.txt
-├── README.md
-└── GUIDE_UTILISATION.md
+│   ├── models.py           # Modèles de données (15+ dataclasses)
+│   ├── pdf_extractor.py    # Extraction PDF avec pdfplumber
+│   ├── rfcv_parser.py      # Parsing des données RFCV
+│   ├── xml_generator.py    # Génération XML ASYCUDA
+│   └── metrics.py          # Système de métriques
+├── tests/
+│   └── test_converter.py   # Tests automatisés
+├── scripts/
+│   └── generate_report.py  # Générateur de rapports
+├── converter.py            # CLI principal
+└── requirements.txt
 ```
 
-## 🛠️ Bibliothèques
+## 🔍 Données extraites
 
-- **pdfplumber** - Extraction de données depuis PDF
-- **pandas** - Traitement des données tabulaires
-- **xml.etree.ElementTree** - Génération XML
+### Sections principales
 
-## 📝 Exemple de Sortie
+- **Identification** : Numéro RFCV, type de déclaration, bureau de douane
+- **Traders** : Exportateur, Importateur/Consignataire
+- **Transport** : Mode, navire, INCOTERM, lieux de chargement/déchargement
+- **Financial** : Mode de paiement, codes de transaction
+- **Valuation** : Valeurs FOB, CIF, fret, assurance, devises
+- **Items** : Articles avec codes SH, quantités, valeurs
+- **Containers** : Liste des conteneurs avec types et identifiants
 
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<ASYCUDA>
-  <Property>
-    <Sad_flow>I</Sad_flow>
-    <Total_number_of_items>75</Total_number_of_items>
-    <Total_number_of_packages>3287</Total_number_of_packages>
-  </Property>
-  <Identification>
-    <Customs_clearance_office_code>CIAB1</Customs_clearance_office_code>
-    <Type_of_declaration>IM</Type_of_declaration>
-  </Identification>
-  <!-- ... sections Traders, Transport, Financial, Items ... -->
-</ASYCUDA>
-```
+## 🛠️ Technologies
 
-## 🎯 Cas d'Usage
+- **pdfplumber** : Extraction de texte et tables depuis PDF
+- **pandas** : Traitement des données tabulaires
+- **xml.etree.ElementTree** : Génération XML
+- **dataclasses** : Modélisation des données
+- **regex** : Parsing avancé avec patterns Unicode
 
-- Déclarations d'importation/exportation
-- Traitement douanier automatisé
-- Réduction des erreurs de saisie manuelle
-- Gain de temps significatif (minutes vs heures)
+## 📈 Métriques de qualité
 
-## ⚡ Performance
+Le système inclut un collecteur de métriques détaillé :
 
-- Conversion PDF → XML : ~2-5 secondes par document
-- Support de documents multi-pages
-- Extraction de 100+ articles par document
+- Taux de remplissage des champs (0-100%)
+- Temps d'extraction et génération
+- Validation XML
+- Détection de warnings
+- Complétude des données par section
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à :
+
+1. Fork le projet
+2. Créer une branche feature (`git checkout -b feature/AmazingFeature`)
+3. Commit vos changements (`git commit -m 'Add AmazingFeature'`)
+4. Push vers la branche (`git push origin feature/AmazingFeature`)
+5. Ouvrir une Pull Request
+
+## 📝 Notes techniques
+
+### Gestion des apostrophes Unicode
+
+Le système gère correctement les deux types d'apostrophes :
+- Apostrophe ASCII standard (`'`)
+- Apostrophe Unicode U+2019 (`'`)
+
+Ceci est crucial pour l'extraction des noms d'exportateurs et importateurs.
+
+### Format XML ASYCUDA
+
+Le XML généré utilise la convention `<null/>` pour les champs vides, conformément au schéma ASYCUDA standard.
+
+## 📄 Licence
+
+Ce projet est sous licence MIT.
+
+## 👨‍💻 Auteur
+
+Développé pour automatiser le processus douanier en Côte d'Ivoire.
+
+## 🔗 Liens utiles
+
+- [Documentation ASYCUDA](https://asycuda.org/)
+- [pdfplumber Documentation](https://github.com/jsvine/pdfplumber)
