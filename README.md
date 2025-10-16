@@ -23,6 +23,16 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 - ✅ **Rapports batch** en JSON, CSV et Markdown
 - ✅ **Gestion d'erreurs robuste** avec continuation automatique
 
+### API REST
+- ✅ **13 endpoints REST** pour intégration complète
+- ✅ **Conversion synchrone et asynchrone** avec job tracking
+- ✅ **Batch processing API** avec suivi de progression
+- ✅ **Upload multipart** avec validation
+- ✅ **Background tasks** pour conversions longues
+- ✅ **Métriques et monitoring** en temps réel
+- ✅ **Documentation OpenAPI/Swagger** interactive
+- ✅ **CORS configuré** pour intégration web
+
 ## 📊 Résultats
 
 - **Taux de réussite** : 100% (7/7 PDFs testés)
@@ -45,7 +55,144 @@ pip install -r requirements.txt
 
 ## 💻 Utilisation
 
-### Conversion d'un seul fichier
+### API REST (Mode Service)
+
+Le convertisseur inclut une API REST complète pour l'intégration dans vos applications.
+
+#### Démarrage de l'API
+
+```bash
+# Installation des dépendances API
+pip install -r requirements.txt
+
+# Démarrer le serveur API
+python run_api.py
+
+# Ou avec uvicorn directement
+python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+L'API sera disponible sur `http://localhost:8000`
+- Documentation interactive: `http://localhost:8000/docs`
+- Documentation alternative: `http://localhost:8000/redoc`
+
+#### Endpoints API
+
+**Conversion**
+- `POST /api/v1/convert` - Conversion synchrone (upload PDF → retourne XML immédiatement)
+- `POST /api/v1/convert/async` - Conversion asynchrone (retourne job_id)
+- `GET /api/v1/convert/{job_id}` - Status d'un job de conversion
+- `GET /api/v1/convert/{job_id}/result` - Résultat complet avec métriques
+- `GET /api/v1/convert/{job_id}/download` - Télécharger le XML généré
+
+**Batch Processing**
+- `POST /api/v1/batch` - Conversion batch de plusieurs PDFs
+- `GET /api/v1/batch/{batch_id}/status` - Status du batch
+- `GET /api/v1/batch/{batch_id}/results` - Résultats détaillés
+- `GET /api/v1/batch/{batch_id}/report` - Rapport complet (JSON)
+
+**Fichiers**
+- `GET /api/v1/files/{file_id}/xml` - Télécharger un XML par ID
+- `GET /api/v1/files/{file_id}/metadata` - Métadonnées du fichier
+
+**Monitoring**
+- `GET /api/v1/health` - Health check de l'API
+- `GET /api/v1/metrics` - Métriques système globales
+- `GET /api/v1/metrics/{job_id}` - Métriques d'un job spécifique
+
+#### Exemples d'utilisation de l'API
+
+**Conversion simple avec curl:**
+```bash
+# Upload et conversion synchrone
+curl -X POST "http://localhost:8000/api/v1/convert" \
+  -F "file=@DOSSIER_18236.pdf"
+
+# Conversion asynchrone
+curl -X POST "http://localhost:8000/api/v1/convert/async" \
+  -F "file=@DOSSIER_18236.pdf"
+
+# Vérifier le status
+curl "http://localhost:8000/api/v1/convert/{job_id}"
+
+# Télécharger le XML
+curl -O "http://localhost:8000/api/v1/convert/{job_id}/download"
+```
+
+**Batch processing:**
+```bash
+# Upload multiple PDFs
+curl -X POST "http://localhost:8000/api/v1/batch" \
+  -F "files=@file1.pdf" \
+  -F "files=@file2.pdf" \
+  -F "files=@file3.pdf" \
+  -F "workers=4"
+
+# Status du batch
+curl "http://localhost:8000/api/v1/batch/{batch_id}/status"
+
+# Rapport détaillé
+curl "http://localhost:8000/api/v1/batch/{batch_id}/report"
+```
+
+**Exemple Python avec requests:**
+```python
+import requests
+
+# Conversion synchrone
+with open('DOSSIER_18236.pdf', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8000/api/v1/convert',
+        files={'file': f}
+    )
+    result = response.json()
+    print(f"Conversion: {result['success']}")
+    print(f"Output: {result['output_file']}")
+    print(f"Métriques: {result['metrics']}")
+
+# Batch conversion
+files = [
+    ('files', open('file1.pdf', 'rb')),
+    ('files', open('file2.pdf', 'rb')),
+    ('files', open('file3.pdf', 'rb'))
+]
+response = requests.post(
+    'http://localhost:8000/api/v1/batch',
+    files=files,
+    data={'workers': 4}
+)
+batch = response.json()
+batch_id = batch['batch_id']
+
+# Suivre la progression
+import time
+while True:
+    status = requests.get(f'http://localhost:8000/api/v1/batch/{batch_id}/status').json()
+    print(f"Progression: {status['processed']}/{status['total_files']}")
+    if status['status'] == 'completed':
+        break
+    time.sleep(1)
+```
+
+#### Configuration API
+
+Créer un fichier `.env` pour personnaliser la configuration:
+```bash
+cp .env.example .env
+```
+
+Variables disponibles:
+- `API_HOST` - Hôte du serveur (défaut: 0.0.0.0)
+- `API_PORT` - Port du serveur (défaut: 8000)
+- `API_DEBUG` - Mode debug (défaut: False)
+- `API_UPLOAD_DIR` - Dossier uploads (défaut: uploads)
+- `API_OUTPUT_DIR` - Dossier outputs (défaut: output)
+- `API_MAX_UPLOAD_SIZE` - Taille max upload en octets (défaut: 50MB)
+- `API_DEFAULT_WORKERS` - Workers par défaut (défaut: 4)
+- `API_MAX_WORKERS` - Workers maximum (défaut: 8)
+- `API_JOB_EXPIRY_HOURS` - Expiration des jobs (défaut: 24h)
+
+### CLI - Conversion d'un seul fichier
 
 ```bash
 # Conversion simple
@@ -155,13 +302,22 @@ pdf-xml-asycuda/
 │   ├── rfcv_parser.py       # Parsing des données RFCV
 │   ├── xml_generator.py     # Génération XML ASYCUDA
 │   ├── metrics.py           # Système de métriques
-│   ├── batch_processor.py   # 🆕 Traitement par lot parallèle
-│   └── batch_report.py      # 🆕 Génération rapports batch
+│   ├── batch_processor.py   # Traitement par lot parallèle
+│   ├── batch_report.py      # Génération rapports batch
+│   └── api/                 # 🆕 API REST FastAPI
+│       ├── main.py          # Application FastAPI
+│       ├── core/            # Configuration et dépendances
+│       ├── models/          # Modèles Pydantic (requests/responses)
+│       ├── routes/          # Endpoints API (convert, batch, files, health)
+│       ├── services/        # Services métier (wrappers)
+│       └── utils/           # Utilitaires
 ├── tests/
 │   └── test_converter.py    # Tests automatisés
 ├── scripts/
 │   └── generate_report.py   # Générateur de rapports
 ├── converter.py             # CLI principal (batch-enabled)
+├── run_api.py              # 🆕 Script de démarrage API
+├── .env.example            # 🆕 Exemple configuration API
 └── requirements.txt
 ```
 
@@ -194,6 +350,15 @@ pdf-xml-asycuda/
 - **tqdm** : Barres de progression interactives
 - **concurrent.futures** : Gestion asynchrone des workers
 - **JSON/CSV** : Export des rapports batch
+
+### API REST
+- **FastAPI** : Framework API moderne et performant
+- **Uvicorn** : Serveur ASGI haute performance
+- **Pydantic v2** : Validation de données et sérialisation
+- **python-multipart** : Support des uploads multipart
+- **aiofiles** : Opérations fichiers asynchrones
+- **Background tasks** : Conversions asynchrones
+- **OpenAPI/Swagger** : Documentation interactive automatique
 
 ## 📈 Métriques de qualité
 
