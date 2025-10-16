@@ -9,6 +9,7 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 ## ✨ Fonctionnalités
 
 ### Extraction et Conversion
+
 - ✅ **Extraction automatique** des données RFCV depuis PDF
 - ✅ **Génération XML ASYCUDA** conforme au schéma officiel
 - ✅ **Validation complète** des données extraites
@@ -16,6 +17,7 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 - ✅ **Tests automatisés** avec rapports détaillés
 
 ### Traitement par Lot
+
 - ✅ **Batch processing** avec support dossiers et recherche récursive
 - ✅ **Traitement parallèle** avec multiprocessing (jusqu'à N workers)
 - ✅ **Filtrage par patterns** pour sélectionner des fichiers spécifiques
@@ -24,6 +26,7 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 - ✅ **Gestion d'erreurs robuste** avec continuation automatique
 
 ### API REST
+
 - ✅ **13 endpoints REST** pour intégration complète
 - ✅ **Conversion synchrone et asynchrone** avec job tracking
 - ✅ **Batch processing API** avec suivi de progression
@@ -73,12 +76,14 @@ python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 L'API sera disponible sur `http://localhost:8000`
+
 - Documentation interactive: `http://localhost:8000/docs`
 - Documentation alternative: `http://localhost:8000/redoc`
 
 #### Endpoints API
 
 **Conversion**
+
 - `POST /api/v1/convert` - Conversion synchrone (upload PDF → retourne XML immédiatement)
 - `POST /api/v1/convert/async` - Conversion asynchrone (retourne job_id)
 - `GET /api/v1/convert/{job_id}` - Status d'un job de conversion
@@ -86,16 +91,19 @@ L'API sera disponible sur `http://localhost:8000`
 - `GET /api/v1/convert/{job_id}/download` - Télécharger le XML généré
 
 **Batch Processing**
+
 - `POST /api/v1/batch` - Conversion batch de plusieurs PDFs
 - `GET /api/v1/batch/{batch_id}/status` - Status du batch
 - `GET /api/v1/batch/{batch_id}/results` - Résultats détaillés
 - `GET /api/v1/batch/{batch_id}/report` - Rapport complet (JSON)
 
 **Fichiers**
+
 - `GET /api/v1/files/{file_id}/xml` - Télécharger un XML par ID
 - `GET /api/v1/files/{file_id}/metadata` - Métadonnées du fichier
 
 **Monitoring**
+
 - `GET /api/v1/health` - Health check de l'API
 - `GET /api/v1/metrics` - Métriques système globales
 - `GET /api/v1/metrics/{job_id}` - Métriques d'un job spécifique
@@ -103,6 +111,7 @@ L'API sera disponible sur `http://localhost:8000`
 #### Exemples d'utilisation de l'API
 
 **Conversion simple avec curl:**
+
 ```bash
 # Upload et conversion synchrone
 curl -X POST "http://localhost:8000/api/v1/convert" \
@@ -120,6 +129,7 @@ curl -O "http://localhost:8000/api/v1/convert/{job_id}/download"
 ```
 
 **Batch processing:**
+
 ```bash
 # Upload multiple PDFs
 curl -X POST "http://localhost:8000/api/v1/batch" \
@@ -136,6 +146,7 @@ curl "http://localhost:8000/api/v1/batch/{batch_id}/report"
 ```
 
 **Exemple Python avec requests:**
+
 ```python
 import requests
 
@@ -177,11 +188,13 @@ while True:
 #### Configuration API
 
 Créer un fichier `.env` pour personnaliser la configuration:
+
 ```bash
 cp .env.example .env
 ```
 
 Variables disponibles:
+
 - `API_HOST` - Hôte du serveur (défaut: 0.0.0.0)
 - `API_PORT` - Port du serveur (défaut: 8000)
 - `API_DEBUG` - Mode debug (défaut: False)
@@ -336,22 +349,26 @@ pdf-xml-asycuda/
 ## 🛠️ Technologies
 
 ### Extraction et Parsing
+
 - **pdfplumber** : Extraction de texte et tables depuis PDF
 - **pandas** : Traitement des données tabulaires
 - **regex** : Parsing avancé avec patterns Unicode
 - **dataclasses** : Modélisation des données
 
 ### Génération et Validation
+
 - **xml.etree.ElementTree** : Génération XML
 - **Système de métriques** : Validation et qualité
 
 ### Traitement par Lot
+
 - **multiprocessing** : Traitement parallèle
 - **tqdm** : Barres de progression interactives
 - **concurrent.futures** : Gestion asynchrone des workers
 - **JSON/CSV** : Export des rapports batch
 
 ### API REST
+
 - **FastAPI** : Framework API moderne et performant
 - **Uvicorn** : Serveur ASGI haute performance
 - **Pydantic v2** : Validation de données et sérialisation
@@ -385,6 +402,7 @@ Les contributions sont les bienvenues ! N'hésitez pas à :
 ### Gestion des apostrophes Unicode
 
 Le système gère correctement les deux types d'apostrophes :
+
 - Apostrophe ASCII standard (`'`)
 - Apostrophe Unicode U+2019 (`'`)
 
