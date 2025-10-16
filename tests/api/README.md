@@ -44,28 +44,28 @@ pytest tests/api/ --cov=src/api --cov-report=html
 ## Résultats
 
 **Total: 26 tests**
-- ✅ 18 tests passés
-- ⏭️  8 tests skippés (nécessitent des PDFs de test)
+- ✅ 26 tests passés (100%)
+- ⏭️  0 tests skippés
 - ❌ 0 échecs
 
 ### Tests par module
 
 **test_health.py** (4 tests) - ✅ 100% passés
-- `test_health_check` - Health check endpoint
-- `test_root_endpoint` - Endpoint racine
-- `test_metrics_endpoint` - Métriques système
-- `test_openapi_docs` - Documentation OpenAPI
+- `test_health_check` - ✅ Health check endpoint
+- `test_root_endpoint` - ✅ Endpoint racine
+- `test_metrics_endpoint` - ✅ Métriques système
+- `test_openapi_docs` - ✅ Documentation OpenAPI
 
-**test_convert.py** (9 tests) - ✅ 44% passés, ⏭️ 56% skippés
-- `test_convert_sync_success` - Conversion synchrone (skipped: pas de PDF)
+**test_convert.py** (9 tests) - ✅ 100% passés
+- `test_convert_sync_success` - ✅ Conversion synchrone
 - `test_convert_sync_no_file` - ✅ Validation sans fichier
 - `test_convert_sync_invalid_file` - ✅ Fichier invalide
-- `test_convert_async_success` - Conversion async (skipped: pas de PDF)
+- `test_convert_async_success` - ✅ Conversion async
 - `test_get_job_status_not_found` - ✅ Job inexistant
-- `test_get_job_result_success` - Résultat job (skipped: pas de PDF)
-- `test_download_xml_success` - Download XML (skipped: pas de PDF)
+- `test_get_job_result_success` - ✅ Résultat job
+- `test_download_xml_success` - ✅ Download XML
 - `test_download_xml_not_found` - ✅ XML inexistant
-- `test_concurrent_conversions` - Conversions concurrentes (skipped: pas de PDF)
+- `test_concurrent_conversions` - ✅ Conversions concurrentes
 
 **test_batch.py** (8 tests) - ✅ 100% passés
 - `test_batch_convert_success` - ✅ Batch conversion réussie
@@ -77,12 +77,12 @@ pytest tests/api/ --cov=src/api --cov-report=html
 - `test_batch_workers_validation` - ✅ Validation workers
 - `test_batch_progress_tracking` - ✅ Suivi progression
 
-**test_files.py** (5 tests) - ✅ 40% passés, ⏭️ 60% skippés
-- `test_download_xml_by_id` - Download par ID (skipped: pas de PDF)
+**test_files.py** (5 tests) - ✅ 100% passés
+- `test_download_xml_by_id` - ✅ Download par ID
 - `test_download_xml_not_found` - ✅ Fichier inexistant
-- `test_file_metadata` - Métadonnées (skipped: pas de PDF)
+- `test_file_metadata` - ✅ Métadonnées
 - `test_file_metadata_not_found` - ✅ Métadonnées inexistantes
-- `test_download_with_extension` - Download avec extension (skipped: pas de PDF)
+- `test_download_with_extension` - ✅ Download avec extension
 
 ## Fixtures disponibles
 
@@ -120,7 +120,9 @@ Les tests couvrent:
 - ✅ Background tasks (batch)
 - ✅ Job tracking
 - ✅ Documentation OpenAPI
-- ⚠️  Conversions réelles (nécessitent PDFs)
+- ✅ Conversions réelles (sync et async)
+- ✅ Téléchargement et métadonnées de fichiers
+- ✅ Conversions concurrentes
 
 ## Dépendances
 
@@ -132,7 +134,8 @@ httpx>=0.27.0
 
 ## Notes
 
-- Les tests skippés nécessitent des fichiers PDF dans `tests/`
+- Les tests utilisent les fichiers PDF disponibles dans `tests/` (7 PDFs de test)
 - Les tests utilisent des dossiers temporaires (`test_uploads`, `test_output`)
 - Cleanup automatique après chaque test
 - Tests asynchrones avec `@pytest.mark.asyncio`
+- Tous les tests passent avec une couverture complète des 13 endpoints

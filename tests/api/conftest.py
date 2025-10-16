@@ -46,14 +46,14 @@ def sample_pdf():
     """
     Retourne le chemin vers un PDF de test
     """
-    # Utiliser un PDF existant dans tests/
-    test_pdf = Path(__file__).parent.parent / "DOSSIER 18236.pdf"
+    # Chercher n'importe quel PDF dans tests/
+    tests_dir = Path(__file__).parent.parent
+    pdf_files = list(tests_dir.glob("*.pdf"))
 
-    if not test_pdf.exists():
-        # Si pas de PDF, retourner None et les tests qui en ont besoin seront skippés
+    if not pdf_files:
         pytest.skip("Pas de PDF de test disponible")
 
-    return test_pdf
+    return pdf_files[0]
 
 
 @pytest.fixture
