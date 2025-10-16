@@ -1,0 +1,11 @@
+# PDF Processing
+pdfplumber>=0.10.0
+
+# Data Processing
+pandas>=2.0.0
+
+# XML Processing (built-in)
+# xml.etree.ElementTree is part of Python standard library
+
+# CLI and Utilities
+python-dateutil>=2.8.0
