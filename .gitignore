@@ -47,6 +47,10 @@ Thumbs.db
 *.log
 debug_extraction.txt
 
+# Test results
+test_results.md
+test_results.json
+
 # Keep output directory structure
 !output/.gitkeep
 
