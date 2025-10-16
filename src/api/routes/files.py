@@ -30,12 +30,13 @@ async def download_xml_file(file_id: str):
     if not file_id.endswith('.xml'):
         file_id = f"{file_id}.xml"
 
-    file_path = Path(storage_service.settings.output_dir) / file_id
+    from ..core.config import settings
+    file_path = Path(settings.output_dir) / file_id
 
     # Vérifier que le fichier existe
     if not storage_service.file_exists(str(file_path)):
         # Essayer de chercher dans les sous-dossiers
-        matching_files = list(Path(storage_service.settings.output_dir).rglob(file_id))
+        matching_files = list(Path(settings.output_dir).rglob(file_id))
         if matching_files:
             file_path = matching_files[0]
         else:
@@ -69,12 +70,13 @@ async def get_file_metadata(file_id: str):
     if not file_id.endswith('.xml'):
         file_id = f"{file_id}.xml"
 
-    file_path = Path(storage_service.settings.output_dir) / file_id
+    from ..core.config import settings
+    file_path = Path(settings.output_dir) / file_id
 
     # Vérifier que le fichier existe
     if not storage_service.file_exists(str(file_path)):
         # Essayer de chercher dans les sous-dossiers
-        matching_files = list(Path(storage_service.settings.output_dir).rglob(file_id))
+        matching_files = list(Path(settings.output_dir).rglob(file_id))
         if matching_files:
             file_path = matching_files[0]
         else:
