@@ -10,8 +10,7 @@ from ..models.api_models import (
     BatchResultsResponse,
     JobStatus,
     BatchFileResult,
-    ConversionMetrics,
-    BatchConvertRequest
+    ConversionMetrics
 )
 from ..services.batch_service import batch_service
 from ..services.storage_service import storage_service

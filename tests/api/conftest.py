@@ -4,6 +4,7 @@ Fixtures pytest pour les tests API
 import pytest
 import pytest_asyncio
 import sys
+import secrets
 from pathlib import Path
 from httpx import AsyncClient, ASGITransport
 import asyncio
@@ -13,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 
 from api.main import app
 from api.core.config import settings
+from api.core.rate_limit import limiter
 
 
 @pytest_asyncio.fixture
@@ -20,16 +22,34 @@ async def client():
     """
     Client HTTP async pour tester l'API
     """
+    # Sauvegarder la config originale
+    original_auth = settings.require_authentication
+    original_keys = settings.api_keys
+    original_limiter_enabled = limiter.enabled
+
+    # Générer une clé API de test
+    test_api_key = secrets.token_urlsafe(32)
+
     # Override settings pour les tests
     settings.upload_dir = "test_uploads"
     settings.output_dir = "test_output"
+    settings.api_keys = test_api_key
+    settings.require_authentication = True
+
+    # Désactiver rate limiting pour les tests
+    limiter.enabled = False
 
     # Créer les dossiers de test
     Path(settings.upload_dir).mkdir(exist_ok=True)
     Path(settings.output_dir).mkdir(exist_ok=True)
 
+    # Créer le client avec le header X-API-Key automatiquement
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-API-Key": test_api_key}  # Ajouter automatiquement la clé API
+    ) as ac:
         yield ac
 
     # Cleanup après les tests
@@ -39,6 +59,11 @@ async def client():
         shutil.rmtree("test_output", ignore_errors=True)
     except:
         pass
+
+    # Restaurer la configuration
+    settings.require_authentication = original_auth
+    settings.api_keys = original_keys
+    limiter.enabled = original_limiter_enabled
 
 
 @pytest.fixture
