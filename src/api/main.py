@@ -103,7 +103,11 @@ def custom_openapi():
             "type": "apiKey",
             "in": "header",
             "name": "X-API-Key",
-            "description": "Clé API pour l'authentification. Générer avec: `python -c 'import secrets; print(secrets.token_urlsafe(32))'`"
+            "description": (
+                "Clé API pour l'authentification. "
+                "Pour obtenir une clé API, veuillez contacter l'administrateur du service. "
+                "Consultez la documentation pour plus d'informations sur l'utilisation de l'API."
+            )
         }
     }
 

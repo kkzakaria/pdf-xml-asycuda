@@ -13,7 +13,7 @@ API_KEY_HEADER = APIKeyHeader(
     name="X-API-Key",
     scheme_name="APIKeyHeader",
     auto_error=False,
-    description="Clé API pour authentification. Cliquer sur 'Authorize' pour l'entrer."
+    description="Veuillez fournir une clé API valide. Pour obtenir une clé, contactez l'administrateur ou consultez la documentation."
 )
 
 
