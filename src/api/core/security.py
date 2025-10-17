@@ -8,7 +8,13 @@ from fastapi.security import APIKeyHeader
 from .config import settings
 
 # Schéma d'authentification par API Key
-API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+# scheme_name doit correspondre au nom dans openapi_schema["components"]["securitySchemes"]
+API_KEY_HEADER = APIKeyHeader(
+    name="X-API-Key",
+    scheme_name="APIKeyHeader",
+    auto_error=False,
+    description="Clé API pour authentification. Cliquer sur 'Authorize' pour l'entrer."
+)
 
 
 async def verify_api_key(api_key: Optional[str] = Security(API_KEY_HEADER)) -> str:

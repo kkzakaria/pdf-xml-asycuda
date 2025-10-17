@@ -68,11 +68,53 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    # Configuration Swagger UI pour l'authentification
+    swagger_ui_parameters={
+        "persistAuthorization": True,  # Persiste la clé API entre les rechargements
+    }
 )
 
 # Ajouter le rate limiter à l'app
 app.state.limiter = limiter
+
+
+# Customiser le schéma OpenAPI pour ajouter la sécurité API Key
+def custom_openapi():
+    """
+    Customise le schéma OpenAPI pour supporter l'authentification API Key
+    dans Swagger UI
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    from fastapi.openapi.utils import get_openapi
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Ajouter le security scheme pour API Key
+    openapi_schema["components"]["securitySchemes"] = {
+        "APIKeyHeader": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+            "description": "Clé API pour l'authentification. Générer avec: `python -c 'import secrets; print(secrets.token_urlsafe(32))'`"
+        }
+    }
+
+    # Marquer tous les endpoints protégés dans la documentation
+    # (FastAPI le fait automatiquement via Depends(verify_api_key))
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 # Configuration CORS
 app.add_middleware(
