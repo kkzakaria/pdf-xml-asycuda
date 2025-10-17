@@ -1,7 +1,7 @@
 """
 Routes de conversion
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, BackgroundTasks, Depends, Request
 from fastapi.responses import FileResponse
 from pathlib import Path
 
@@ -17,6 +17,8 @@ from ..services.conversion_service import conversion_service
 from ..services.storage_service import storage_service
 from ..services.job_service import job_service
 from ..core.dependencies import validate_upload_file
+from ..core.security import verify_api_key
+from ..core.rate_limit import limiter, RateLimits
 
 router = APIRouter(prefix="/api/v1/convert", tags=["Conversion"])
 
@@ -25,9 +27,12 @@ router = APIRouter(prefix="/api/v1/convert", tags=["Conversion"])
     "",
     response_model=ConvertResponse,
     summary="Conversion synchrone",
-    description="Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement"
+    description="Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement",
+    dependencies=[Depends(verify_api_key)]
 )
+@limiter.limit(RateLimits.UPLOAD_SINGLE)
 async def convert_pdf(
+    request: Request,
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir")
 ):
     """
@@ -37,8 +42,8 @@ async def convert_pdf(
 
     Retourne le résultat immédiatement avec les métriques
     """
-    # Valider le fichier
-    validate_upload_file(file)
+    # Valider le fichier (fonction async maintenant)
+    file = await validate_upload_file(file)
 
     # Générer un job ID
     job_id = storage_service.generate_job_id()
@@ -139,9 +144,12 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str):
     "/async",
     response_model=ConvertAsyncResponse,
     summary="Conversion asynchrone",
-    description="Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard"
+    description="Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard",
+    dependencies=[Depends(verify_api_key)]
 )
+@limiter.limit(RateLimits.UPLOAD_ASYNC)
 async def convert_pdf_async(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir")
 ):
@@ -152,8 +160,8 @@ async def convert_pdf_async(
 
     Retourne un job_id pour suivre la progression avec GET /convert/{job_id}
     """
-    # Valider le fichier
-    validate_upload_file(file)
+    # Valider le fichier (fonction async maintenant)
+    file = await validate_upload_file(file)
 
     # Générer un job ID
     job_id = storage_service.generate_job_id()
@@ -199,9 +207,11 @@ async def convert_pdf_async(
     "/{job_id}",
     response_model=JobStatusResponse,
     summary="Status d'un job",
-    description="Récupère le status et la progression d'un job de conversion"
+    description="Récupère le status et la progression d'un job de conversion",
+    dependencies=[Depends(verify_api_key)]
 )
-async def get_job_status(job_id: str):
+@limiter.limit(RateLimits.DEFAULT)
+async def get_job_status(request: Request, job_id: str):
     """
     Récupère le status d'un job de conversion
 
@@ -232,9 +242,11 @@ async def get_job_status(job_id: str):
 @router.get(
     "/{job_id}/result",
     summary="Résultat d'un job",
-    description="Récupère le résultat complet d'un job de conversion avec métriques"
+    description="Récupère le résultat complet d'un job de conversion avec métriques",
+    dependencies=[Depends(verify_api_key)]
 )
-async def get_job_result(job_id: str):
+@limiter.limit(RateLimits.DEFAULT)
+async def get_job_result(request: Request, job_id: str):
     """
     Récupère le résultat complet d'un job
 
@@ -268,9 +280,11 @@ async def get_job_result(job_id: str):
     "/{job_id}/download",
     response_class=FileResponse,
     summary="Télécharger le XML",
-    description="Télécharge le fichier XML généré pour un job"
+    description="Télécharge le fichier XML généré pour un job",
+    dependencies=[Depends(verify_api_key)]
 )
-async def download_xml(job_id: str):
+@limiter.limit(RateLimits.DOWNLOAD)
+async def download_xml(request: Request, job_id: str):
     """
     Télécharge le fichier XML généré
 
