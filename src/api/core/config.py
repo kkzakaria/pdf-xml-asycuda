@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # API Configuration
     api_title: str = "API Convertisseur PDF RFCV → XML ASYCUDA"
-    api_version: str = "1.0.0"
+    api_version: str = "1.1.0"
     api_description: str = "API REST pour convertir les documents RFCV PDF en XML ASYCUDA"
 
     # Server Configuration

@@ -17,7 +17,7 @@ services:
         value: API Convertisseur PDF RFCV → XML ASYCUDA
 
       - key: API_VERSION
-        value: 1.0.0
+        value: 1.1.0
 
       - key: API_DEBUG
         value: false
