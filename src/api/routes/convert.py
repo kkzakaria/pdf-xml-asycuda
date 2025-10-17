@@ -10,7 +10,6 @@ from ..models.api_models import (
     ConvertAsyncResponse,
     JobStatusResponse,
     JobStatus,
-    ErrorResponse,
     ConversionMetrics
 )
 from ..services.conversion_service import conversion_service

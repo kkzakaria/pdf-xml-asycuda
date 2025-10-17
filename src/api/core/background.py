@@ -4,8 +4,6 @@ Tâches background pour l'API
 import asyncio
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Optional
-import shutil
 
 from .config import settings
 

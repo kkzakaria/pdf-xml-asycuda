@@ -8,8 +8,6 @@ from slowapi.errors import RateLimitExceeded
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
-from .config import settings
-
 
 def get_remote_address_with_forwarded(request: Request) -> str:
     """

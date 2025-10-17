@@ -3,9 +3,7 @@ Dépendances FastAPI pour injection
 """
 import io
 import logging
-from fastapi import Depends, HTTPException, status, UploadFile
-from typing import Optional
-import os
+from fastapi import HTTPException, status, UploadFile
 from pathlib import Path
 
 from .config import settings
