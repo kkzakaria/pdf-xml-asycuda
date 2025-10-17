@@ -16,7 +16,7 @@ from .core.dependencies import startup_tasks
 from .core.background import task_manager
 from .core.rate_limit import limiter, rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from .routes import convert, batch, files, health, debug
+from .routes import convert, batch, files, health
 
 # Configuration du logging
 logging.basicConfig(
@@ -229,7 +229,6 @@ app.include_router(convert.router)
 app.include_router(batch.router)
 app.include_router(files.router)
 app.include_router(health.router)
-app.include_router(debug.router)  # ⚠️ TEMPORAIRE - pour diagnostic
 
 
 # Route racine
