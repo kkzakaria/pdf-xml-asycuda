@@ -2,16 +2,28 @@
 Application FastAPI principale
 API REST pour la conversion PDF RFCV → XML ASYCUDA
 """
-from fastapi import FastAPI
+import uuid
+import logging
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import asyncio
 
 from .core.config import settings
 from .core.dependencies import startup_tasks
 from .core.background import task_manager
+from .core.rate_limit import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from .routes import convert, batch, files, health
+
+# Configuration du logging
+logging.basicConfig(
+    level=logging.INFO if not settings.debug else logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -59,27 +71,116 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
+# Ajouter le rate limiter à l'app
+app.state.limiter = limiter
+
 # Configuration CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins if settings.cors_origins else ["http://localhost:3000"],
     allow_credentials=settings.cors_allow_credentials,
     allow_methods=settings.cors_allow_methods,
     allow_headers=settings.cors_allow_headers,
 )
 
 
-# Exception handler global
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """Handler global pour les exceptions non gérées"""
+# Exception handlers sécurisés
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Handler pour les erreurs de rate limit"""
+    return rate_limit_exceeded_handler(request, exc)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Handler pour les exceptions HTTP
+
+    Logs les erreurs sans exposer les détails sensibles
+    """
+    logger.warning(
+        f"HTTP {exc.status_code}: {exc.detail} - "
+        f"path={request.url.path}, method={request.method}, "
+        f"ip={request.client.host if request.client else 'unknown'}"
+    )
+
     return JSONResponse(
-        status_code=500,
+        status_code=exc.status_code,
         content={
-            "error": "Erreur interne du serveur",
-            "detail": str(exc)
+            "error": exc.detail,
+            "status_code": exc.status_code
         }
     )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Handler pour les erreurs de validation Pydantic
+
+    Logs les erreurs de validation sans exposer les détails internes
+    """
+    logger.warning(
+        f"Validation error: {exc.errors()} - "
+        f"path={request.url.path}, ip={request.client.host if request.client else 'unknown'}"
+    )
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Erreur de validation",
+            "detail": "Les données fournies sont invalides",
+            "errors": exc.errors() if settings.debug else None
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Handler global pour les exceptions non gérées
+
+    En production: retourne un message générique avec error_id pour tracking
+    En développement: inclut les détails de l'exception
+    """
+    # Générer un ID unique pour tracking
+    error_id = str(uuid.uuid4())
+
+    # Logger l'exception complète avec stacktrace
+    logger.error(
+        f"Unhandled exception [{error_id}]: {type(exc).__name__}: {str(exc)}",
+        exc_info=True,
+        extra={
+            'error_id': error_id,
+            'path': request.url.path,
+            'method': request.method,
+            'client_host': request.client.host if request.client else 'unknown'
+        }
+    )
+
+    # Réponse selon le mode debug
+    if settings.debug:
+        # Mode développement: inclure les détails
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Erreur interne du serveur",
+                "error_id": error_id,
+                "type": type(exc).__name__,
+                "detail": str(exc)
+            }
+        )
+    else:
+        # Mode production: message générique seulement
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Erreur interne du serveur",
+                "error_id": error_id,
+                "message": "Une erreur inattendue s'est produite. Veuillez contacter le support avec cet ID d'erreur."
+            }
+        )
 
 
 # Inclure les routers

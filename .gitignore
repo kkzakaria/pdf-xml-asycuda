@@ -68,3 +68,16 @@ docker-compose.override.yml
 # Docker volumes
 uploads/
 !uploads/.gitkeep
+
+# Security
+secrets/
+credentials/.json
+apikeys.txt
+private_keys/.json
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+/SECURITY_FIXES.md
+/TEST_RESULTS.md

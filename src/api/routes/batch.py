@@ -1,7 +1,7 @@
 """
 Routes batch
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, BackgroundTasks, Body
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, BackgroundTasks, Body, Depends, Request
 from typing import List
 from pathlib import Path
 
@@ -16,6 +16,8 @@ from ..models.api_models import (
 from ..services.batch_service import batch_service
 from ..services.storage_service import storage_service
 from ..services.job_service import job_service
+from ..core.security import verify_api_key
+from ..core.rate_limit import limiter, RateLimits
 
 router = APIRouter(prefix="/api/v1/batch", tags=["Batch"])
 
@@ -54,9 +56,12 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], output_dir: str
     "",
     response_model=BatchJobResponse,
     summary="Conversion batch",
-    description="Upload plusieurs PDFs RFCV et les convertit en parallèle"
+    description="Upload plusieurs PDFs RFCV et les convertit en parallèle",
+    dependencies=[Depends(verify_api_key)]
 )
+@limiter.limit(RateLimits.BATCH)
 async def batch_convert(
+    request: Request,
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(..., description="Fichiers PDF à convertir"),
     workers: int = Body(default=4, ge=1, le=8, description="Nombre de workers parallèles")
@@ -121,9 +126,11 @@ async def batch_convert(
     "/{batch_id}/status",
     response_model=BatchJobResponse,
     summary="Status d'un batch",
-    description="Récupère le status et la progression d'un traitement batch"
+    description="Récupère le status et la progression d'un traitement batch",
+    dependencies=[Depends(verify_api_key)]
 )
-async def get_batch_status(batch_id: str):
+@limiter.limit(RateLimits.DEFAULT)
+async def get_batch_status(request: Request, batch_id: str):
     """
     Récupère le status d'un batch
 
@@ -156,9 +163,11 @@ async def get_batch_status(batch_id: str):
     "/{batch_id}/results",
     response_model=BatchResultsResponse,
     summary="Résultats d'un batch",
-    description="Récupère les résultats détaillés de tous les fichiers d'un batch"
+    description="Récupère les résultats détaillés de tous les fichiers d'un batch",
+    dependencies=[Depends(verify_api_key)]
 )
-async def get_batch_results(batch_id: str):
+@limiter.limit(RateLimits.DEFAULT)
+async def get_batch_results(request: Request, batch_id: str):
     """
     Récupère les résultats détaillés d'un batch
 
@@ -222,9 +231,11 @@ async def get_batch_results(batch_id: str):
 @router.get(
     "/{batch_id}/report",
     summary="Rapport batch",
-    description="Génère et retourne un rapport détaillé du batch (JSON)"
+    description="Génère et retourne un rapport détaillé du batch (JSON)",
+    dependencies=[Depends(verify_api_key)]
 )
-async def get_batch_report(batch_id: str):
+@limiter.limit(RateLimits.DEFAULT)
+async def get_batch_report(request: Request, batch_id: str):
     """
     Génère un rapport détaillé du batch
 
