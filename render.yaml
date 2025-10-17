@@ -4,7 +4,7 @@ services:
     name: pdf-xml-asycuda-api
     runtime: image
     image:
-      url: ghcr.io/kkzakaria/pdf-xml-asycuda:latest
+      url: ghcr.io/kkzakaria/pdf-xml-asycuda:main
     region: frankfurt # Or: oregon, ohio, singapore
     plan: free # Options: free, starter, standard, pro
 
