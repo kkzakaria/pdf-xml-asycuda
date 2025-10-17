@@ -28,12 +28,14 @@ services:
       - key: API_PORT
         value: 8000
 
-      # CORS Configuration
+      # CORS Configuration (restrictif par défaut)
+      # Pour autoriser votre frontend, modifier avec vos domaines:
+      # value: '["https://votre-app.com","https://app.votre-domaine.com"]'
       - key: API_CORS_ORIGINS
-        value: '["*"]'
+        value: '[]'  # Vide = aucune origine autorisée (plus sécurisé)
 
       - key: API_CORS_ALLOW_CREDENTIALS
-        value: true
+        value: false  # Désactivé par défaut pour sécurité
 
       # File Storage - Using ephemeral disk (free plan)
       - key: API_UPLOAD_DIR
@@ -59,12 +61,25 @@ services:
       - key: API_MAX_WORKERS
         value: 4 # Reduced for free plan
 
+      # Security Configuration
+      # IMPORTANT: API_KEYS doit être configuré via le Dashboard Render (secret)
+      # Ne JAMAIS commiter API_KEYS dans render.yaml !
+
+      - key: API_REQUIRE_AUTHENTICATION
+        value: true
+
       # Rate Limiting
       - key: API_RATE_LIMIT_ENABLED
         value: true
 
-      - key: API_RATE_LIMIT_PER_MINUTE
-        value: 60
+      - key: API_RATE_LIMIT_DEFAULT
+        value: "60/minute"
+
+      - key: API_RATE_LIMIT_UPLOAD
+        value: "10/minute"
+
+      - key: API_RATE_LIMIT_BATCH
+        value: "5/hour"
 
     # Disk configuration (ephemeral on free plan)
     # For persistent storage, upgrade to starter plan and uncomment:
