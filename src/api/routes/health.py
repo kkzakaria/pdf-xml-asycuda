@@ -1,13 +1,14 @@
 """
 Routes health et métriques
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from datetime import datetime
 import time
 
 from ..models.api_models import HealthResponse, MetricsResponse
 from ..services.job_service import job_service
 from ..core.config import settings
+from ..core.security import verify_api_key
 
 router = APIRouter(tags=["Health"])
 
@@ -43,7 +44,8 @@ async def health_check():
     "/api/v1/metrics",
     response_model=MetricsResponse,
     summary="Métriques système",
-    description="Récupère les métriques globales de conversion"
+    description="Récupère les métriques globales de conversion",
+    dependencies=[Depends(verify_api_key)]
 )
 async def get_system_metrics():
     """
@@ -103,7 +105,8 @@ async def get_system_metrics():
 @router.get(
     "/api/v1/metrics/{job_id}",
     summary="Métriques d'un job",
-    description="Récupère les métriques détaillées d'un job spécifique"
+    description="Récupère les métriques détaillées d'un job spécifique",
+    dependencies=[Depends(verify_api_key)]
 )
 async def get_job_metrics(job_id: str):
     """
