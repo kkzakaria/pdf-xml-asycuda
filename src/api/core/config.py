@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Security Configuration
-    api_keys: str = ""  # Clés API séparées par virgules (ex: "key1,key2,key3")
+    keys: str = ""  # Clés API séparées par virgules (ex: "key1,key2,key3") - Pydantic charge depuis API_KEYS
     require_authentication: bool = True  # Requiert authentification par défaut
 
     # CORS Configuration - SÉCURISÉ PAR DÉFAUT
@@ -103,7 +103,7 @@ class Settings(BaseSettings):
             )
         return v
 
-    @field_validator('api_keys')
+    @field_validator('keys')
     def validate_api_keys(cls, v, values):
         """
         Valide que des clés API sont configurées si auth requise
@@ -119,8 +119,8 @@ class Settings(BaseSettings):
         # On ne peut donc pas valider la cohérence avec require_authentication ici
         # Cette validation sera faite au runtime dans security.py
         if v:
-            keys = [k.strip() for k in v.split(',') if k.strip()]
-            if any(len(key) < 16 for key in keys):
+            api_keys = [k.strip() for k in v.split(',') if k.strip()]
+            if any(len(key) < 16 for key in api_keys):
                 warnings.warn(
                     "⚠️  ATTENTION SÉCURITÉ: Certaines clés API sont trop courtes (<16 caractères). "
                     "Utiliser des clés longues et aléatoires générées avec secrets.token_urlsafe(32)",

@@ -24,7 +24,7 @@ async def client():
     """
     # Sauvegarder la config originale
     original_auth = settings.require_authentication
-    original_keys = settings.api_keys
+    original_keys = settings.keys
     original_limiter_enabled = limiter.enabled
 
     # Générer une clé API de test
@@ -33,7 +33,7 @@ async def client():
     # Override settings pour les tests
     settings.upload_dir = "test_uploads"
     settings.output_dir = "test_output"
-    settings.api_keys = test_api_key
+    settings.keys = test_api_key
     settings.require_authentication = True
 
     # Désactiver rate limiting pour les tests
@@ -62,7 +62,7 @@ async def client():
 
     # Restaurer la configuration
     settings.require_authentication = original_auth
-    settings.api_keys = original_keys
+    settings.keys = original_keys
     limiter.enabled = original_limiter_enabled
 
 

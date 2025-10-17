@@ -24,11 +24,11 @@ def client():
     """
     # Sauvegarder la configuration originale
     original_auth = settings.require_authentication
-    original_keys = settings.api_keys
+    original_keys = settings.keys
 
     # Générer une clé de test
     test_key = secrets.token_urlsafe(32)
-    settings.api_keys = test_key
+    settings.keys = test_key
     settings.require_authentication = True
 
     # Créer le client de test
@@ -37,7 +37,7 @@ def client():
 
     # Restaurer la configuration
     settings.require_authentication = original_auth
-    settings.api_keys = original_keys
+    settings.keys = original_keys
 
 
 @pytest.fixture
@@ -51,10 +51,10 @@ def authenticated_client(client, test_api_key):
     """Fixture pour un client authentifié"""
     # Configurer la clé API
     from api.core.config import settings
-    original_keys = settings.api_keys
-    settings.api_keys = test_api_key
+    original_keys = settings.keys
+    settings.keys = test_api_key
 
     yield client, test_api_key
 
     # Restaurer
-    settings.api_keys = original_keys
+    settings.keys = original_keys

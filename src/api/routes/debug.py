@@ -24,7 +24,7 @@ async def debug_config():
         "API_KEYS_exists": "API_KEYS" in os.environ,
         "API_KEYS_length": len(os.environ.get("API_KEYS", "")) if "API_KEYS" in os.environ else 0,
         "KEYS_exists": "KEYS" in os.environ,
-        "settings_api_keys_length": len(settings.api_keys) if settings.api_keys else 0,
+        "settings_api_keys_length": len(settings.keys) if settings.keys else 0,
         "settings_require_authentication": settings.require_authentication,
         "settings_rate_limit_enabled": settings.rate_limit_enabled,
         "all_API_env_vars": [k for k in os.environ.keys() if k.startswith("API_")]

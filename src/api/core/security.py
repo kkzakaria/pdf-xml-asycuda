@@ -44,9 +44,9 @@ async def verify_api_key(api_key: Optional[str] = Security(API_KEY_HEADER)) -> s
 
     # Récupérer les clés valides depuis la config
     valid_keys = []
-    if settings.api_keys:
+    if settings.keys:
         # Support multi-clés séparées par virgules
-        valid_keys = [key.strip() for key in settings.api_keys.split(',') if key.strip()]
+        valid_keys = [key.strip() for key in settings.keys.split(',') if key.strip()]
 
     if not valid_keys:
         # Si aucune clé configurée mais auth requise = erreur config
