@@ -19,6 +19,12 @@ class Identification:
     assessment_number: Optional[str] = None
     assessment_date: Optional[str] = None
 
+    # Nouveaux champs PRIORITÉ 3
+    rfcv_date: Optional[str] = None           # Date RFCV (DD/MM/YYYY)
+    fdi_number: Optional[str] = None          # No. FDI/DAI
+    fdi_date: Optional[str] = None            # Date FDI/DAI (DD/MM/YYYY)
+    delivery_type: Optional[str] = None       # Type livraison (TOT/PART)
+
 
 @dataclass
 class Trader:
@@ -56,6 +62,17 @@ class TransportInfo:
     loading_place_name: Optional[str] = None
     location_of_goods: Optional[str] = None
 
+    # Nouveaux champs PRIORITÉ 1
+    bill_of_lading: Optional[str] = None        # No. Connaissement
+    bl_date: Optional[str] = None               # Date Connaissement
+    voyage_number: Optional[str] = None         # No. Voyage (ex: 535W)
+    vessel_name: Optional[str] = None           # Nom navire/transporteur
+    incoterm: Optional[str] = None              # CFR, FOB, CIF, etc.
+    loading_location: Optional[str] = None      # Lieu chargement (ex: CNNGB)
+    discharge_location: Optional[str] = None    # Lieu déchargement (ex: CIABJ)
+    fcl_count: Optional[int] = None             # Nombre conteneurs complets
+    lcl_count: Optional[int] = None             # Nombre conteneurs partiels
+
 
 @dataclass
 class Bank:
@@ -78,6 +95,13 @@ class Financial:
     global_taxes: Optional[float] = None
     total_taxes: Optional[float] = None
 
+    # Nouveaux champs PRIORITÉ 2
+    invoice_number: Optional[str] = None       # No. Facture (ex: 2025/GB/SN17705)
+    invoice_date: Optional[str] = None         # Date Facture (DD/MM/YYYY)
+    invoice_amount: Optional[float] = None     # Total Facture
+    currency_code: Optional[str] = None        # Code Devise (USD, EUR, etc.)
+    exchange_rate: Optional[float] = None      # Taux de Change
+
 
 @dataclass
 class CurrencyAmount:
@@ -94,6 +118,7 @@ class Valuation:
     """Informations de valorisation"""
     calculation_mode: Optional[str] = None
     gross_weight: Optional[float] = None
+    net_weight: Optional[float] = None  # Ajout PRIORITÉ 1
     total_cost: Optional[float] = None
     total_cif: Optional[float] = None
     invoice: Optional[CurrencyAmount] = None
@@ -230,6 +255,9 @@ class Property:
     total_packages: Optional[int] = None
     date_of_declaration: Optional[str] = None
     selected_page: Optional[int] = None
+
+    # Nouveau champ PRIORITÉ 3
+    package_type: Optional[str] = None  # Type de colisage (CARTONS, PACKAGES, COLIS, PALETTES)
 
 
 @dataclass

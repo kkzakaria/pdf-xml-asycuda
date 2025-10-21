@@ -1,0 +1,3 @@
+file,success,output_file,processing_time,items_count,containers_count,fill_rate,xml_valid,warnings_count,error
+BL_2025_02830_RFCV.pdf,Yes,BL_2025_02830_RFCV.xml,0.161,2,1,65.5,Yes,1,
+BL_2025_03228_RFCV.pdf,Yes,BL_2025_03228_RFCV.xml,0.155,1,1,65.5,Yes,1,
