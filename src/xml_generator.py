@@ -145,6 +145,10 @@ class XMLGenerator:
         self._add_simple_element(nbers, 'Total_number_of_items', str(len(self.data.items)) if self.data.items else '0')
         self._add_simple_element(nbers, 'Total_number_of_packages', str(prop.total_packages) if prop and prop.total_packages else '0')
 
+        # P3.6: Ajouter le type de colisage
+        if prop and prop.package_type:
+            self._add_simple_element(nbers, 'Package_type', prop.package_type)
+
         self._add_element(prop_elem, 'Place_of_declaration')
         self._add_simple_element(prop_elem, 'Date_of_declaration', prop.date_of_declaration if prop and prop.date_of_declaration else '')
         self._add_simple_element(prop_elem, 'Selected_page', str(prop.selected_page) if prop and prop.selected_page else '1')
@@ -164,6 +168,23 @@ class XMLGenerator:
         self._add_element(type_elem, 'Type_of_transit_document')
 
         self._add_simple_element(ident_elem, 'Manifest_reference_number', ident.manifest_reference if ident else '')
+
+        # P3.5: Ajouter les nouveaux champs PRIORITÉ 3
+        # Date RFCV (section 5)
+        if ident and ident.rfcv_date:
+            self._add_simple_element(ident_elem, 'RFCV_date', ident.rfcv_date)
+
+        # No. FDI/DAI (section 7)
+        if ident and ident.fdi_number:
+            self._add_simple_element(ident_elem, 'FDI_number', ident.fdi_number)
+
+        # Date FDI/DAI (section 8)
+        if ident and ident.fdi_date:
+            self._add_simple_element(ident_elem, 'FDI_date', ident.fdi_date)
+
+        # Type de livraison (section 6: TOT/PART)
+        if ident and ident.delivery_type:
+            self._add_simple_element(ident_elem, 'Delivery_type', ident.delivery_type)
 
         registration = ET.SubElement(ident_elem, 'Registration')
         self._add_element(registration, 'Serial_number')
@@ -252,6 +273,11 @@ class XMLGenerator:
         departure = ET.SubElement(means, 'Departure_arrival_information')
         self._add_simple_element(departure, 'Identity', trans.vessel_identity if trans and trans.vessel_identity else '')
         self._add_simple_element(departure, 'Nationality', trans.vessel_nationality if trans and trans.vessel_nationality else '')
+        # P1.5: Ajouter voyage number et vessel name
+        if trans and trans.voyage_number:
+            self._add_simple_element(departure, 'Voyage_number', trans.voyage_number)
+        if trans and trans.vessel_name:
+            self._add_simple_element(departure, 'Vessel_name', trans.vessel_name)
 
         border = ET.SubElement(means, 'Border_information')
         self._add_simple_element(border, 'Identity', trans.vessel_identity if trans and trans.vessel_identity else '')
@@ -260,10 +286,18 @@ class XMLGenerator:
 
         self._add_element(means, 'Inland_mode_of_transport')
 
+        # P1.4: Ajouter Bill of Lading
+        if trans and (trans.bill_of_lading or trans.bl_date):
+            bl_elem = ET.SubElement(means, 'Bill_of_lading')
+            self._add_simple_element(bl_elem, 'Number', trans.bill_of_lading if trans.bill_of_lading else '')
+            self._add_simple_element(bl_elem, 'Date', trans.bl_date if trans.bl_date else '')
+
         self._add_simple_element(transport_elem, 'Container_flag', 'true' if trans and trans.container_flag else 'false')
 
         delivery = ET.SubElement(transport_elem, 'Delivery_terms')
-        self._add_simple_element(delivery, 'Code', trans.delivery_terms_code if trans and trans.delivery_terms_code else 'CFR')
+        # P1.3: Utiliser incoterm si disponible
+        incoterm_code = trans.incoterm if trans and trans.incoterm else (trans.delivery_terms_code if trans and trans.delivery_terms_code else 'CFR')
+        self._add_simple_element(delivery, 'Code', incoterm_code)
         self._add_element(delivery, 'Place')
         self._add_simple_element(delivery, 'Situation')
 
@@ -272,11 +306,15 @@ class XMLGenerator:
         self._add_simple_element(border_office, 'Name', trans.border_office_name if trans else 'ABIDJAN-PORT')
 
         loading = ET.SubElement(transport_elem, 'Place_of_loading')
-        self._add_simple_element(loading, 'Code', trans.loading_place_code if trans and trans.loading_place_code else '')
+        # P1.6: Utiliser loading_location si disponible
+        loading_code = trans.loading_location if trans and trans.loading_location else (trans.loading_place_code if trans and trans.loading_place_code else '')
+        self._add_simple_element(loading, 'Code', loading_code)
         self._add_simple_element(loading, 'Name', trans.loading_place_name if trans and trans.loading_place_name else '')
         self._add_element(loading, 'Country')
 
-        self._add_simple_element(transport_elem, 'Location_of_goods', trans.location_of_goods if trans and trans.location_of_goods else 'AIRE')
+        # P1.6: Utiliser discharge_location si disponible
+        discharge = trans.discharge_location if trans and trans.discharge_location else (trans.location_of_goods if trans and trans.location_of_goods else 'AIRE')
+        self._add_simple_element(transport_elem, 'Location_of_goods', discharge)
 
     def _build_financial(self):
         """Construit la section Financial"""
@@ -298,7 +336,18 @@ class XMLGenerator:
         self._add_element(terms, 'Code')
         self._add_element(terms, 'Description')
 
-        self._add_simple_element(financial_elem, 'Total_invoice')
+        # P2.5: Ajouter les données de facture
+        total_invoice_value = ''
+        if fin and fin.invoice_amount:
+            total_invoice_value = str(fin.invoice_amount)
+        self._add_simple_element(financial_elem, 'Total_invoice', total_invoice_value)
+
+        # P2.5: Ajouter numéro et date de facture
+        if fin and fin.invoice_number:
+            self._add_simple_element(financial_elem, 'Invoice_number', fin.invoice_number)
+        if fin and fin.invoice_date:
+            self._add_simple_element(financial_elem, 'Invoice_date', fin.invoice_date)
+
         self._add_simple_element(financial_elem, 'Deffered_payment_reference', fin.deferred_payment_ref if fin and fin.deferred_payment_ref else '')
         self._add_simple_element(financial_elem, 'Mode_of_payment', fin.mode_of_payment if fin and fin.mode_of_payment else 'COMPTE DE PAIEMENT')
 
@@ -372,7 +421,10 @@ class XMLGenerator:
         self._add_simple_element(total, 'Total_weight', str(val.total_weight) if val and val.total_weight else '')
 
     def _add_currency_amount(self, parent: ET.Element, tag: str, currency: Optional[CurrencyAmount]):
-        """Ajoute un élément de type montant avec devise"""
+        """Ajoute un élément de type montant avec devise
+
+        P2.6: Si currency est None, utilise les données de Financial (currency_code, exchange_rate)
+        """
         elem = ET.SubElement(parent, tag)
 
         if currency:
@@ -382,11 +434,16 @@ class XMLGenerator:
             self._add_simple_element(elem, 'Currency_name', currency.currency_name if currency.currency_name else 'Pas de devise étrangère')
             self._add_simple_element(elem, 'Currency_rate', str(currency.currency_rate) if currency.currency_rate else '0.0')
         else:
+            # P2.6: Utiliser les données financières si disponibles
+            fin = self.data.financial
+            currency_code = fin.currency_code if fin and fin.currency_code else None
+            exchange_rate = str(fin.exchange_rate) if fin and fin.exchange_rate else '0.0'
+
             self._add_simple_element(elem, 'Amount_national_currency', '0.0')
             self._add_simple_element(elem, 'Amount_foreign_currency', '0.0')
-            self._add_element(elem, 'Currency_code')
+            self._add_element(elem, 'Currency_code', currency_code)
             self._add_simple_element(elem, 'Currency_name', 'Pas de devise étrangère')
-            self._add_simple_element(elem, 'Currency_rate', '0.0')
+            self._add_simple_element(elem, 'Currency_rate', exchange_rate)
 
     def _build_containers(self):
         """Construit la section Container"""

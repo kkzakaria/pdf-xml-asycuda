@@ -163,6 +163,19 @@ class MetricsCollector:
         total_fields = 0
         filled_fields = 0
 
+        # P3.7: Identification (4 nouveaux champs PRIORITÉ 3)
+        total_fields += 4
+        if rfcv_data.identification:
+            if rfcv_data.identification.rfcv_date: filled_fields += 1
+            if rfcv_data.identification.fdi_number: filled_fields += 1
+            if rfcv_data.identification.fdi_date: filled_fields += 1
+            if rfcv_data.identification.delivery_type: filled_fields += 1
+
+        # P3.7: Property (1 nouveau champ PRIORITÉ 3)
+        total_fields += 1
+        if rfcv_data.property:
+            if rfcv_data.property.package_type: filled_fields += 1
+
         # Traders (3 traders × 3 champs)
         for trader in [rfcv_data.exporter, rfcv_data.consignee, rfcv_data.declarant]:
             total_fields += 3
@@ -191,11 +204,17 @@ class MetricsCollector:
             if rfcv_data.valuation.gross_weight: filled_fields += 1
             if rfcv_data.valuation.total_invoice: filled_fields += 1
 
-        # Financial (2 champs clés)
-        total_fields += 2
+        # Financial (7 champs clés) - P2: ajout de 5 nouveaux champs
+        total_fields += 7
         if rfcv_data.financial:
             if rfcv_data.financial.mode_of_payment: filled_fields += 1
             if rfcv_data.financial.deferred_payment_ref: filled_fields += 1
+            # P2: Nouveaux champs financiers
+            if rfcv_data.financial.invoice_number: filled_fields += 1
+            if rfcv_data.financial.invoice_date: filled_fields += 1
+            if rfcv_data.financial.invoice_amount: filled_fields += 1
+            if rfcv_data.financial.currency_code: filled_fields += 1
+            if rfcv_data.financial.exchange_rate: filled_fields += 1
 
         # Country (4 champs clés)
         total_fields += 4

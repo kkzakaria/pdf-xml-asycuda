@@ -1,0 +1,66 @@
+{
+  "generated_at": "2025-10-21T13:59:40.436688",
+  "summary": {
+    "total_files": 2,
+    "processed": 2,
+    "successful": 2,
+    "failed": 0,
+    "success_rate": 100.0,
+    "total_time": 0.32,
+    "avg_time_per_file": 0.16
+  },
+  "quality_metrics": {
+    "total_conversions": 2,
+    "successful": 2,
+    "failed": 0,
+    "success_rate": 100.0,
+    "avg_extraction_time_ms": 0.0,
+    "avg_generation_time_ms": 0.0,
+    "avg_total_time_ms": 156.81,
+    "avg_items_count": 1.5,
+    "avg_containers_count": 1.0,
+    "avg_fill_rate": 65.52,
+    "total_warnings": 2,
+    "xml_valid_count": 2
+  },
+  "files": [
+    {
+      "file": "tests/BL_2025_02830_RFCV.pdf",
+      "success": true,
+      "output_file": "output/BL_2025_02830_RFCV.xml",
+      "processing_time": 0.161,
+      "error": null,
+      "metrics": {
+        "items_count": 2,
+        "containers_count": 1,
+        "fill_rate": 65.52,
+        "warnings_count": 1,
+        "warnings": [
+          "Poids total manquant"
+        ],
+        "xml_valid": true,
+        "has_exporter": true,
+        "has_consignee": true
+      }
+    },
+    {
+      "file": "tests/BL_2025_03228_RFCV.pdf",
+      "success": true,
+      "output_file": "output/BL_2025_03228_RFCV.xml",
+      "processing_time": 0.155,
+      "error": null,
+      "metrics": {
+        "items_count": 1,
+        "containers_count": 1,
+        "fill_rate": 65.52,
+        "warnings_count": 1,
+        "warnings": [
+          "Poids total manquant"
+        ],
+        "xml_valid": true,
+        "has_exporter": true,
+        "has_consignee": true
+      }
+    }
+  ]
+}
