@@ -536,15 +536,32 @@ class RFCVParser:
             container_pattern = r'(\d+)\s+(\w+)\s+Conteneur\s+(\d+\'.*?)\s+(\d+\')\s+(\w+)'
 
             for match in re.finditer(container_pattern, section_text):
-                # Déterminer le type de conteneur (avec HC si High cube)
-                size = match.group(4).replace("'", "")  # "40" ou "20"
-                description = match.group(3).lower()     # "40' high cube"
+                # Déterminer le type de conteneur selon codes ISO
+                size = match.group(4).replace("'", "")  # "20", "40", "45"
+                description = match.group(3).lower()     # "40' high cube", "20' refrigerated", etc.
 
-                # Ajouter HC si High cube détecté
-                if 'high cube' in description or 'high-cube' in description:
-                    container_type = f"{size}HC"
-                else:
-                    container_type = size
+                # Mapping des types de conteneurs ISO
+                # Format: [Taille][Type] - ex: 40HC, 20GP, 45HC, 40RF, 40OT, etc.
+                type_mapping = {
+                    'high cube': 'HC',      # High Cube (9'6" height)
+                    'high-cube': 'HC',
+                    'open top': 'OT',       # Open Top
+                    'flat rack': 'FR',      # Flat Rack
+                    'flat-rack': 'FR',
+                    'refrigerated': 'RF',   # Refrigerated/Reefer
+                    'reefer': 'RF',
+                    'tank': 'TK',           # Tank container
+                    'standard': 'GP',       # General Purpose (standard)
+                }
+
+                # Déterminer le suffix selon la description
+                container_suffix = 'GP'  # Par défaut: General Purpose
+                for keyword, suffix in type_mapping.items():
+                    if keyword in description:
+                        container_suffix = suffix
+                        break
+
+                container_type = f"{size}{container_suffix}"
 
                 container = Container(
                     item_number=int(match.group(1)),
