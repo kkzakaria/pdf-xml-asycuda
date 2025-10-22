@@ -81,3 +81,6 @@ private_keys/.json
 *.jks
 /SECURITY_FIXES.md
 /TEST_RESULTS.md
+
+# asycude extraction - temporary files
+/asycuda-extraction/

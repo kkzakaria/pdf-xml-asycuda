@@ -5,6 +5,7 @@ Crée des fichiers XML conformes au format ASYCUDA à partir des données RFCV
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from typing import Optional, List
+from datetime import datetime
 from models import RFCVData, Item, Trader, CurrencyAmount
 
 
@@ -20,6 +21,33 @@ class XMLGenerator:
         """
         self.data = rfcv_data
         self.root = None
+
+    def _convert_date_to_asycuda_format(self, date_str: Optional[str]) -> Optional[str]:
+        """
+        Convertit une date du format DD/MM/YYYY au format ASYCUDA M/D/YY
+
+        Args:
+            date_str: Date au format DD/MM/YYYY (ex: "26/09/2025")
+
+        Returns:
+            Date au format M/D/YY (ex: "9/26/25") ou None si conversion impossible
+
+        Examples:
+            "26/09/2025" -> "9/26/25"
+            "01/12/2025" -> "12/1/25"
+            "10/07/2025" -> "7/10/25"
+        """
+        if not date_str:
+            return None
+
+        try:
+            # Parse DD/MM/YYYY
+            dt = datetime.strptime(date_str, '%d/%m/%Y')
+            # Format as M/D/YY (sans zéros initiaux)
+            return f"{dt.month}/{dt.day}/{dt.year % 100}"
+        except (ValueError, AttributeError):
+            # Si le format est déjà M/D/YY ou invalide, retourner tel quel
+            return date_str
 
     def generate(self) -> ET.Element:
         """
@@ -172,7 +200,7 @@ class XMLGenerator:
         # P3.5: Ajouter les nouveaux champs PRIORITÉ 3
         # Date RFCV (section 5)
         if ident and ident.rfcv_date:
-            self._add_simple_element(ident_elem, 'RFCV_date', ident.rfcv_date)
+            self._add_simple_element(ident_elem, 'RFCV_date', self._convert_date_to_asycuda_format(ident.rfcv_date))
 
         # No. FDI/DAI (section 7)
         if ident and ident.fdi_number:
@@ -180,7 +208,7 @@ class XMLGenerator:
 
         # Date FDI/DAI (section 8)
         if ident and ident.fdi_date:
-            self._add_simple_element(ident_elem, 'FDI_date', ident.fdi_date)
+            self._add_simple_element(ident_elem, 'FDI_date', self._convert_date_to_asycuda_format(ident.fdi_date))
 
         # Type de livraison (section 6: TOT/PART)
         if ident and ident.delivery_type:
@@ -189,12 +217,12 @@ class XMLGenerator:
         registration = ET.SubElement(ident_elem, 'Registration')
         self._add_element(registration, 'Serial_number')
         self._add_simple_element(registration, 'Number', ident.registration_number if ident and ident.registration_number else '')
-        self._add_simple_element(registration, 'Date', ident.registration_date if ident and ident.registration_date else '')
+        self._add_simple_element(registration, 'Date', self._convert_date_to_asycuda_format(ident.registration_date) if ident and ident.registration_date else '')
 
         assessment = ET.SubElement(ident_elem, 'Assessment')
         self._add_element(assessment, 'Serial_number')
         self._add_simple_element(assessment, 'Number', ident.assessment_number if ident and ident.assessment_number else '')
-        self._add_simple_element(assessment, 'Date', ident.assessment_date if ident and ident.assessment_date else '')
+        self._add_simple_element(assessment, 'Date', self._convert_date_to_asycuda_format(ident.assessment_date) if ident and ident.assessment_date else '')
 
         receipt = ET.SubElement(ident_elem, 'receipt')
         self._add_element(receipt, 'Serial_number')
@@ -271,26 +299,21 @@ class XMLGenerator:
         means = ET.SubElement(transport_elem, 'Means_of_transport')
 
         departure = ET.SubElement(means, 'Departure_arrival_information')
-        self._add_simple_element(departure, 'Identity', trans.vessel_identity if trans and trans.vessel_identity else '')
+        # Identity: Nom du navire SANS date (conforme ASYCUDA)
+        vessel_id = trans.vessel_name if trans and trans.vessel_name else ''
+        self._add_simple_element(departure, 'Identity', vessel_id)
         self._add_simple_element(departure, 'Nationality', trans.vessel_nationality if trans and trans.vessel_nationality else '')
-        # P1.5: Ajouter voyage number et vessel name
-        if trans and trans.voyage_number:
-            self._add_simple_element(departure, 'Voyage_number', trans.voyage_number)
-        if trans and trans.vessel_name:
-            self._add_simple_element(departure, 'Vessel_name', trans.vessel_name)
 
         border = ET.SubElement(means, 'Border_information')
-        self._add_simple_element(border, 'Identity', trans.vessel_identity if trans and trans.vessel_identity else '')
-        self._add_simple_element(border, 'Nationality')
+        # Identity: Nom du navire SANS date (conforme ASYCUDA)
+        self._add_simple_element(border, 'Identity', vessel_id)
+        self._add_element(border, 'Nationality')  # <null/> format pour conformité ASYCUDA
         self._add_simple_element(border, 'Mode', trans.border_mode if trans and trans.border_mode else '1')
 
         self._add_element(means, 'Inland_mode_of_transport')
 
-        # P1.4: Ajouter Bill of Lading
-        if trans and (trans.bill_of_lading or trans.bl_date):
-            bl_elem = ET.SubElement(means, 'Bill_of_lading')
-            self._add_simple_element(bl_elem, 'Number', trans.bill_of_lading if trans.bill_of_lading else '')
-            self._add_simple_element(bl_elem, 'Date', trans.bl_date if trans.bl_date else '')
+        # Note: Bill of Lading n'est PAS dans Transport/Means_of_transport dans ASYCUDA
+        # Il va dans Item/Previous_doc/Summary_declaration (voir _add_item_previous_doc)
 
         self._add_simple_element(transport_elem, 'Container_flag', 'true' if trans and trans.container_flag else 'false')
 
@@ -346,7 +369,7 @@ class XMLGenerator:
         if fin and fin.invoice_number:
             self._add_simple_element(financial_elem, 'Invoice_number', fin.invoice_number)
         if fin and fin.invoice_date:
-            self._add_simple_element(financial_elem, 'Invoice_date', fin.invoice_date)
+            self._add_simple_element(financial_elem, 'Invoice_date', self._convert_date_to_asycuda_format(fin.invoice_date))
 
         self._add_simple_element(financial_elem, 'Deffered_payment_reference', fin.deferred_payment_ref if fin and fin.deferred_payment_ref else '')
         self._add_simple_element(financial_elem, 'Mode_of_payment', fin.mode_of_payment if fin and fin.mode_of_payment else 'COMPTE DE PAIEMENT')
@@ -432,12 +455,15 @@ class XMLGenerator:
             self._add_simple_element(elem, 'Amount_foreign_currency', str(currency.amount_foreign) if currency.amount_foreign else '0.0')
             self._add_element(elem, 'Currency_code', currency.currency_code)
             self._add_simple_element(elem, 'Currency_name', currency.currency_name if currency.currency_name else 'Pas de devise étrangère')
-            self._add_simple_element(elem, 'Currency_rate', str(currency.currency_rate) if currency.currency_rate else '0.0')
+            # Format avec 4 décimales pour conformité ASYCUDA (ex: 566.6700)
+            rate_str = f'{currency.currency_rate:.4f}' if currency.currency_rate else '0.0'
+            self._add_simple_element(elem, 'Currency_rate', rate_str)
         else:
             # P2.6: Utiliser les données financières si disponibles
             fin = self.data.financial
             currency_code = fin.currency_code if fin and fin.currency_code else None
-            exchange_rate = str(fin.exchange_rate) if fin and fin.exchange_rate else '0.0'
+            # Format avec 4 décimales pour conformité ASYCUDA
+            exchange_rate = f'{fin.exchange_rate:.4f}' if fin and fin.exchange_rate else '0.0'
 
             self._add_simple_element(elem, 'Amount_national_currency', '0.0')
             self._add_simple_element(elem, 'Amount_foreign_currency', '0.0')
@@ -497,7 +523,7 @@ class XMLGenerator:
             self._add_simple_element(doc_elem, 'Attached_document_reference', doc.reference if doc.reference else '')
             self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '')
             if doc.document_date:
-                self._add_simple_element(doc_elem, 'Attached_document_date', doc.document_date)
+                self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
 
         # Packages
         if item.packages:
@@ -571,7 +597,7 @@ class XMLGenerator:
         prev_doc = ET.SubElement(item_elem, 'Previous_doc')
         self._add_simple_element(prev_doc, 'Summary_declaration', item.summary_declaration if item.summary_declaration else '')
         self._add_element(prev_doc, 'Summary_declaration_sl')
-        self._add_element(prev_doc, 'Previous_document_reference')
+        self._add_simple_element(prev_doc, 'Previous_document_reference', item.previous_document_reference if item.previous_document_reference else '')
         self._add_element(prev_doc, 'Previous_warehouse_code')
 
         self._add_simple_element(item_elem, 'Licence_number')

@@ -55,6 +55,28 @@ class RFCVParser:
         rfcv_data.items = self._parse_items()
         rfcv_data.value_details = self._extract_value_details()
 
+        # Enrichir les items avec les documents attachés
+        self._add_attached_documents(rfcv_data)
+
+        # Ajouter Summary_declaration (Bill of Lading) à tous les items
+        if rfcv_data.transport and rfcv_data.transport.bill_of_lading:
+            for item in rfcv_data.items:
+                item.summary_declaration = rfcv_data.transport.bill_of_lading
+
+        # Ajouter Previous_document_reference (Facture DU Date) à tous les items
+        if rfcv_data.financial and rfcv_data.financial.invoice_number:
+            invoice_num = rfcv_data.financial.invoice_number
+            invoice_date = rfcv_data.financial.invoice_date
+
+            # Format: "2025/BC/SN18215 DU 17/07/2025"
+            if invoice_date:
+                prev_doc_ref = f"{invoice_num} DU {invoice_date}"
+            else:
+                prev_doc_ref = invoice_num
+
+            for item in rfcv_data.items:
+                item.previous_document_reference = prev_doc_ref
+
         return rfcv_data
 
     def _extract_field(self, pattern: str, group: int = 1) -> Optional[str]:
@@ -117,6 +139,12 @@ class RFCVParser:
         # P3.3: Date RFCV - Section 5
         # Structure: "4. No. RFCV 5. Date RFCV 6. Livraison\n<nom> <RCS> <date_rfcv> <TOT/PART>"
         # La date RFCV est entre le numéro RCS et le type de livraison (format: DD/MM/YYYY)
+        # P3.3: No. RFCV - Section 4
+        # Structure: "4. No. RFCV 5. Date RFCV 6. Livraison\n<nom> RCS<numero> <date> <type>"
+        rfcv_number = self._extract_field(r'4\.\s*No\.\s*RFCV.*?\n.*?(RCS\d+)')
+        if rfcv_number:
+            ident.rfcv_number = rfcv_number
+
         rfcv_date = self._extract_field(r'4\.\s*No\.\s*RFCV.*?\n.*?RCS\d+\s+(\d{2}/\d{2}/\d{4})')
         if rfcv_date:
             ident.rfcv_date = rfcv_date
@@ -303,9 +331,10 @@ class RFCVParser:
             transport.delivery_terms_code = incoterm
             transport.incoterm = incoterm  # P1.3: Nouveau champ
 
-        # P1.4: No. Connaissement (Bill of Lading) - chercher le numéro long (6+ chiffres)
+        # P1.4: No. Connaissement (Bill of Lading) - chercher le numéro alphanumérique (6+ caractères)
         # Structure: Le BL est sur la 3ème ligne après "No. (LTA/Connaissement"
-        bl_number = self._extract_field(r'No\.\s*\(LTA/Connaissement/CMR\):.*?\n.*?\n(\d{6,})')
+        # Exemples: 258614991 (numérique), COSU6426271870 (alphanumérique)
+        bl_number = self._extract_field(r'No\.\s*\(LTA/Connaissement/CMR\):.*?\n.*?\n([A-Z0-9]{6,})')
         if bl_number:
             transport.bill_of_lading = bl_number
 
@@ -428,9 +457,14 @@ class RFCVParser:
         if gross_weight:
             valuation.gross_weight = self._parse_number(gross_weight)
 
-        # Devise
-        currency = self._extract_field(r'16\.\s*Code Devise[:\s]+(\w+)')
-        currency_rate = self._extract_field(r'17\.\s*Taux de Change[:\s]+([\d\s,\.]+)')
+        # P2.3: Code Devise - chercher le code ISO 3 lettres sur la ligne suivante
+        # Structure: "16. Code Devise 17. Taux...\n<pays> <CODE_ISO> <taux> <montant>"
+        # Note: utilise [^\n] au lieu de . car _extract_field n'utilise pas re.DOTALL
+        currency = self._extract_field(r'16\.\s*Code Devise[^\n]*?17\.[^\n]*?\n[^\n]*?([A-Z]{3})\s+[\d\s,]+')
+
+        # P2.4: Taux de Change - chercher le taux après le code devise
+        # Structure: même ligne que devise, format: "USD 566,6700"
+        currency_rate = self._extract_field(r'16\.\s*Code Devise[^\n]*?17\.[^\n]*?\n[^\n]*?[A-Z]{3}\s+([\d\s]+,\d{2,4})')
 
         # Total facture (ligne 18 avec "18. Total Facture")
         total_invoice = self._extract_field(r'18\.\s*Total Facture.*?\n.*?\s+([\d\s]+,\d{2})\s*$')
@@ -476,23 +510,14 @@ class RFCVParser:
         )
 
         valuation.total_invoice = self._parse_number(total_invoice) if total_invoice else None
-        valuation.total_cif = self._parse_number(cif) if cif else None
 
-        # P4.3: Calculer total_cost = FOB + Fret + Assurance + Charges
-        # Si les composants sont disponibles, calculer le total
-        fob_val = self._parse_number(fob) if fob else 0
-        freight_val = self._parse_number(freight) if freight else 0
-        insurance_val = self._parse_number(insurance) if insurance else 0
-
-        # Charges attestées (section 22) si présent
-        charges = self._extract_field(r'22\.\s*Charges Attestées[:\s]+([\d\s,\.]+)')
-        charges_val = self._parse_number(charges) if charges else 0
-
-        # Calculer le total si au moins FOB est présent
-        if fob_val > 0:
-            valuation.total_cost = fob_val + freight_val + insurance_val + charges_val
-        else:
-            valuation.total_cost = None
+        # TODO: Total_cost et Total_CIF à null en attendant clarification
+        # Incohérence détectée:
+        # - Total_cost calculé comme FOB+Fret+Assurance+Charges ne correspond pas à ASYCUDA
+        # - Total_CIF extraction capture le numéro de connaissement au lieu du CIF
+        # Dans ASYCUDA: Total_cost = Somme(Item/Total_cost_itm), Total_CIF = Somme(Item/Total_CIF_itm)
+        valuation.total_cost = None
+        valuation.total_cif = None
 
         return valuation
 
@@ -511,13 +536,42 @@ class RFCVParser:
             section_text = container_section.group(1)
 
             # Pattern pour extraire les conteneurs
+            # Format: N No_Conteneur Type Taille No_Scellé
+            # Exemple: "1 MRSU7172203 Conteneur 40' High cube 40' ML-CN8063134"
             container_pattern = r'(\d+)\s+(\w+)\s+Conteneur\s+(\d+\'.*?)\s+(\d+\')\s+(\w+)'
 
             for match in re.finditer(container_pattern, section_text):
+                # Déterminer le type de conteneur selon codes ISO
+                size = match.group(4).replace("'", "")  # "20", "40", "45"
+                description = match.group(3).lower()     # "40' high cube", "20' refrigerated", etc.
+
+                # Mapping des types de conteneurs ISO
+                # Format: [Taille][Type] - ex: 40HC, 20GP, 45HC, 40RF, 40OT, etc.
+                type_mapping = {
+                    'high cube': 'HC',      # High Cube (9'6" height)
+                    'high-cube': 'HC',
+                    'open top': 'OT',       # Open Top
+                    'flat rack': 'FR',      # Flat Rack
+                    'flat-rack': 'FR',
+                    'refrigerated': 'RF',   # Refrigerated/Reefer
+                    'reefer': 'RF',
+                    'tank': 'TK',           # Tank container
+                    'standard': 'GP',       # General Purpose (standard)
+                }
+
+                # Déterminer le suffix selon la description
+                container_suffix = 'GP'  # Par défaut: General Purpose
+                for keyword, suffix in type_mapping.items():
+                    if keyword in description:
+                        container_suffix = suffix
+                        break
+
+                container_type = f"{size}{container_suffix}"
+
                 container = Container(
                     item_number=int(match.group(1)),
                     identity=match.group(2),
-                    container_type=match.group(4).replace("'", ""),
+                    container_type=container_type,
                     empty_full_indicator='1/1'
                 )
                 containers.append(container)
@@ -540,30 +594,40 @@ class RFCVParser:
 
         section_text = articles_section.group(1)
 
+        # Extraire le type de colisage de la section 24
+        package_type_match = self._extract_field(r'\d+\s+(CARTONS|PACKAGES|COLIS|PALETTES|PIECES|BAGS|BOXES)')
+        kind_code, kind_name = self._map_package_type(package_type_match)
+
         # Pattern pour extraire les articles
-        # Format: N° Quantité UM UPO Description Code_SH Valeur_FOB Valeur_taxable
-        item_pattern = r'(\d+)\s+([\d,\.]+)\s+(\w+)\s+(\w+)\s+(\w+)\s+(.*?)\s+(\d{4}\.\d{2}\.\d{2}\.\d{2})\s+([\d,\.]+)\s+([\d,\.]+)'
+        # Format: N° Quantité UM UPO Origine Description Code_SH Valeur_FOB Valeur_taxable
+        # Note: Les nombres peuvent contenir des espaces (ex: "2 000,00")
+        item_pattern = r'(\d+)\s+([\d\s]+,\d{2})\s+(\w+)\s+(\w+)\s+(\w+)\s+(.*?)\s+(\d{4}\.\d{2}\.\d{2}\.\d{2})\s+([\d\s]+,\d{2})\s+([\d\s]+,\d{2})'
 
         for match in re.finditer(item_pattern, section_text):
             item = Item()
 
-            # Package info
-            item.packages = Package(
-                number_of_packages=self._parse_number(match.group(2)),
-                kind_code='PK',
-                kind_name='Colis ("package")'
-            )
-
             # Description
             item.goods_description = match.group(6).strip()
+
+            # Package info - utilise le type extrait de la section 24
+            item.packages = Package(
+                number_of_packages=self._parse_number(match.group(2)),
+                kind_code=kind_code,
+                kind_name=kind_name,
+                marks1=item.goods_description  # Utilise la description des marchandises (comme ASYCUDA)
+            )
             item.country_of_origin_code = match.group(5)
+
+            # Summary declaration sera ajouté après parsing (besoin du bill_of_lading)
 
             # HS Code
             hs_code_str = match.group(7)
+            # Remove dots from HS code (e.g., "2803.00.00.00" -> "2803000000")
+            hs_code_clean = hs_code_str.replace('.', '')
             item.tarification = Tarification(
                 hscode=HSCode(
-                    commodity_code=hs_code_str[:8] if len(hs_code_str) >= 8 else hs_code_str,
-                    precision_1=hs_code_str[8:10] if len(hs_code_str) >= 10 else '00'
+                    commodity_code=hs_code_clean[:8] if len(hs_code_clean) >= 8 else hs_code_clean,
+                    precision_1=hs_code_clean[8:10] if len(hs_code_clean) >= 10 else '00'
                 ),
                 extended_procedure='4000',
                 national_procedure='000',
@@ -624,6 +688,92 @@ class RFCVParser:
             return float(cleaned)
         except (ValueError, AttributeError):
             return None
+
+    @staticmethod
+    def _map_package_type(package_type: Optional[str]) -> tuple:
+        """
+        Mappe le type de colisage du PDF vers les codes ASYCUDA
+
+        Args:
+            package_type: Type extrait du PDF (CARTONS, PACKAGES, etc.)
+
+        Returns:
+            Tuple (code, nom) pour ASYCUDA
+        """
+        if not package_type:
+            return ('PK', 'Colis ("package")')
+
+        # Mapping des types de colisage vers codes ASYCUDA
+        mapping = {
+            'CARTONS': ('CT', 'Carton'),
+            'PACKAGES': ('PK', 'Colis ("package")'),
+            'COLIS': ('PK', 'Colis ("package")'),
+            'PALETTES': ('PL', 'Palette'),
+            'PIECES': ('PC', 'Pièce'),
+            'BAGS': ('BG', 'Sac'),
+            'BOXES': ('BX', 'Boîte'),
+            'BARRELS': ('BA', 'Baril'),
+            'DRUMS': ('DR', 'Fût'),
+            'CONTAINERS': ('CN', 'Conteneur'),
+        }
+
+        # Recherche du type (insensible à la casse)
+        package_upper = package_type.upper()
+        if package_upper in mapping:
+            return mapping[package_upper]
+
+        # Par défaut: Package
+        return ('PK', 'Colis ("package")')
+
+    def _add_attached_documents(self, rfcv_data: RFCVData) -> None:
+        """
+        Ajoute les documents attachés standards à chaque item
+
+        Documents standards ASYCUDA Côte d'Ivoire:
+        - Code 0007: FACTURE (No. Facture + Date)
+        - Code 2501: A.V./R.F.C.V. - ATTESTATION DE VERIFICATION (No. RFCV)
+        - Code 6610: NUMERO FDI (No. FDI/DAI + Date)
+
+        Args:
+            rfcv_data: Données RFCV complètes avec identification et financial
+        """
+        # Récupérer les références depuis identification et financial
+        rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
+        fdi_number = rfcv_data.identification.fdi_number if rfcv_data.identification else None
+        fdi_date = rfcv_data.identification.fdi_date if rfcv_data.identification else None
+        invoice_number = rfcv_data.financial.invoice_number if rfcv_data.financial else None
+        invoice_date = rfcv_data.financial.invoice_date if rfcv_data.financial else None
+
+        # Ajouter les documents attachés à chaque item
+        for item in rfcv_data.items:
+            # Document 1: FACTURE (code 0007)
+            if invoice_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='0007',
+                    name='FACTURE',
+                    reference=invoice_number,
+                    from_rule=1,
+                    document_date=invoice_date
+                ))
+
+            # Document 2: RFCV (code 2501)
+            if rfcv_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='2501',
+                    name="A.V./R.F.C.V. - ATTESTATION DE VERIFICATION",
+                    reference=rfcv_number,
+                    from_rule=1
+                ))
+
+            # Document 3: FDI (code 6610)
+            if fdi_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='6610',
+                    name='NUMERO  FDI',
+                    reference=fdi_number,
+                    from_rule=1,
+                    document_date=fdi_date
+                ))
 
 
 def parse_rfcv(pdf_path: str) -> RFCVData:

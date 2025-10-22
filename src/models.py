@@ -20,6 +20,7 @@ class Identification:
     assessment_date: Optional[str] = None
 
     # Nouveaux champs PRIORITÉ 3
+    rfcv_number: Optional[str] = None         # No. RFCV (ex: RCS25125133)
     rfcv_date: Optional[str] = None           # Date RFCV (DD/MM/YYYY)
     fdi_number: Optional[str] = None          # No. FDI/DAI
     fdi_date: Optional[str] = None            # Date FDI/DAI (DD/MM/YYYY)
@@ -239,6 +240,7 @@ class Item:
     commercial_description: Optional[str] = None
     country_of_origin_code: Optional[str] = None
     summary_declaration: Optional[str] = None
+    previous_document_reference: Optional[str] = None
     free_text_1: Optional[str] = None
     free_text_2: Optional[str] = None
     taxation: Optional[Taxation] = None
