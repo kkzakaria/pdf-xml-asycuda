@@ -562,15 +562,16 @@ class RFCVParser:
         for match in re.finditer(item_pattern, section_text):
             item = Item()
 
+            # Description
+            item.goods_description = match.group(6).strip()
+
             # Package info
             item.packages = Package(
                 number_of_packages=self._parse_number(match.group(2)),
                 kind_code='PK',
-                kind_name='Colis ("package")'
+                kind_name='Colis ("package")',
+                marks1=item.goods_description  # Utilise la description des marchandises (comme ASYCUDA)
             )
-
-            # Description
-            item.goods_description = match.group(6).strip()
             item.country_of_origin_code = match.group(5)
 
             # HS Code
