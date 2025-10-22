@@ -555,8 +555,9 @@ class RFCVParser:
         section_text = articles_section.group(1)
 
         # Pattern pour extraire les articles
-        # Format: N° Quantité UM UPO Description Code_SH Valeur_FOB Valeur_taxable
-        item_pattern = r'(\d+)\s+([\d,\.]+)\s+(\w+)\s+(\w+)\s+(\w+)\s+(.*?)\s+(\d{4}\.\d{2}\.\d{2}\.\d{2})\s+([\d,\.]+)\s+([\d,\.]+)'
+        # Format: N° Quantité UM UPO Origine Description Code_SH Valeur_FOB Valeur_taxable
+        # Note: Les nombres peuvent contenir des espaces (ex: "2 000,00")
+        item_pattern = r'(\d+)\s+([\d\s]+,\d{2})\s+(\w+)\s+(\w+)\s+(\w+)\s+(.*?)\s+(\d{4}\.\d{2}\.\d{2}\.\d{2})\s+([\d\s]+,\d{2})\s+([\d\s]+,\d{2})'
 
         for match in re.finditer(item_pattern, section_text):
             item = Item()
