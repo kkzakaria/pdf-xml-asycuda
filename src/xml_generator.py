@@ -455,12 +455,15 @@ class XMLGenerator:
             self._add_simple_element(elem, 'Amount_foreign_currency', str(currency.amount_foreign) if currency.amount_foreign else '0.0')
             self._add_element(elem, 'Currency_code', currency.currency_code)
             self._add_simple_element(elem, 'Currency_name', currency.currency_name if currency.currency_name else 'Pas de devise étrangère')
-            self._add_simple_element(elem, 'Currency_rate', str(currency.currency_rate) if currency.currency_rate else '0.0')
+            # Format avec 4 décimales pour conformité ASYCUDA (ex: 566.6700)
+            rate_str = f'{currency.currency_rate:.4f}' if currency.currency_rate else '0.0'
+            self._add_simple_element(elem, 'Currency_rate', rate_str)
         else:
             # P2.6: Utiliser les données financières si disponibles
             fin = self.data.financial
             currency_code = fin.currency_code if fin and fin.currency_code else None
-            exchange_rate = str(fin.exchange_rate) if fin and fin.exchange_rate else '0.0'
+            # Format avec 4 décimales pour conformité ASYCUDA
+            exchange_rate = f'{fin.exchange_rate:.4f}' if fin and fin.exchange_rate else '0.0'
 
             self._add_simple_element(elem, 'Amount_national_currency', '0.0')
             self._add_simple_element(elem, 'Amount_foreign_currency', '0.0')
