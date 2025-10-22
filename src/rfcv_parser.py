@@ -55,6 +55,9 @@ class RFCVParser:
         rfcv_data.items = self._parse_items()
         rfcv_data.value_details = self._extract_value_details()
 
+        # Enrichir les items avec les documents attachés
+        self._add_attached_documents(rfcv_data)
+
         return rfcv_data
 
     def _extract_field(self, pattern: str, group: int = 1) -> Optional[str]:
@@ -117,6 +120,12 @@ class RFCVParser:
         # P3.3: Date RFCV - Section 5
         # Structure: "4. No. RFCV 5. Date RFCV 6. Livraison\n<nom> <RCS> <date_rfcv> <TOT/PART>"
         # La date RFCV est entre le numéro RCS et le type de livraison (format: DD/MM/YYYY)
+        # P3.3: No. RFCV - Section 4
+        # Structure: "4. No. RFCV 5. Date RFCV 6. Livraison\n<nom> RCS<numero> <date> <type>"
+        rfcv_number = self._extract_field(r'4\.\s*No\.\s*RFCV.*?\n.*?(RCS\d+)')
+        if rfcv_number:
+            ident.rfcv_number = rfcv_number
+
         rfcv_date = self._extract_field(r'4\.\s*No\.\s*RFCV.*?\n.*?RCS\d+\s+(\d{2}/\d{2}/\d{4})')
         if rfcv_date:
             ident.rfcv_date = rfcv_date
@@ -631,6 +640,57 @@ class RFCVParser:
             return float(cleaned)
         except (ValueError, AttributeError):
             return None
+
+
+    def _add_attached_documents(self, rfcv_data: RFCVData) -> None:
+        """
+        Ajoute les documents attachés standards à chaque item
+
+        Documents standards ASYCUDA Côte d'Ivoire:
+        - Code 0007: FACTURE (No. Facture + Date)
+        - Code 2501: A.V./R.F.C.V. - ATTESTATION DE VERIFICATION (No. RFCV)
+        - Code 6610: NUMERO FDI (No. FDI/DAI + Date)
+
+        Args:
+            rfcv_data: Données RFCV complètes avec identification et financial
+        """
+        # Récupérer les références depuis identification et financial
+        rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
+        fdi_number = rfcv_data.identification.fdi_number if rfcv_data.identification else None
+        fdi_date = rfcv_data.identification.fdi_date if rfcv_data.identification else None
+        invoice_number = rfcv_data.financial.invoice_number if rfcv_data.financial else None
+        invoice_date = rfcv_data.financial.invoice_date if rfcv_data.financial else None
+
+        # Ajouter les documents attachés à chaque item
+        for item in rfcv_data.items:
+            # Document 1: FACTURE (code 0007)
+            if invoice_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='0007',
+                    name='FACTURE',
+                    reference=invoice_number,
+                    from_rule=1,
+                    document_date=invoice_date
+                ))
+
+            # Document 2: RFCV (code 2501)
+            if rfcv_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='2501',
+                    name="A.V./R.F.C.V. - ATTESTATION DE VERIFICATION",
+                    reference=rfcv_number,
+                    from_rule=1
+                ))
+
+            # Document 3: FDI (code 6610)
+            if fdi_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='6610',
+                    name='NUMERO  FDI',
+                    reference=fdi_number,
+                    from_rule=1,
+                    document_date=fdi_date
+                ))
 
 
 def parse_rfcv(pdf_path: str) -> RFCVData:
