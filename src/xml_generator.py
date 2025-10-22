@@ -314,11 +314,8 @@ class XMLGenerator:
 
         self._add_element(means, 'Inland_mode_of_transport')
 
-        # P1.4: Ajouter Bill of Lading
-        if trans and (trans.bill_of_lading or trans.bl_date):
-            bl_elem = ET.SubElement(means, 'Bill_of_lading')
-            self._add_simple_element(bl_elem, 'Number', trans.bill_of_lading if trans.bill_of_lading else '')
-            self._add_simple_element(bl_elem, 'Date', trans.bl_date if trans.bl_date else '')
+        # Note: Bill of Lading n'est PAS dans Transport/Means_of_transport dans ASYCUDA
+        # Il va dans Item/Previous_doc/Summary_declaration (voir _add_item_previous_doc)
 
         self._add_simple_element(transport_elem, 'Container_flag', 'true' if trans and trans.container_flag else 'false')
 

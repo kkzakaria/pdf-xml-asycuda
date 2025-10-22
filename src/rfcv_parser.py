@@ -58,6 +58,11 @@ class RFCVParser:
         # Enrichir les items avec les documents attachés
         self._add_attached_documents(rfcv_data)
 
+        # Ajouter Summary_declaration (Bill of Lading) à tous les items
+        if rfcv_data.transport and rfcv_data.transport.bill_of_lading:
+            for item in rfcv_data.items:
+                item.summary_declaration = rfcv_data.transport.bill_of_lading
+
         return rfcv_data
 
     def _extract_field(self, pattern: str, group: int = 1) -> Optional[str]:
@@ -312,9 +317,10 @@ class RFCVParser:
             transport.delivery_terms_code = incoterm
             transport.incoterm = incoterm  # P1.3: Nouveau champ
 
-        # P1.4: No. Connaissement (Bill of Lading) - chercher le numéro long (6+ chiffres)
+        # P1.4: No. Connaissement (Bill of Lading) - chercher le numéro alphanumérique (6+ caractères)
         # Structure: Le BL est sur la 3ème ligne après "No. (LTA/Connaissement"
-        bl_number = self._extract_field(r'No\.\s*\(LTA/Connaissement/CMR\):.*?\n.*?\n(\d{6,})')
+        # Exemples: 258614991 (numérique), COSU6426271870 (alphanumérique)
+        bl_number = self._extract_field(r'No\.\s*\(LTA/Connaissement/CMR\):.*?\n.*?\n([A-Z0-9]{6,})')
         if bl_number:
             transport.bill_of_lading = bl_number
 
@@ -573,6 +579,8 @@ class RFCVParser:
                 marks1=item.goods_description  # Utilise la description des marchandises (comme ASYCUDA)
             )
             item.country_of_origin_code = match.group(5)
+
+            # Summary declaration sera ajouté après parsing (besoin du bill_of_lading)
 
             # HS Code
             hs_code_str = match.group(7)
