@@ -232,19 +232,43 @@ class RFCVParser:
         """Parse les informations sur les pays"""
         country = Country()
 
-        # Pays de provenance
-        provenance = self._extract_field(r'9\.\s*Pays de provenance[:\s]+(.*?)(?:\n|$)')
+        # P4.1: Pays de provenance - Section 9
+        # Structure: "9. Pays de provenance 10. Mode de Paiement\n<PAYS> <mode_paiement>"
+        # Le pays est le premier mot de la ligne suivante
+        provenance = self._extract_field(r'9\.\s*Pays de provenance.*?\n([A-Za-zÀ-ÿ\s\'-]+?)\s+(?:Paiement|$)')
         if provenance:
+            provenance = provenance.strip()
             country.export_country_name = provenance
             country.origin_country_name = provenance
-            # Mapper nom pays → code (Chine = CN)
-            if 'Chine' in provenance or 'China' in provenance:
-                country.export_country_code = 'CN'
-                country.first_destination = 'CN'
+
+            # P4.1: Mapper nom pays → code ISO (enrichir selon besoins)
+            country_codes = {
+                'Chine': 'CN',
+                'China': 'CN',
+                'Emirats Arabes Unis': 'AE',
+                'United Arab Emirates': 'AE',
+                'UAE': 'AE',
+                'France': 'FR',
+                'Allemagne': 'DE',
+                'Germany': 'DE',
+                'Italie': 'IT',
+                'Italy': 'IT',
+                'Espagne': 'ES',
+                'Spain': 'ES',
+                'Turquie': 'TR',
+                'Turkey': 'TR'
+            }
+
+            for country_name, code in country_codes.items():
+                if country_name.lower() in provenance.lower():
+                    country.export_country_code = code
+                    country.first_destination = code
+                    break
 
         # Pays de destination (Côte d'Ivoire)
         country.destination_country_code = 'CI'
         country.destination_country_name = "Cote d'Ivoire"
+        country.trading_country = 'CI'
 
         return country
 
@@ -296,11 +320,19 @@ class RFCVParser:
         if voyage:
             transport.voyage_number = voyage
 
-        # P1.6: Lieu de chargement (pattern amélioré pour code UN/LOCODE)
+        # P1.6 + P4.2: Lieu de chargement (code et nom)
+        # Code UN/LOCODE (5 caractères) - déjà extrait en P1
         loading = self._extract_field(r'Lieu\s*de\s*chargement:\s*([A-Z]{5})')
         if loading:
             transport.loading_place_code = loading
-            transport.loading_location = loading  # P1.6: Nouveau champ
+            transport.loading_location = loading  # P1.6: Code UN/LOCODE
+
+        # P4.2: Nom du lieu de chargement
+        # Structure: "CFR\n<NOM_LIEU> 16. Code Devise"
+        # Le nom du lieu est entre INCOTERM et "16. Code Devise"
+        loading_match = re.search(r'\b(CFR|FOB|CIF|EXW|FCA|CPT|CIP|DAP|DPU|DDP)\b\s*\n([A-Z][A-Z\s]+?)\s+16\.', self.text)
+        if loading_match:
+            transport.loading_place_name = loading_match.group(2).strip()
 
         # P1.6: Lieu de déchargement
         unloading = self._extract_field(r'Lieu\s*de\s*déchargement:\s*([A-Z]{5})')
@@ -400,17 +432,19 @@ class RFCVParser:
         currency = self._extract_field(r'16\.\s*Code Devise[:\s]+(\w+)')
         currency_rate = self._extract_field(r'17\.\s*Taux de Change[:\s]+([\d\s,\.]+)')
 
-        # Total facture
-        total_invoice = self._extract_field(r'18\.\s*Total Facture[:\s]+([\d\s,\.]+)')
+        # Total facture (ligne 18 avec "18. Total Facture")
+        total_invoice = self._extract_field(r'18\.\s*Total Facture.*?\n.*?\s+([\d\s]+,\d{2})\s*$')
 
-        # FOB
-        fob = self._extract_field(r'19\.\s*Total Valeur FOB attestée[:\s]+([\d\s,\.]+)')
+        # P4.3: FOB - Structure: "19. Total Valeur FOB attestée 20. Fret Attesté\n3. Détails Transport\n<FOB> <FRET>"
+        # Pattern: premier nombre sur ligne après "3. Détails Transport"
+        fob = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
 
-        # Fret
-        freight = self._extract_field(r'20\.\s*Fret Attesté[:\s]+([\d\s,\.]+)')
+        # P4.3: Fret - deuxième nombre sur la même ligne
+        freight = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n[\d\s]+,\d{2}\s+([\d\s]+,\d{2})')
 
-        # Assurance
-        insurance = self._extract_field(r'21\.\s*Assurance Attestée[:\s]+([\d\s,\.]+)')
+        # P4.3: Assurance - premier nombre après "21. Assurance Attestée"
+        # Structure: "21. Assurance...\n<texte>\n<ASSURANCE> <CIF>"
+        insurance = self._extract_field(r'21\.\s*Assurance Attestée.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
 
         # CIF - Pattern amélioré pour capturer les valeurs avec espaces et formats variés
         cif = self._extract_field(r'23\.\s*Valeur CIF Attestée[:\s]+([\d][\d\s,\.]+)')
@@ -443,7 +477,22 @@ class RFCVParser:
 
         valuation.total_invoice = self._parse_number(total_invoice) if total_invoice else None
         valuation.total_cif = self._parse_number(cif) if cif else None
-        valuation.total_cost = self._parse_number(fob) if fob else None
+
+        # P4.3: Calculer total_cost = FOB + Fret + Assurance + Charges
+        # Si les composants sont disponibles, calculer le total
+        fob_val = self._parse_number(fob) if fob else 0
+        freight_val = self._parse_number(freight) if freight else 0
+        insurance_val = self._parse_number(insurance) if insurance else 0
+
+        # Charges attestées (section 22) si présent
+        charges = self._extract_field(r'22\.\s*Charges Attestées[:\s]+([\d\s,\.]+)')
+        charges_val = self._parse_number(charges) if charges else 0
+
+        # Calculer le total si au moins FOB est présent
+        if fob_val > 0:
+            valuation.total_cost = fob_val + freight_val + insurance_val + charges_val
+        else:
+            valuation.total_cost = None
 
         return valuation
 

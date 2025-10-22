@@ -184,8 +184,8 @@ class MetricsCollector:
                 if trader.name: filled_fields += 1
                 if trader.address: filled_fields += 1
 
-        # Transport (7 champs clés)
-        total_fields += 7
+        # Transport (8 champs clés) - P4.2: ajout loading_place_name
+        total_fields += 8
         if rfcv_data.transport:
             if rfcv_data.transport.vessel_identity: filled_fields += 1
             if rfcv_data.transport.border_mode: filled_fields += 1
@@ -194,6 +194,8 @@ class MetricsCollector:
             if rfcv_data.transport.location_of_goods: filled_fields += 1
             if rfcv_data.transport.border_office_code: filled_fields += 1
             if rfcv_data.transport.container_flag is not None: filled_fields += 1
+            # P4.2: Nouveau champ
+            if rfcv_data.transport.loading_place_name: filled_fields += 1
 
         # Valuation (5 champs clés)
         total_fields += 5
@@ -216,13 +218,15 @@ class MetricsCollector:
             if rfcv_data.financial.currency_code: filled_fields += 1
             if rfcv_data.financial.exchange_rate: filled_fields += 1
 
-        # Country (4 champs clés)
-        total_fields += 4
+        # Country (5 champs clés) - P4.1: ajout trading_country
+        total_fields += 5
         if rfcv_data.country:
             if rfcv_data.country.export_country_code: filled_fields += 1
             if rfcv_data.country.export_country_name: filled_fields += 1
             if rfcv_data.country.destination_country_code: filled_fields += 1
             if rfcv_data.country.origin_country_name: filled_fields += 1
+            # P4.1: Nouveau champ
+            if rfcv_data.country.trading_country: filled_fields += 1
 
         # Items et containers
         total_fields += 2
