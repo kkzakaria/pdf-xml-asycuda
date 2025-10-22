@@ -428,9 +428,14 @@ class RFCVParser:
         if gross_weight:
             valuation.gross_weight = self._parse_number(gross_weight)
 
-        # Devise
-        currency = self._extract_field(r'16\.\s*Code Devise[:\s]+(\w+)')
-        currency_rate = self._extract_field(r'17\.\s*Taux de Change[:\s]+([\d\s,\.]+)')
+        # P2.3: Code Devise - chercher le code ISO 3 lettres sur la ligne suivante
+        # Structure: "16. Code Devise 17. Taux...\n<pays> <CODE_ISO> <taux> <montant>"
+        # Note: utilise [^\n] au lieu de . car _extract_field n'utilise pas re.DOTALL
+        currency = self._extract_field(r'16\.\s*Code Devise[^\n]*?17\.[^\n]*?\n[^\n]*?([A-Z]{3})\s+[\d\s,]+')
+
+        # P2.4: Taux de Change - chercher le taux après le code devise
+        # Structure: même ligne que devise, format: "USD 566,6700"
+        currency_rate = self._extract_field(r'16\.\s*Code Devise[^\n]*?17\.[^\n]*?\n[^\n]*?[A-Z]{3}\s+([\d\s]+,\d{2,4})')
 
         # Total facture (ligne 18 avec "18. Total Facture")
         total_invoice = self._extract_field(r'18\.\s*Total Facture.*?\n.*?\s+([\d\s]+,\d{2})\s*$')
