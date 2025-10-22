@@ -496,23 +496,14 @@ class RFCVParser:
         )
 
         valuation.total_invoice = self._parse_number(total_invoice) if total_invoice else None
-        valuation.total_cif = self._parse_number(cif) if cif else None
 
-        # P4.3: Calculer total_cost = FOB + Fret + Assurance + Charges
-        # Si les composants sont disponibles, calculer le total
-        fob_val = self._parse_number(fob) if fob else 0
-        freight_val = self._parse_number(freight) if freight else 0
-        insurance_val = self._parse_number(insurance) if insurance else 0
-
-        # Charges attestées (section 22) si présent
-        charges = self._extract_field(r'22\.\s*Charges Attestées[:\s]+([\d\s,\.]+)')
-        charges_val = self._parse_number(charges) if charges else 0
-
-        # Calculer le total si au moins FOB est présent
-        if fob_val > 0:
-            valuation.total_cost = fob_val + freight_val + insurance_val + charges_val
-        else:
-            valuation.total_cost = None
+        # TODO: Total_cost et Total_CIF à null en attendant clarification
+        # Incohérence détectée:
+        # - Total_cost calculé comme FOB+Fret+Assurance+Charges ne correspond pas à ASYCUDA
+        # - Total_CIF extraction capture le numéro de connaissement au lieu du CIF
+        # Dans ASYCUDA: Total_cost = Somme(Item/Total_cost_itm), Total_CIF = Somme(Item/Total_CIF_itm)
+        valuation.total_cost = None
+        valuation.total_cif = None
 
         return valuation
 
