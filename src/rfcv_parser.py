@@ -531,13 +531,25 @@ class RFCVParser:
             section_text = container_section.group(1)
 
             # Pattern pour extraire les conteneurs
+            # Format: N No_Conteneur Type Taille No_Scellé
+            # Exemple: "1 MRSU7172203 Conteneur 40' High cube 40' ML-CN8063134"
             container_pattern = r'(\d+)\s+(\w+)\s+Conteneur\s+(\d+\'.*?)\s+(\d+\')\s+(\w+)'
 
             for match in re.finditer(container_pattern, section_text):
+                # Déterminer le type de conteneur (avec HC si High cube)
+                size = match.group(4).replace("'", "")  # "40" ou "20"
+                description = match.group(3).lower()     # "40' high cube"
+
+                # Ajouter HC si High cube détecté
+                if 'high cube' in description or 'high-cube' in description:
+                    container_type = f"{size}HC"
+                else:
+                    container_type = size
+
                 container = Container(
                     item_number=int(match.group(1)),
                     identity=match.group(2),
-                    container_type=match.group(4).replace("'", ""),
+                    container_type=container_type,
                     empty_full_indicator='1/1'
                 )
                 containers.append(container)
