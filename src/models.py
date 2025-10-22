@@ -240,6 +240,7 @@ class Item:
     commercial_description: Optional[str] = None
     country_of_origin_code: Optional[str] = None
     summary_declaration: Optional[str] = None
+    previous_document_reference: Optional[str] = None
     free_text_1: Optional[str] = None
     free_text_2: Optional[str] = None
     taxation: Optional[Taxation] = None

@@ -597,7 +597,7 @@ class XMLGenerator:
         prev_doc = ET.SubElement(item_elem, 'Previous_doc')
         self._add_simple_element(prev_doc, 'Summary_declaration', item.summary_declaration if item.summary_declaration else '')
         self._add_element(prev_doc, 'Summary_declaration_sl')
-        self._add_element(prev_doc, 'Previous_document_reference')
+        self._add_simple_element(prev_doc, 'Previous_document_reference', item.previous_document_reference if item.previous_document_reference else '')
         self._add_element(prev_doc, 'Previous_warehouse_code')
 
         self._add_simple_element(item_elem, 'Licence_number')

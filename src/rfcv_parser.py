@@ -63,6 +63,20 @@ class RFCVParser:
             for item in rfcv_data.items:
                 item.summary_declaration = rfcv_data.transport.bill_of_lading
 
+        # Ajouter Previous_document_reference (Facture DU Date) à tous les items
+        if rfcv_data.financial and rfcv_data.financial.invoice_number:
+            invoice_num = rfcv_data.financial.invoice_number
+            invoice_date = rfcv_data.financial.invoice_date
+
+            # Format: "2025/BC/SN18215 DU 17/07/2025"
+            if invoice_date:
+                prev_doc_ref = f"{invoice_num} DU {invoice_date}"
+            else:
+                prev_doc_ref = invoice_num
+
+            for item in rfcv_data.items:
+                item.previous_document_reference = prev_doc_ref
+
         return rfcv_data
 
     def _extract_field(self, pattern: str, group: int = 1) -> Optional[str]:
@@ -580,6 +594,10 @@ class RFCVParser:
 
         section_text = articles_section.group(1)
 
+        # Extraire le type de colisage de la section 24
+        package_type_match = self._extract_field(r'\d+\s+(CARTONS|PACKAGES|COLIS|PALETTES|PIECES|BAGS|BOXES)')
+        kind_code, kind_name = self._map_package_type(package_type_match)
+
         # Pattern pour extraire les articles
         # Format: N° Quantité UM UPO Origine Description Code_SH Valeur_FOB Valeur_taxable
         # Note: Les nombres peuvent contenir des espaces (ex: "2 000,00")
@@ -591,11 +609,11 @@ class RFCVParser:
             # Description
             item.goods_description = match.group(6).strip()
 
-            # Package info
+            # Package info - utilise le type extrait de la section 24
             item.packages = Package(
                 number_of_packages=self._parse_number(match.group(2)),
-                kind_code='PK',
-                kind_name='Colis ("package")',
+                kind_code=kind_code,
+                kind_name=kind_name,
                 marks1=item.goods_description  # Utilise la description des marchandises (comme ASYCUDA)
             )
             item.country_of_origin_code = match.group(5)
@@ -671,6 +689,41 @@ class RFCVParser:
         except (ValueError, AttributeError):
             return None
 
+    @staticmethod
+    def _map_package_type(package_type: Optional[str]) -> tuple:
+        """
+        Mappe le type de colisage du PDF vers les codes ASYCUDA
+
+        Args:
+            package_type: Type extrait du PDF (CARTONS, PACKAGES, etc.)
+
+        Returns:
+            Tuple (code, nom) pour ASYCUDA
+        """
+        if not package_type:
+            return ('PK', 'Colis ("package")')
+
+        # Mapping des types de colisage vers codes ASYCUDA
+        mapping = {
+            'CARTONS': ('CT', 'Carton'),
+            'PACKAGES': ('PK', 'Colis ("package")'),
+            'COLIS': ('PK', 'Colis ("package")'),
+            'PALETTES': ('PL', 'Palette'),
+            'PIECES': ('PC', 'Pièce'),
+            'BAGS': ('BG', 'Sac'),
+            'BOXES': ('BX', 'Boîte'),
+            'BARRELS': ('BA', 'Baril'),
+            'DRUMS': ('DR', 'Fût'),
+            'CONTAINERS': ('CN', 'Conteneur'),
+        }
+
+        # Recherche du type (insensible à la casse)
+        package_upper = package_type.upper()
+        if package_upper in mapping:
+            return mapping[package_upper]
+
+        # Par défaut: Package
+        return ('PK', 'Colis ("package")')
 
     def _add_attached_documents(self, rfcv_data: RFCVData) -> None:
         """
