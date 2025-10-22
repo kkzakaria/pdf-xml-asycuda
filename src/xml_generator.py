@@ -299,17 +299,15 @@ class XMLGenerator:
         means = ET.SubElement(transport_elem, 'Means_of_transport')
 
         departure = ET.SubElement(means, 'Departure_arrival_information')
-        self._add_simple_element(departure, 'Identity', trans.vessel_identity if trans and trans.vessel_identity else '')
+        # Identity: Nom du navire SANS date (conforme ASYCUDA)
+        vessel_id = trans.vessel_name if trans and trans.vessel_name else ''
+        self._add_simple_element(departure, 'Identity', vessel_id)
         self._add_simple_element(departure, 'Nationality', trans.vessel_nationality if trans and trans.vessel_nationality else '')
-        # P1.5: Ajouter voyage number et vessel name
-        if trans and trans.voyage_number:
-            self._add_simple_element(departure, 'Voyage_number', trans.voyage_number)
-        if trans and trans.vessel_name:
-            self._add_simple_element(departure, 'Vessel_name', trans.vessel_name)
 
         border = ET.SubElement(means, 'Border_information')
-        self._add_simple_element(border, 'Identity', trans.vessel_identity if trans and trans.vessel_identity else '')
-        self._add_simple_element(border, 'Nationality')
+        # Identity: Nom du navire SANS date (conforme ASYCUDA)
+        self._add_simple_element(border, 'Identity', vessel_id)
+        self._add_element(border, 'Nationality')  # <null/> format pour conformité ASYCUDA
         self._add_simple_element(border, 'Mode', trans.border_mode if trans and trans.border_mode else '1')
 
         self._add_element(means, 'Inland_mode_of_transport')
