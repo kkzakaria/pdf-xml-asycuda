@@ -560,10 +560,12 @@ class RFCVParser:
 
             # HS Code
             hs_code_str = match.group(7)
+            # Remove dots from HS code (e.g., "2803.00.00.00" -> "2803000000")
+            hs_code_clean = hs_code_str.replace('.', '')
             item.tarification = Tarification(
                 hscode=HSCode(
-                    commodity_code=hs_code_str[:8] if len(hs_code_str) >= 8 else hs_code_str,
-                    precision_1=hs_code_str[8:10] if len(hs_code_str) >= 10 else '00'
+                    commodity_code=hs_code_clean[:8] if len(hs_code_clean) >= 8 else hs_code_clean,
+                    precision_1=hs_code_clean[8:10] if len(hs_code_clean) >= 10 else '00'
                 ),
                 extended_procedure='4000',
                 national_procedure='000',
