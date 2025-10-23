@@ -18,59 +18,78 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate changelog
-        id: changelog
+      - name: Generate release notes
+        id: release_notes
         run: |
+          VERSION="${{ github.ref_name }}"
+
           # Get previous tag
           PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
 
+          # Generate commit list
           if [ -z "$PREV_TAG" ]; then
-            # First release
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --reverse)
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
           else
-            # Generate changelog from previous tag
-            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
           fi
 
-          # Save to file
-          echo "$CHANGELOG" > CHANGELOG.txt
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # Get PR numbers and titles from commits
+          PRS=$(echo "$COMMITS" | grep -oP '#\d+' || echo "")
 
-      - name: Create Release
-        uses: actions/create-release@v1
+          # Create comprehensive release notes in French
+          cat > release_notes.md << 'EOF'
+          ## 🚀 Nouveautés
+
+          EOF
+
+          # Add commits
+          echo "$COMMITS" >> release_notes.md
+
+          cat >> release_notes.md << EOF
+
+          ## 📦 Installation
+
+          ### Via Docker (Recommandé)
+          \`\`\`bash
+          docker pull ghcr.io/${{ github.repository }}:${VERSION}
+          docker run -p 8000:8000 ghcr.io/${{ github.repository }}:${VERSION}
+          \`\`\`
+
+          ### Via Docker Compose
+          \`\`\`bash
+          git checkout ${VERSION}
+          docker-compose up -d
+          \`\`\`
+
+          ### Via pip
+          \`\`\`bash
+          pip install git+https://github.com/${{ github.repository }}.git@${VERSION}
+          \`\`\`
+
+          ## 📚 Documentation
+
+          - [README Principal](https://github.com/${{ github.repository }}/blob/${VERSION}/README.md)
+          - [Guide API](https://github.com/${{ github.repository }}/blob/${VERSION}/README.md#api-endpoints)
+          - [Guide Docker](https://github.com/${{ github.repository }}/blob/${VERSION}/README_DOCKER.md)
+          - [Documentation Claude](https://github.com/${{ github.repository }}/blob/${VERSION}/CLAUDE.md)
+
+          ## 🔗 Liens Utiles
+
+          - **Image Docker**: \`ghcr.io/${{ github.repository }}:${VERSION}\`
+          - **Tag Git**: \`${VERSION}\`
+          EOF
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "- **Comparaison**: [\`${PREV_TAG}...${VERSION}\`](https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION})" >> release_notes.md
+          fi
+
+      - name: Create Release with gh CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          body: |
-            ## 🚀 Release ${{ github.ref_name }}
-
-            ### Changes
-            ${{ steps.changelog.outputs.changelog }}
-
-            ### Docker Image
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ```
-
-            ### Quick Start
-            ```bash
-            # Using docker-compose
-            git checkout ${{ github.ref_name }}
-            docker-compose up -d
-
-            # Or direct run
-            docker run -p 8000:8000 ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ```
-
-            ### Documentation
-            - [API Documentation](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/README.md)
-            - [Docker Guide](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/README_DOCKER.md)
-          draft: false
-          prerelease: false
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }} - Amélioration Système" \
+            --notes-file release_notes.md
 
   release-notes:
     name: Post-Release Notification
