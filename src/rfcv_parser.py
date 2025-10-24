@@ -413,11 +413,9 @@ class RFCVParser:
             financial.invoice_date = invoice_date
 
         # P2.2: Total Facture - Section 18
-        # Structure: "16. Code Devise 17. Taux de Change 18. Total Facture\n<pays> USD <taux> <montant_facture>"
-        # Le montant total facture est le DERNIER nombre sur la ligne après le code devise
-        invoice_amount = self._extract_field(r'18\.\s*Total\s*Facture.*?\n.*?\s+([\d\s]+,\d{2})\s*$')
-        if invoice_amount:
-            financial.invoice_amount = self._parse_number(invoice_amount)
+        # NOTE: Section 18 (Total Facture) n'est PAS utilisée par ASYCUDA
+        # Mise à null en attendant identification de la valeur correcte
+        financial.invoice_amount = None
 
         # P2.3: Code Devise - Section 16
         # Structure: "16. Code Devise 17...\n<pays> <CODE> <taux> <montant>"
@@ -466,9 +464,6 @@ class RFCVParser:
         # Structure: même ligne que devise, format: "USD 566,6700"
         currency_rate = self._extract_field(r'16\.\s*Code Devise[^\n]*?17\.[^\n]*?\n[^\n]*?[A-Z]{3}\s+([\d\s]+,\d{2,4})')
 
-        # Total facture (ligne 18 avec "18. Total Facture")
-        total_invoice = self._extract_field(r'18\.\s*Total Facture.*?\n.*?\s+([\d\s]+,\d{2})\s*$')
-
         # P4.3: FOB - Structure: "19. Total Valeur FOB attestée 20. Fret Attesté\n3. Détails Transport\n<FOB> <FRET>"
         # Pattern: premier nombre sur ligne après "3. Détails Transport"
         # NOTE: Sections 18 (Total Facture) et 20 (Fret Attesté) ne sont PAS utilisées par ASYCUDA
@@ -489,11 +484,8 @@ class RFCVParser:
                 cif = match.group(1).strip()
 
         # Créer les CurrencyAmount
-        valuation.invoice = CurrencyAmount(
-            amount_foreign=self._parse_number(total_invoice) if total_invoice else None,
-            currency_code=currency,
-            currency_rate=self._parse_number(currency_rate) if currency_rate else None
-        )
+        # Gs_Invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        valuation.invoice = None
 
         # Gs_external_freight à null en attendant la logique de calcul correcte
         # La section 20 (Fret Attesté) du RFCV n'est pas utilisée par ASYCUDA
@@ -505,7 +497,8 @@ class RFCVParser:
             currency_rate=self._parse_number(currency_rate) if currency_rate else None
         )
 
-        valuation.total_invoice = self._parse_number(total_invoice) if total_invoice else None
+        # Total_invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        valuation.total_invoice = None
 
         # TODO: Total_cost et Total_CIF à null en attendant clarification
         # Incohérence détectée:
