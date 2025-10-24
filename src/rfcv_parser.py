@@ -644,6 +644,10 @@ class RFCVParser:
         for match in re.finditer(item_pattern, section_text):
             item = Item()
 
+            # Extraire la quantité et l'unité de mesure de l'article
+            quantity = self._parse_number(match.group(2))  # Ex: "36 000,00" -> 36000
+            unit_measure = match.group(3)  # Ex: "KG"
+
             # Description
             item.goods_description = match.group(6).strip()
 
@@ -670,11 +674,19 @@ class RFCVParser:
                 ),
                 extended_procedure='4000',
                 national_procedure='000',
+                supplementary_units=[
+                    SupplementaryUnit(
+                        code='QA',
+                        name='Unité d\'apurement',
+                        quantity=quantity
+                    )
+                ],
                 item_price=self._parse_number(match.group(8))
             )
 
-            # Valuation item
+            # Valuation item - inclut le poids net (quantité de l'article)
             item.valuation_item = ValuationItem(
+                net_weight=quantity,  # Poids net = quantité de l'article (ex: 36000 KG)
                 total_cost=self._parse_number(match.group(8)),
                 total_cif=self._parse_number(match.group(9))
             )
