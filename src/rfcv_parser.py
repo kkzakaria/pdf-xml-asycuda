@@ -471,10 +471,8 @@ class RFCVParser:
 
         # P4.3: FOB - Structure: "19. Total Valeur FOB attestée 20. Fret Attesté\n3. Détails Transport\n<FOB> <FRET>"
         # Pattern: premier nombre sur ligne après "3. Détails Transport"
+        # NOTE: Sections 18 (Total Facture) et 20 (Fret Attesté) ne sont PAS utilisées par ASYCUDA
         fob = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
-
-        # P4.3: Fret - deuxième nombre sur la même ligne
-        freight = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n[\d\s]+,\d{2}\s+([\d\s]+,\d{2})')
 
         # P4.3: Assurance - premier nombre après "21. Assurance Attestée"
         # Structure: "21. Assurance...\n<texte>\n<ASSURANCE> <CIF>"
@@ -497,11 +495,9 @@ class RFCVParser:
             currency_rate=self._parse_number(currency_rate) if currency_rate else None
         )
 
-        valuation.external_freight = CurrencyAmount(
-            amount_foreign=self._parse_number(freight) if freight else None,
-            currency_code=currency,
-            currency_rate=self._parse_number(currency_rate) if currency_rate else None
-        )
+        # Gs_external_freight à null en attendant la logique de calcul correcte
+        # La section 20 (Fret Attesté) du RFCV n'est pas utilisée par ASYCUDA
+        valuation.external_freight = None
 
         valuation.insurance = CurrencyAmount(
             amount_foreign=self._parse_number(insurance) if insurance else None,

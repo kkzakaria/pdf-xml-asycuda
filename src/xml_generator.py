@@ -433,7 +433,8 @@ class XMLGenerator:
 
         # Currency amounts
         self._add_currency_amount(valuation_elem, 'Gs_Invoice', val.invoice if val else None)
-        self._add_currency_amount(valuation_elem, 'Gs_external_freight', val.external_freight if val else None)
+        # Gs_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
+        self._add_currency_amount(valuation_elem, 'Gs_external_freight', val.external_freight if val else None, allow_null=True)
         self._add_currency_amount(valuation_elem, 'Gs_internal_freight', val.internal_freight if val else None)
         self._add_currency_amount(valuation_elem, 'Gs_insurance', val.insurance if val else None)
         self._add_currency_amount(valuation_elem, 'Gs_other_cost', val.other_cost if val else None)
@@ -443,10 +444,18 @@ class XMLGenerator:
         self._add_simple_element(total, 'Total_invoice', str(val.total_invoice) if val and val.total_invoice else '')
         self._add_simple_element(total, 'Total_weight', str(val.total_weight) if val and val.total_weight else '')
 
-    def _add_currency_amount(self, parent: ET.Element, tag: str, currency: Optional[CurrencyAmount]):
+    def _add_currency_amount(self, parent: ET.Element, tag: str, currency: Optional[CurrencyAmount], allow_null: bool = False):
         """Ajoute un élément de type montant avec devise
 
-        P2.6: Si currency est None, utilise les données de Financial (currency_code, exchange_rate)
+        P2.6: Si currency est None:
+        - Si allow_null=True: crée <null/> uniquement (pour external_freight)
+        - Si allow_null=False: utilise les données de Financial (currency_code, exchange_rate)
+
+        Args:
+            parent: Element parent
+            tag: Nom du tag
+            currency: Objet CurrencyAmount ou None
+            allow_null: Si True, crée <null/> quand currency est None
         """
         elem = ET.SubElement(parent, tag)
 
@@ -458,6 +467,9 @@ class XMLGenerator:
             # Format avec 4 décimales pour conformité ASYCUDA (ex: 566.6700)
             rate_str = f'{currency.currency_rate:.4f}' if currency.currency_rate else '0.0'
             self._add_simple_element(elem, 'Currency_rate', rate_str)
+        elif allow_null:
+            # Créer un seul <null/> au lieu de remplir avec des valeurs par défaut
+            ET.SubElement(elem, 'null')
         else:
             # P2.6: Utiliser les données financières si disponibles
             fin = self.data.financial
@@ -653,7 +665,8 @@ class XMLGenerator:
 
             # Currency amounts pour item
             self._add_currency_amount(val_item_elem, 'Item_Invoice', val_item.invoice)
-            self._add_currency_amount(val_item_elem, 'item_external_freight', val_item.external_freight)
+            # item_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
+            self._add_currency_amount(val_item_elem, 'item_external_freight', val_item.external_freight, allow_null=True)
             self._add_currency_amount(val_item_elem, 'item_internal_freight', val_item.internal_freight)
             self._add_currency_amount(val_item_elem, 'item_insurance', val_item.insurance)
             self._add_currency_amount(val_item_elem, 'item_other_cost', val_item.other_cost)
