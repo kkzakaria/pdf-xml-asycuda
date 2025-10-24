@@ -360,10 +360,8 @@ class XMLGenerator:
         self._add_element(terms, 'Description')
 
         # P2.5: Ajouter les données de facture
-        total_invoice_value = ''
-        if fin and fin.invoice_amount:
-            total_invoice_value = str(fin.invoice_amount)
-        self._add_simple_element(financial_elem, 'Total_invoice', total_invoice_value)
+        # Total_invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        self._add_element(financial_elem, 'Total_invoice', str(fin.invoice_amount) if fin and fin.invoice_amount else None)
 
         # P2.5: Ajouter numéro et date de facture
         if fin and fin.invoice_number:
@@ -432,7 +430,8 @@ class XMLGenerator:
         self._add_simple_element(valuation_elem, 'Total_CIF', str(val.total_cif) if val and val.total_cif else '')
 
         # Currency amounts
-        self._add_currency_amount(valuation_elem, 'Gs_Invoice', val.invoice if val else None)
+        # Gs_Invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        self._add_currency_amount(valuation_elem, 'Gs_Invoice', val.invoice if val else None, allow_null=True)
         # Gs_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
         self._add_currency_amount(valuation_elem, 'Gs_external_freight', val.external_freight if val else None, allow_null=True)
         self._add_currency_amount(valuation_elem, 'Gs_internal_freight', val.internal_freight if val else None)
@@ -441,7 +440,8 @@ class XMLGenerator:
         self._add_currency_amount(valuation_elem, 'Gs_deduction', val.deduction if val else None)
 
         total = ET.SubElement(valuation_elem, 'Total')
-        self._add_simple_element(total, 'Total_invoice', str(val.total_invoice) if val and val.total_invoice else '')
+        # Total_invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        self._add_element(total, 'Total_invoice', str(val.total_invoice) if val and val.total_invoice else None)
         self._add_simple_element(total, 'Total_weight', str(val.total_weight) if val and val.total_weight else '')
 
     def _add_currency_amount(self, parent: ET.Element, tag: str, currency: Optional[CurrencyAmount], allow_null: bool = False):
