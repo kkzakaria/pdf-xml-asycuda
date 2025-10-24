@@ -360,7 +360,7 @@ class XMLGenerator:
         self._add_element(terms, 'Description')
 
         # P2.5: Ajouter les données de facture
-        # Total_invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        # Total_invoice: Valeur de la facture (section 18 dans RFCV, non utilisée - utilise FOB section 19 à la place)
         self._add_element(financial_elem, 'Total_invoice', str(fin.invoice_amount) if fin and fin.invoice_amount else None)
 
         # P2.5: Ajouter numéro et date de facture
@@ -430,7 +430,7 @@ class XMLGenerator:
         self._add_simple_element(valuation_elem, 'Total_CIF', str(val.total_cif) if val and val.total_cif else '')
 
         # Currency amounts
-        # Gs_Invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        # Gs_Invoice: Utilise section 19 (Total Valeur FOB attestée) - valeur de la facture commerciale
         self._add_currency_amount(valuation_elem, 'Gs_Invoice', val.invoice if val else None, allow_null=True)
         # Gs_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
         self._add_currency_amount(valuation_elem, 'Gs_external_freight', val.external_freight if val else None, allow_null=True)
@@ -441,7 +441,7 @@ class XMLGenerator:
         self._add_currency_amount(valuation_elem, 'Gs_deduction', val.deduction if val else None)
 
         total = ET.SubElement(valuation_elem, 'Total')
-        # Total_invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
+        # Total_invoice: Valeur FOB totale (section 19) en devise étrangère
         self._add_element(total, 'Total_invoice', str(val.total_invoice) if val and val.total_invoice else None)
         self._add_simple_element(total, 'Total_weight', str(val.total_weight) if val and val.total_weight else '')
 

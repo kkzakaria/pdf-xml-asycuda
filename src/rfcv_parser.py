@@ -77,6 +77,21 @@ class RFCVParser:
             for item in rfcv_data.items:
                 item.previous_document_reference = prev_doc_ref
 
+        # Enrichir ValuationItem.invoice avec les données de devise pour chaque item
+        if rfcv_data.financial and rfcv_data.financial.currency_code and rfcv_data.financial.exchange_rate:
+            for item in rfcv_data.items:
+                if item.valuation_item and item.tarification and item.tarification.item_price:
+                    # Utiliser item_price (valeur FOB de l'item) pour créer Item_Invoice
+                    fob_value = item.tarification.item_price
+                    rate_value = rfcv_data.financial.exchange_rate
+                    item.valuation_item.invoice = CurrencyAmount(
+                        amount_foreign=fob_value,
+                        amount_national=fob_value * rate_value if fob_value and rate_value else None,
+                        currency_code=rfcv_data.financial.currency_code,
+                        currency_name='Pas de devise étrangère',
+                        currency_rate=rate_value
+                    )
+
         return rfcv_data
 
     def _extract_field(self, pattern: str, group: int = 1) -> Optional[str]:
@@ -466,7 +481,9 @@ class RFCVParser:
 
         # P4.3: FOB - Structure: "19. Total Valeur FOB attestée 20. Fret Attesté\n3. Détails Transport\n<FOB> <FRET>"
         # Pattern: premier nombre sur ligne après "3. Détails Transport"
-        # NOTE: Sections 18 (Total Facture) et 20 (Fret Attesté) ne sont PAS utilisées par ASYCUDA
+        # NOTE IMPORTANTE: Section 19 (Total Valeur FOB attestée) EST utilisée pour Gs_Invoice dans ASYCUDA
+        #                  Section 18 (Total Facture) n'est PAS utilisée (différent du FOB)
+        #                  Section 20 (Fret Attesté) n'est PAS utilisée directement
         fob = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
 
         # P4.3: Assurance - premier nombre après "21. Assurance Attestée"
@@ -484,8 +501,19 @@ class RFCVParser:
                 cif = match.group(1).strip()
 
         # Créer les CurrencyAmount
-        # Gs_Invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
-        valuation.invoice = None
+        # Gs_Invoice: Utilise la section 19 (Total Valeur FOB attestée)
+        if fob and currency and currency_rate:
+            fob_value = self._parse_number(fob)
+            rate_value = self._parse_number(currency_rate)
+            valuation.invoice = CurrencyAmount(
+                amount_foreign=fob_value,
+                amount_national=fob_value * rate_value if fob_value and rate_value else None,
+                currency_code=currency,
+                currency_name='Pas de devise étrangère',
+                currency_rate=rate_value
+            )
+        else:
+            valuation.invoice = None
 
         # Gs_external_freight à null en attendant la logique de calcul correcte
         # La section 20 (Fret Attesté) du RFCV n'est pas utilisée par ASYCUDA
@@ -494,8 +522,9 @@ class RFCVParser:
         # Gs_insurance à null - valeur extraite incorrecte, en attente de clarification
         valuation.insurance = None
 
-        # Total_invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
-        valuation.total_invoice = None
+        # Total_invoice: Utilise la valeur FOB (section 19) en devise étrangère
+        # Note: Section 18 (Total Facture) n'est pas la même que le FOB
+        valuation.total_invoice = self._parse_number(fob) if fob else None
 
         # TODO: Total_cost et Total_CIF à null en attendant clarification
         # Incohérence détectée:
