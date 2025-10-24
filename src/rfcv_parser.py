@@ -470,8 +470,8 @@ class RFCVParser:
         fob = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
 
         # P4.3: Assurance - premier nombre après "21. Assurance Attestée"
-        # Structure: "21. Assurance...\n<texte>\n<ASSURANCE> <CIF>"
-        insurance = self._extract_field(r'21\.\s*Assurance Attestée.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
+        # NOTE: Section 21 (Assurance Attestée) - extraction temporairement désactivée
+        # Valeur incorrecte, en attente de clarification
 
         # CIF - Pattern amélioré pour capturer les valeurs avec espaces et formats variés
         cif = self._extract_field(r'23\.\s*Valeur CIF Attestée[:\s]+([\d][\d\s,\.]+)')
@@ -491,11 +491,8 @@ class RFCVParser:
         # La section 20 (Fret Attesté) du RFCV n'est pas utilisée par ASYCUDA
         valuation.external_freight = None
 
-        valuation.insurance = CurrencyAmount(
-            amount_foreign=self._parse_number(insurance) if insurance else None,
-            currency_code=currency,
-            currency_rate=self._parse_number(currency_rate) if currency_rate else None
-        )
+        # Gs_insurance à null - valeur extraite incorrecte, en attente de clarification
+        valuation.insurance = None
 
         # Total_invoice à null - section 18 (Total Facture) non utilisée par ASYCUDA
         valuation.total_invoice = None
