@@ -32,11 +32,15 @@ RUN pip install --upgrade pip setuptools wheel && \
 # =========================================
 FROM python:3.11-slim-bookworm
 
+# Build argument for version (injected by GitHub Actions)
+ARG VERSION=dev
+
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/app/src:$PYTHONPATH"
+    PYTHONPATH="/app/src:$PYTHONPATH" \
+    API_VERSION=${VERSION}
 
 # Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

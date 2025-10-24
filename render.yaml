@@ -16,8 +16,9 @@ services:
       - key: API_TITLE
         value: API Convertisseur PDF RFCV → XML ASYCUDA
 
-      - key: API_VERSION
-        value: 1.4.10
+      # API_VERSION est maintenant injectée automatiquement dans l'image Docker
+      # via ARG VERSION au moment du build (depuis les tags Git)
+      # Plus besoin de la définir ici!
 
       - key: API_DEBUG
         value: false
