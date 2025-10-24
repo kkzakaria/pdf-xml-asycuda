@@ -492,9 +492,9 @@ class RFCVParser:
         #                  Section 20 (Fret Attesté) n'est PAS utilisée directement
         fob = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
 
-        # P4.3: Assurance - premier nombre après "21. Assurance Attestée"
-        # NOTE: Section 21 (Assurance Attestée) - extraction temporairement désactivée
-        # Valeur incorrecte, en attente de clarification
+        # P4.3: Assurance - Section 21 (Assurance Attestée)
+        # NOTE: L'assurance est une valeur calculée par ASYCUDA, pas extraite du RFCV
+        # Mise à null en attendant la formule de calcul
 
         # CIF - Pattern amélioré pour capturer les valeurs avec espaces et formats variés
         cif = self._extract_field(r'23\.\s*Valeur CIF Attestée[:\s]+([\d][\d\s,\.]+)')
@@ -525,7 +525,7 @@ class RFCVParser:
         # La section 20 (Fret Attesté) du RFCV n'est pas utilisée par ASYCUDA
         valuation.external_freight = None
 
-        # Gs_insurance à null - valeur extraite incorrecte, en attente de clarification
+        # Gs_insurance à null - valeur calculée par ASYCUDA, pas extraite du RFCV
         valuation.insurance = None
 
         # Total_invoice: Utilise la valeur FOB (section 19) en devise étrangère
