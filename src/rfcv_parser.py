@@ -461,20 +461,12 @@ class RFCVParser:
         valuation.calculation_mode = '2'
 
         # P1.7: Poids net total (pattern amélioré)
-        # Structure: "11. Poids Total NET (KG) 12. Poids Total BRUT (KG)\n<nom> <poids NET> <poids BRUT>"
-        # Les poids sont sur la même ligne après le nom
-        # Pattern: capture nombre format français "24 687,00" (chiffres avec espaces + virgule + 2 décimales)
-        net_weight = self._extract_field(r'11\.\s*Poids Total NET\s*\(KG\)\s+12\..*?\n.*?\s+([\d\s]+,\d{2})\s+([\d\s]+,\d{2})\s*\n')
-        if net_weight:
-            valuation.net_weight = self._parse_number(net_weight)
-            valuation.total_weight = self._parse_number(net_weight)  # Rétro-compatibilité
-
-        # P1.7: Poids brut total (pattern amélioré)
-        # Structure: capture le 2ème nombre après le nom (sur même ligne)
-        # Le pattern ci-dessus capture les 2 groupes, on extrait le 2ème
-        gross_weight = self._extract_field(r'11\.\s*Poids Total NET\s*\(KG\)\s+12\..*?\n.*?\s+([\d\s]+,\d{2})\s+([\d\s]+,\d{2})\s*\n', group=2)
-        if gross_weight:
-            valuation.gross_weight = self._parse_number(gross_weight)
+        # Poids - Sections 11 (Poids Total NET) et 12 (Poids Total BRUT)
+        # NOTE: Les poids sont des valeurs calculées, pas extraites du RFCV
+        # Mise à null en attendant la formule de calcul
+        valuation.net_weight = None
+        valuation.gross_weight = None
+        valuation.total_weight = None
 
         # P2.3: Code Devise - chercher le code ISO 3 lettres sur la ligne suivante
         # Structure: "16. Code Devise 17. Taux...\n<pays> <CODE_ISO> <taux> <montant>"
