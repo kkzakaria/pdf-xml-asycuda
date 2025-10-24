@@ -6,9 +6,9 @@ on:
     workflows: ["Docker Build & Push"]
     types:
       - completed
-    branches: [main]
+    # Suppression de la restriction "branches" pour permettre les tags
 
-  # Déploiement manuel
+  # Déploiement manuel avec sélection de version
   workflow_dispatch:
     inputs:
       environment:
@@ -19,6 +19,10 @@ on:
         options:
           - production
           - staging
+      image_tag:
+        description: 'Docker image tag to deploy (leave empty for latest)'
+        required: false
+        type: string
 
 jobs:
   deploy:
@@ -29,15 +33,57 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Docker image tag
+        id: image_tag
+        run: |
+          # Détecter le tag à utiliser selon le contexte
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Déploiement manuel avec tag spécifié
+            if [ -n "${{ inputs.image_tag }}" ]; then
+              TAG="${{ inputs.image_tag }}"
+            else
+              TAG="latest"
+            fi
+          elif [ "${{ github.event.workflow_run.event }}" == "push" ]; then
+            # Déploiement automatique après build Docker
+            # Récupérer le ref qui a déclenché le workflow_run
+            TRIGGER_REF="${{ github.event.workflow_run.head_branch }}"
+
+            # Vérifier si c'est un tag de version
+            if [[ "$TRIGGER_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              TAG="$TRIGGER_REF"
+              echo "📦 Tag de version détecté: $TAG"
+            else
+              TAG="latest"
+              echo "📦 Branche main détectée, utilisation de: $TAG"
+            fi
+          else
+            TAG="latest"
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "🏷️  Image Docker à déployer: ghcr.io/${{ github.repository }}:$TAG"
 
       - name: Deploy to Render
+        env:
+          IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
         run: |
           echo "🚀 Déploiement automatique sur Render..."
-          echo "Render détectera automatiquement la nouvelle image Docker"
-          echo "Image: ghcr.io/${{ github.repository }}:latest"
+          echo "Image: ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
+          echo ""
+          echo "📋 Contexte de déploiement:"
+          echo "  - Event: ${{ github.event_name }}"
+          echo "  - Workflow run event: ${{ github.event.workflow_run.event }}"
+          echo "  - Head branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "  - Image tag: ${IMAGE_TAG}"
+          echo ""
 
           # Note: Avec render.yaml et autoDeploy: true, Render détecte
           # automatiquement les nouvelles images Docker sans webhook
+          # Pour forcer un déploiement spécifique, utiliser l'API Render
 
       - name: Wait for deployment
         run: |
@@ -69,17 +115,21 @@ jobs:
 
       - name: Deployment summary
         if: always()
+        env:
+          IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
+          RENDER_URL: "https://pdf-xml-asycuda-api.onrender.com"
         run: |
           echo "📊 Résumé du déploiement"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Repository: ${{ github.repository }}"
+          echo "Image: ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
           echo "Commit: ${{ github.sha }}"
           echo "Branch: ${{ github.ref_name }}"
           echo "Trigger: ${{ github.event_name }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "🔗 Dashboard Render: https://dashboard.render.com"
-          echo "📖 Documentation: $RENDER_URL/docs"
-          echo "❤️  Health Check: $RENDER_URL/api/v1/health"
+          echo "📖 Documentation: ${RENDER_URL}/docs"
+          echo "❤️  Health Check: ${RENDER_URL}/api/v1/health"
 
   # Optionnel: Notifier l'équipe
   notify:

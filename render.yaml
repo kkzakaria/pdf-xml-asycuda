@@ -4,7 +4,7 @@ services:
     name: pdf-xml-asycuda-api
     runtime: image
     image:
-      url: ghcr.io/kkzakaria/pdf-xml-asycuda:main
+      url: ghcr.io/kkzakaria/pdf-xml-asycuda:latest
     region: frankfurt # Or: oregon, ohio, singapore
     plan: free # Options: free, starter, standard, pro
 
@@ -17,7 +17,7 @@ services:
         value: API Convertisseur PDF RFCV → XML ASYCUDA
 
       - key: API_VERSION
-        value: 1.1.0
+        value: 1.4.0
 
       - key: API_DEBUG
         value: false
