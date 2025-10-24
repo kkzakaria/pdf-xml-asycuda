@@ -435,7 +435,7 @@ class XMLGenerator:
         # Gs_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
         self._add_currency_amount(valuation_elem, 'Gs_external_freight', val.external_freight if val else None, allow_null=True)
         self._add_currency_amount(valuation_elem, 'Gs_internal_freight', val.internal_freight if val else None)
-        # Gs_insurance à null - valeur extraite incorrecte, en attente de clarification
+        # Gs_insurance à null - valeur calculée par ASYCUDA, pas extraite du RFCV
         self._add_currency_amount(valuation_elem, 'Gs_insurance', val.insurance if val else None, allow_null=True)
         self._add_currency_amount(valuation_elem, 'Gs_other_cost', val.other_cost if val else None)
         self._add_currency_amount(valuation_elem, 'Gs_deduction', val.deduction if val else None)
@@ -669,7 +669,7 @@ class XMLGenerator:
             # item_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
             self._add_currency_amount(val_item_elem, 'item_external_freight', val_item.external_freight, allow_null=True)
             self._add_currency_amount(val_item_elem, 'item_internal_freight', val_item.internal_freight)
-            self._add_currency_amount(val_item_elem, 'item_insurance', val_item.insurance)
+            self._add_currency_amount(val_item_elem, 'item_insurance', val_item.insurance, allow_null=True)
             self._add_currency_amount(val_item_elem, 'item_other_cost', val_item.other_cost)
             self._add_currency_amount(val_item_elem, 'item_deduction', val_item.deduction)
 
