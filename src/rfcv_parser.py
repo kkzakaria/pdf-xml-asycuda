@@ -684,9 +684,8 @@ class RFCVParser:
                 item_price=self._parse_number(match.group(8))
             )
 
-            # Valuation item - inclut le poids net (quantité de l'article)
+            # Valuation item
             item.valuation_item = ValuationItem(
-                net_weight=quantity,  # Poids net = quantité de l'article (ex: 36000 KG)
                 total_cost=self._parse_number(match.group(8)),
                 total_cif=self._parse_number(match.group(9))
             )
