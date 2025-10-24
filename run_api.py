@@ -17,7 +17,7 @@ def main():
     print(f"""
 ╔════════════════════════════════════════════════════════════════════╗
 ║  API Convertisseur PDF RFCV → XML ASYCUDA                         ║
-║  Version: {settings.api_version}                                              ║
+║  Version: {settings.version}                                              ║
 ╚════════════════════════════════════════════════════════════════════╝
 """)
 
