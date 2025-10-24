@@ -53,8 +53,8 @@ jobs:
             # Récupérer le ref qui a déclenché le workflow_run
             TRIGGER_REF="${{ github.event.workflow_run.head_branch }}"
 
-            # Vérifier si c'est un tag de version
-            if [[ "$TRIGGER_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            # Vérifier si c'est un tag de version (avec ou sans suffixe)
+            if [[ "$TRIGGER_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
               TAG="$TRIGGER_REF"
               echo "📦 Tag de version détecté: $TAG"
             else

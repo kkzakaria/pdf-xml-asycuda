@@ -1,5 +1,23 @@
 # Dépannage du Déploiement Render
 
+## 🚨 SOLUTION IMMÉDIATE (Action Requise)
+
+**Vous DEVEZ faire un déploiement manuel pour appliquer la nouvelle configuration render.yaml:**
+
+1. **Accédez au Dashboard Render**: https://dashboard.render.com
+2. **Sélectionnez votre service**: pdf-xml-asycuda-api
+3. **Cliquez sur**: "Manual Deploy" → **"Clear build cache & deploy"**
+4. **Attendez 3-5 minutes** pour que le déploiement se termine
+5. **Vérifiez la nouvelle version**:
+   ```bash
+   curl https://pdf-xml-asycuda-api.onrender.com/api/v1/health
+   ```
+   Devrait afficher `"version": "1.4.0"` ou supérieur
+
+**Après ce déploiement manuel**, les déploiements automatiques via l'API fonctionneront correctement.
+
+---
+
 ## 🔍 Situation Actuelle
 
 ### ✅ Succès
@@ -7,10 +25,12 @@
 - Image Docker construite: **SUCCESS** (`ghcr.io/kkzakaria/pdf-xml-asycuda:latest`)
 - API Render appelée: **SUCCESS** (Deployment ID: `dep-d3tpio3uibrs73barr3g`)
 
-### ❌ Problème
-- Le service Render **n'a PAS redémarré**
-- Version de l'API: **1.1.0** (au lieu de 1.4.0 ou 1.4.8-test)
-- Uptime: **21+ minutes** (indique qu'il n'y a pas eu de redémarrage)
+### ❌ Problème RÉSOLU
+- **CAUSE RACINE IDENTIFIÉE**: Render utilise toujours l'ancienne configuration qui pointait vers `:main` au lieu de `:latest`
+- Le changement de `render.yaml` (`:main` → `:latest` dans PR #18) n'a jamais été appliqué sur Render
+- Render montre "Deploy live for 28ab73e" (ancien commit inexistant dans l'historique récent)
+- Version de l'API: **1.1.0** (au lieu de 1.4.0+)
+- **SOLUTION REQUISE**: Déploiement manuel obligatoire (une seule fois) pour forcer Render à lire le nouveau render.yaml
 
 ## 🔍 Étapes de Diagnostic
 
@@ -206,27 +226,28 @@ services:
       url: ghcr.io/kkzakaria/pdf-xml-asycuda:latest  # ← Doit être :latest
 ```
 
-### Problème 5: API_VERSION hardcodée
+### Problème 5: Render Utilise Ancienne Configuration (:main au lieu de :latest)
 
-**Symptôme**: Render redéploie mais la version reste 1.1.0
+**Symptôme**: API Render appelée avec succès mais service ne redéploie pas, version reste 1.1.0
 
-**Cause**: `API_VERSION` est hardcodée à 1.4.0 dans `render.yaml`
+**Cause**: Render utilise toujours l'ancienne configuration qui pointait vers l'image `:main`
 
 **Explication**:
-- L'API retourne `version: 1.1.0` car c'est ce qui est codé dans l'ancienne image
-- La nouvelle image devrait retourner `1.4.0` (ou la valeur de render.yaml)
+- Le 24 oct à 15:08, PR #18 a changé `render.yaml` pour utiliser `:latest` au lieu de `:main`
+- Render n'a JAMAIS reçu cette nouvelle configuration car elle n'est lue qu'au déploiement
+- Les appels API Render vérifient si l'image `:main` a changé → NON (on ne la met plus à jour)
+- Résultat: Aucun redéploiement, Render continue d'utiliser une très vieille image
 
-**Vérification**:
+**Historique render.yaml**:
 ```bash
-# Vérifier la version dans render.yaml
-grep -A 1 "API_VERSION" render.yaml
+# Voir les changements
+git log --oneline render.yaml
 
-# Devrait afficher:
-# - key: API_VERSION
-#   value: 1.4.0
+# Commit 503187e: Changement vers :main
+# Commit 5aac5da (PR #18): Changement :main → :latest ✅
 ```
 
-**Note**: La version dans le health check vient du code de l'application, pas de la variable d'environnement seule.
+**Solution**: Déploiement manuel OBLIGATOIRE (voir section "SOLUTION IMMÉDIATE" en haut)
 
 ## 📋 Checklist Complète
 
