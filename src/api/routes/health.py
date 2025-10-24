@@ -34,7 +34,7 @@ async def health_check():
 
     return HealthResponse(
         status="healthy",
-        version=settings.api_version,
+        version=settings.version,
         uptime_seconds=uptime,
         total_jobs=total_jobs
     )

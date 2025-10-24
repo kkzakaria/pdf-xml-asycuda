@@ -3,7 +3,7 @@ Configuration FastAPI pour l'API de conversion PDF RFCV → XML ASYCUDA
 """
 import warnings
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from typing import List
 
 
@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # API Configuration
     api_title: str = "API Convertisseur PDF RFCV → XML ASYCUDA"
-    api_version: str = "1.1.0"
+    version: str = "1.1.0"  # Lit depuis API_VERSION avec env_prefix
     api_description: str = "API REST pour convertir les documents RFCV PDF en XML ASYCUDA"
 
     # Server Configuration
