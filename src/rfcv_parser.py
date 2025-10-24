@@ -92,6 +92,12 @@ class RFCVParser:
                         currency_rate=rate_value
                     )
 
+        # Enrichir number_of_packages avec le total de la section 24 (Colisage)
+        if rfcv_data.property and rfcv_data.property.total_packages:
+            for item in rfcv_data.items:
+                if item.packages:
+                    item.packages.number_of_packages = rfcv_data.property.total_packages
+
         return rfcv_data
 
     def _extract_field(self, pattern: str, group: int = 1) -> Optional[str]:
@@ -618,6 +624,23 @@ class RFCVParser:
         # Note: Les nombres peuvent contenir des espaces (ex: "2 000,00")
         item_pattern = r'(\d+)\s+([\d\s]+,\d{2})\s+(\w+)\s+(\w+)\s+(\w+)\s+(.*?)\s+(\d{4}\.\d{2}\.\d{2}\.\d{2})\s+([\d\s]+,\d{2})\s+([\d\s]+,\d{2})'
 
+        # Extraire la description commerciale depuis la ligne précédant les données de l'article
+        # La description est sur la ligne avant "1 36 000,00 KG N CN..."
+        commercial_description = None
+        lines = section_text.split('\n')
+        for i, line in enumerate(lines):
+            # Chercher la ligne avec le numéro d'article et les données
+            if re.match(r'^\d+\s+[\d\s]+,\d{2}\s+\w+\s+\w+\s+\w+', line):
+                # La description est dans les lignes précédentes (après les en-têtes)
+                for j in range(i-1, -1, -1):
+                    if lines[j].strip() and not lines[j].strip().startswith(('A ', 'R ', 'T ', 'I ', 'C ', 'L ', 'E ')):
+                        # Ligne de description trouvée
+                        desc_full = lines[j].strip()
+                        # Prendre la partie avant la parenthèse si présente
+                        commercial_description = desc_full.split('(')[0].strip()
+                        break
+                break
+
         for match in re.finditer(item_pattern, section_text):
             item = Item()
 
@@ -625,11 +648,12 @@ class RFCVParser:
             item.goods_description = match.group(6).strip()
 
             # Package info - utilise le type extrait de la section 24
+            # Note: number_of_packages sera enrichi après avec prop.total_packages
             item.packages = Package(
-                number_of_packages=self._parse_number(match.group(2)),
+                number_of_packages=None,  # Sera enrichi après avec total_packages de section 24
                 kind_code=kind_code,
                 kind_name=kind_name,
-                marks1=item.goods_description  # Utilise la description des marchandises (comme ASYCUDA)
+                marks1=commercial_description if commercial_description else item.goods_description
             )
             item.country_of_origin_code = match.group(5)
 
