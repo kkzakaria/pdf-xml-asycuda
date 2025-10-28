@@ -3,6 +3,7 @@ Module de parsing des documents PDF RFCV
 Extrait les données structurées et les mappe aux modèles
 """
 import re
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pdf_extractor import PDFExtractor
@@ -12,6 +13,9 @@ from models import (
     AttachedDocument, Package, HSCode, Tarification, SupplementaryUnit,
     Taxation, TaxationLine, ValuationItem, CurrencyAmount
 )
+from hs_code_rules import HSCodeAnalyzer
+
+logger = logging.getLogger(__name__)
 
 
 class RFCVParser:
@@ -640,25 +644,60 @@ class RFCVParser:
             quantity = self._parse_number(match.group(2))  # Ex: "36 000,00" -> 36000
             unit_measure = match.group(3)  # Ex: "KG"
 
-            # Description
-            item.goods_description = match.group(6).strip()
+            # Description brute
+            raw_description = match.group(6).strip()
 
-            # Package info - utilise le type extrait de la section 24
-            # Note: number_of_packages sera enrichi après avec prop.total_packages
+            # HS Code - extraction préalable pour analyse
+            hs_code_str = match.group(7)
+            # Remove dots from HS code (e.g., "2803.00.00.00" -> "2803000000")
+            hs_code_clean = hs_code_str.replace('.', '')
+
+            # DÉTECTION CHÂSSIS: Analyser si l'article nécessite un châssis
+            chassis_info = HSCodeAnalyzer.requires_chassis(hs_code_clean, raw_description)
+
+            chassis_number = None
+            goods_description_clean = raw_description
+            marks2_value = None
+
+            if chassis_info['required']:
+                # Tenter d'extraire le châssis
+                chassis_number = self._extract_chassis_number(raw_description)
+
+                if chassis_number:
+                    # Châssis trouvé: nettoyer la description
+                    goods_description_clean = raw_description.replace(chassis_number, '').strip()
+                    goods_description_clean = re.sub(r'\s+', ' ', goods_description_clean)
+
+                    # Format ASYCUDA: "CH: XXXXX"
+                    marks2_value = f"CH: {chassis_number}"
+
+                    logger.info(
+                        f"Article {match.group(1)}: Châssis détecté ({chassis_info['category']}) "
+                        f"- {chassis_number}"
+                    )
+                else:
+                    # ⚠️ Châssis attendu mais non trouvé
+                    logger.warning(
+                        f"Article {match.group(1)}: Code HS {hs_code_clean[:4]} nécessite un châssis "
+                        f"({chassis_info['category']}, confiance: {chassis_info['confidence']:.0%}) "
+                        f"mais aucun numéro détecté dans: {raw_description[:60]}..."
+                    )
+
+            # Description finale
+            item.goods_description = goods_description_clean
+
+            # Package info avec châssis si présent
             item.packages = Package(
                 number_of_packages=None,  # Sera enrichi après avec total_packages de section 24
                 kind_code=kind_code,
                 kind_name=kind_name,
-                marks1=commercial_description if commercial_description else item.goods_description
+                marks1=commercial_description if commercial_description else goods_description_clean,
+                marks2=marks2_value,  # "CH: XXXXX" ou None
+                chassis_number=chassis_number  # Numéro brut pour référence
             )
             item.country_of_origin_code = match.group(5)
 
             # Summary declaration sera ajouté après parsing (besoin du bill_of_lading)
-
-            # HS Code
-            hs_code_str = match.group(7)
-            # Remove dots from HS code (e.g., "2803.00.00.00" -> "2803000000")
-            hs_code_clean = hs_code_str.replace('.', '')
             item.tarification = Tarification(
                 hscode=HSCode(
                     commodity_code=hs_code_clean[:8] if len(hs_code_clean) >= 8 else hs_code_clean,
@@ -766,6 +805,65 @@ class RFCVParser:
 
         # Par défaut: Package
         return ('PK', 'Colis ("package")')
+
+    def _extract_chassis_number(self, description: str, expected_lengths: List[int] = None) -> Optional[str]:
+        """
+        Extrait un numéro de châssis depuis la description d'un véhicule
+
+        Args:
+            description: Description de la marchandise
+            expected_lengths: Longueurs attendues (défaut: [13, 17])
+
+        Returns:
+            Numéro de châssis ou None
+
+        Exemples:
+            "TRICYCLE AP150ZH-20 LLCLHJL03SP420331" → "LLCLHJL03SP420331"
+            "MOTORCYCLE LRFPCJLDIS0F18969" → "LRFPCJLDIS0F18969"
+        """
+        if not description:
+            return None
+
+        if expected_lengths is None:
+            expected_lengths = [13, 17]
+
+        # PATTERN 1: Châssis avec préfixe explicite
+        # Exemples: "CH: XXXXX", "CHASSIS: XXXXX", "VIN: XXXXX"
+        prefix_pattern = r'(?:CH|CHASSIS|VIN)[:\s]+([A-Z0-9]{13,17})'
+        match = re.search(prefix_pattern, description, re.IGNORECASE)
+        if match:
+            chassis = match.group(1).upper()
+            logger.debug(f"Châssis détecté (préfixe): {chassis}")
+            return chassis
+
+        # PATTERN 2: VIN standard (17 caractères)
+        # Validation: pas de I, O, Q (norme ISO 3779)
+        if 17 in expected_lengths:
+            vin_pattern = r'\b([A-HJ-NPR-Z0-9]{17})\b'
+            match = re.search(vin_pattern, description)
+            if match:
+                chassis = match.group(1).upper()
+                logger.debug(f"VIN détecté (17 car): {chassis}")
+                return chassis
+
+        # PATTERN 3: Châssis fabricant (13-17 caractères alphanumériques)
+        # Utilisé pour tricycles, motos, etc.
+        for length in sorted(expected_lengths, reverse=True):
+            pattern = rf'\b([A-Z0-9]{{{length}}})\b'
+            matches = re.findall(pattern, description)
+
+            for chassis in matches:
+                # Validation: éviter faux positifs (codes HS, dates, etc.)
+                # Un châssis doit avoir au moins des lettres ET des chiffres
+                has_letters = any(c.isalpha() for c in chassis)
+                has_digits = any(c.isdigit() for c in chassis)
+
+                if has_letters and has_digits:
+                    logger.debug(f"Châssis détecté ({length} car): {chassis}")
+                    return chassis.upper()
+
+        logger.debug(f"Aucun châssis détecté dans: {description[:50]}...")
+        return None
 
     def _add_attached_documents(self, rfcv_data: RFCVData) -> None:
         """
