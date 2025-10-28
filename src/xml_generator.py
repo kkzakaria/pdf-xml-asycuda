@@ -538,6 +538,14 @@ class XMLGenerator:
             if doc.document_date:
                 self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
 
+        # Document châssis (code 6122) si présent
+        if item.packages and item.packages.chassis_number:
+            chassis_doc_elem = ET.SubElement(item_elem, 'Attached_documents')
+            self._add_simple_element(chassis_doc_elem, 'Attached_document_code', '6122')
+            self._add_simple_element(chassis_doc_elem, 'Attached_document_name', 'CHASSIS MOTOS')
+            self._add_simple_element(chassis_doc_elem, 'Attached_document_reference', item.packages.chassis_number)
+            self._add_simple_element(chassis_doc_elem, 'Attached_document_from_rule', '1')
+
         # Packages
         if item.packages:
             packages = ET.SubElement(item_elem, 'Packages')

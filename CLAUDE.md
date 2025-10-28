@@ -63,6 +63,103 @@ ruff check src/ --output-format=github
 python -m py_compile src/**/*.py
 ```
 
+### Testing Chassis Detection
+
+```bash
+# Run chassis detection tests
+python -m pytest tests/test_chassis_detection.py -v
+
+# Test on real RFCV with vehicles
+python converter.py "tests/DOSSIER 18237.pdf" -o output/test_chassis.xml -v
+```
+
+## Chassis Detection Feature
+
+The system automatically detects and extracts chassis/VIN numbers for vehicles based on HS codes.
+
+### Supported HS Codes (Chapter 87 - Vehicles)
+
+Vehicles requiring chassis numbers (codes HS à 4 chiffres):
+
+| Code HS | Type de Véhicule | Format |
+|---------|------------------|--------|
+| **8701** | Tracteurs | VIN 17 caractères |
+| **8702** | Bus/Autocars (≥10 places) | VIN 17 caractères |
+| **8703** | Voitures automobiles | VIN 17 caractères |
+| **8704** | Camions, tricycles | Châssis 13-17 caractères |
+| **8705** | Véhicules à usages spéciaux | VIN 17 caractères |
+| **8711** | Motocycles, cyclomoteurs | Châssis/VIN 13-17 caractères |
+| **8427** | Chariots de manutention | Châssis variable |
+| **8429** | Engins de travaux publics | Châssis variable |
+| **8716** | Remorques, semi-remorques | Châssis variable |
+
+### Extraction Patterns
+
+Le système détecte automatiquement:
+- **VIN standard**: 17 caractères (norme ISO 3779, pas de I/O/Q)
+- **Châssis fabricant**: 13-17 caractères alphanumériques
+- **Préfixes explicites**: `CH:`, `CHASSIS:`, `VIN:` suivis du numéro
+
+Exemples:
+```
+"TRICYCLE AP150ZH-20 LLCLHJL03SP420331" → Châssis: LLCLHJL03SP420331
+"MOTORCYCLE LRFPCJLDIS0F18969" → VIN: LRFPCJLDIS0F18969
+"MOTO CH: ABC123DEF456GHI" → Châssis: ABC123DEF456GHI
+```
+
+### XML Output Format (ASYCUDA Standard)
+
+Pour chaque véhicule avec châssis détecté:
+
+```xml
+<Item>
+  <!-- Document châssis (code 6122) -->
+  <Attached_documents>
+    <Attached_document_code>6122</Attached_document_code>
+    <Attached_document_name>CHASSIS MOTOS</Attached_document_name>
+    <Attached_document_reference>LLCLHJL03SP420331</Attached_document_reference>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
+
+  <!-- Châssis dans Marks2 avec préfixe CH: -->
+  <Packages>
+    <Marks1_of_packages>TRICYCLE AP150ZH-20</Marks1_of_packages>
+    <Marks2_of_packages>CH: LLCLHJL03SP420331</Marks2_of_packages>
+  </Packages>
+
+  <!-- Description nettoyée (châssis retiré) -->
+  <Goods_description>
+    <Description_of_goods>TRICYCLE AP150ZH-20</Description_of_goods>
+  </Goods_description>
+</Item>
+```
+
+### Implementation Files
+
+- `src/hs_code_rules.py`: Liste officielle des codes HS nécessitant châssis
+- `src/rfcv_parser.py`: Détection et extraction des numéros de châssis
+- `src/xml_generator.py`: Génération document code 6122 + Marks2
+- `src/models.py`: Modèle `Package` avec champ `chassis_number`
+- `tests/test_chassis_detection.py`: 22 tests unitaires (100% pass)
+
+### Fallback Detection
+
+Si le code HS est absent ou invalide, détection par mots-clés:
+- MOTORCYCLE, MOTO, SCOOTER
+- TRICYCLE, THREE WHEEL
+- VEHICLE, CAR, TRUCK
+- TRACTOR, BUS, BULLDOZER
+
+Confiance: 70% (vs 100% pour détection par code HS)
+
+### Logging
+
+Le système log automatiquement:
+```
+INFO: Article 1: Châssis détecté (Véhicules transport marchandises) - LLCLHJL03SP420331
+WARNING: Article 5: Code HS 8704 nécessite un châssis mais aucun détecté dans description
+```
+
 ## Architecture
 
 ### Core Processing Pipeline

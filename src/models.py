@@ -163,6 +163,9 @@ class Package:
     kind_code: Optional[str] = None
     kind_name: Optional[str] = None
 
+    # Numéro de châssis (pour véhicules uniquement)
+    chassis_number: Optional[str] = None
+
 
 @dataclass
 class HSCode:
