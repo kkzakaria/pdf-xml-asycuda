@@ -14,6 +14,7 @@ from models import (
     Taxation, TaxationLine, ValuationItem, CurrencyAmount
 )
 from hs_code_rules import HSCodeAnalyzer
+from proportional_calculator import ProportionalCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,12 @@ class RFCVParser:
             for item in rfcv_data.items:
                 if item.packages:
                     item.packages.number_of_packages = rfcv_data.property.total_packages
+
+        # Appliquer les calculs de répartition proportionnelle
+        # Distribue FRET, ASSURANCE, POIDS BRUT, POIDS NET sur les articles
+        # proportionnellement à leur FOB en utilisant la méthode du reste le plus grand
+        calculator = ProportionalCalculator()
+        rfcv_data = calculator.apply_to_rfcv(rfcv_data)
 
         return rfcv_data
 
@@ -464,13 +471,23 @@ class RFCVParser:
 
         valuation.calculation_mode = '2'
 
-        # P1.7: Poids net total (pattern amélioré)
-        # Poids - Sections 11 (Poids Total NET) et 12 (Poids Total BRUT)
-        # NOTE: Les poids sont des valeurs calculées, pas extraites du RFCV
-        # Mise à null en attendant la formule de calcul
-        valuation.net_weight = None
-        valuation.gross_weight = None
-        valuation.total_weight = None
+        # P1.7: Poids net et brut totaux - Sections 11 et 12
+        # Structure: "2. Nom et Adresse de l'Exportateur 11. Poids Total NET 12. Poids Total BRUT"
+        # Ligne suivante: "NOM_EXPORTATEUR POIDS_NET POIDS_BRUT"
+        # Les poids sont sur la même ligne que le nom de l'exportateur (après le nom)
+        # Format: "XX XXX,XX" (avec espaces pour milliers et virgule pour décimales)
+
+        # Section 11: Poids Total NET (premier nombre après le nom de l'exportateur)
+        net_weight_str = self._extract_field(r'11\.\s*Poids Total NET.*?\n.*?(\d[\d\s]+,\d{2})\s+\d[\d\s]+,\d{2}')
+        if net_weight_str:
+            valuation.net_weight = self._parse_number(net_weight_str)
+
+        # Section 12: Poids Total BRUT (deuxième nombre après le nom de l'exportateur)
+        gross_weight_str = self._extract_field(r'12\.\s*Poids Total BRUT.*?\n.*?\d[\d\s]+,\d{2}\s+(\d[\d\s]+,\d{2})')
+        if gross_weight_str:
+            valuation.gross_weight = self._parse_number(gross_weight_str)
+
+        valuation.total_weight = valuation.gross_weight  # Total weight = gross weight
 
         # P2.3: Code Devise - chercher le code ISO 3 lettres sur la ligne suivante
         # Structure: "16. Code Devise 17. Taux...\n<pays> <CODE_ISO> <taux> <montant>"
@@ -517,12 +534,44 @@ class RFCVParser:
         else:
             valuation.invoice = None
 
-        # Gs_external_freight à null en attendant la logique de calcul correcte
-        # La section 20 (Fret Attesté) du RFCV n'est pas utilisée par ASYCUDA
-        valuation.external_freight = None
+        # Section 20: Fret Attesté (external_freight)
+        # Structure: "19. Total Valeur FOB attestée 20. Fret Attesté\n3. Détails Transport\n<FOB> <FRET>"
+        # Le FRET est le deuxième nombre sur la ligne après "3. Détails Transport"
+        fret_str = self._extract_field(r'19\.\s*Total Valeur FOB.*?\n.*?\n[\d\s]+,\d{2}\s+([\d\s]+,\d{2})')
+        if fret_str and currency and currency_rate:
+            fret_value = self._parse_number(fret_str)
+            rate_value = self._parse_number(currency_rate)
+            if fret_value is not None:
+                valuation.external_freight = CurrencyAmount(
+                    amount_foreign=fret_value,
+                    amount_national=fret_value * rate_value if rate_value else None,
+                    currency_code=currency,
+                    currency_name='Pas de devise étrangère',
+                    currency_rate=rate_value
+                )
+        else:
+            valuation.external_freight = None
 
-        # Gs_insurance à null - valeur calculée par ASYCUDA, pas extraite du RFCV
-        valuation.insurance = None
+        # Section 21: Assurance Attestée (insurance) - toujours en XOF
+        # Structure réelle du PDF:
+        # "21. Assurance Attestée 22. Charges Attestées..."
+        # "ONEYCANF66571400 Transport maritime"  (ligne avec texte)
+        # "44,05 14 727,70"  (ASSURANCE CHARGES)
+        # L'assurance est le premier nombre 2 lignes après "21. Assurance Attestée"
+        assurance_str = self._extract_field(r'21\.\s*Assurance Attestée.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
+
+        if assurance_str:
+            assurance_value = self._parse_number(assurance_str)
+            if assurance_value is not None:
+                valuation.insurance = CurrencyAmount(
+                    amount_national=assurance_value,
+                    amount_foreign=None,
+                    currency_code='XOF',
+                    currency_name='Franc CFA',
+                    currency_rate=1.0
+                )
+        else:
+            valuation.insurance = None
 
         # Total_invoice: Utilise la valeur FOB (section 19) en devise étrangère
         # Note: Section 18 (Total Facture) n'est pas la même que le FOB

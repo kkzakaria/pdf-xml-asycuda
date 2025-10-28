@@ -84,3 +84,4 @@ private_keys/.json
 
 # asycude extraction - temporary files
 /asycuda-extraction/
+/CALCUL-DETAIL.xlsx
