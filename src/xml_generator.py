@@ -441,8 +441,10 @@ class XMLGenerator:
         self._add_currency_amount(valuation_elem, 'Gs_internal_freight', None, allow_null=True)
         # Gs_insurance à null - ASYCUDA calcule automatiquement depuis les item_insurance des articles
         self._add_currency_amount(valuation_elem, 'Gs_insurance', None, allow_null=True)
-        self._add_currency_amount(valuation_elem, 'Gs_other_cost', val.other_cost if val else None)
-        self._add_currency_amount(valuation_elem, 'Gs_deduction', val.deduction if val else None)
+        # Gs_other_cost à null - Non utilisé dans les RFCV
+        self._add_currency_amount(valuation_elem, 'Gs_other_cost', None, allow_null=True)
+        # Gs_deduction à null - Non utilisé dans les RFCV
+        self._add_currency_amount(valuation_elem, 'Gs_deduction', None, allow_null=True)
 
         total = ET.SubElement(valuation_elem, 'Total')
         # Total_invoice: Valeur FOB totale (section 19) en devise étrangère
@@ -683,8 +685,10 @@ class XMLGenerator:
             # item_internal_freight à null - Le fret RFCV concerne uniquement le fret étranger (external)
             self._add_currency_amount(val_item_elem, 'item_internal_freight', None, allow_null=True)
             self._add_currency_amount(val_item_elem, 'item_insurance', val_item.insurance, allow_null=True)
-            self._add_currency_amount(val_item_elem, 'item_other_cost', val_item.other_cost)
-            self._add_currency_amount(val_item_elem, 'item_deduction', val_item.deduction)
+            # item_other_cost à null - Non utilisé dans les RFCV
+            self._add_currency_amount(val_item_elem, 'item_other_cost', None, allow_null=True)
+            # item_deduction à null - Non utilisé dans les RFCV
+            self._add_currency_amount(val_item_elem, 'item_deduction', None, allow_null=True)
 
             market = ET.SubElement(val_item_elem, 'Market_valuer')
             self._add_simple_element(market, 'Rate')
