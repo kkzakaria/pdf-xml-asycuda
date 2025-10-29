@@ -437,7 +437,8 @@ class XMLGenerator:
         self._add_currency_amount(valuation_elem, 'Gs_Invoice', val.invoice if val else None, allow_null=True)
         # Gs_external_freight à null - ASYCUDA calcule automatiquement depuis les item_external_freight des articles
         self._add_currency_amount(valuation_elem, 'Gs_external_freight', None, allow_null=True)
-        self._add_currency_amount(valuation_elem, 'Gs_internal_freight', val.internal_freight if val else None)
+        # Gs_internal_freight à null - Le fret RFCV concerne uniquement le fret étranger (external)
+        self._add_currency_amount(valuation_elem, 'Gs_internal_freight', None, allow_null=True)
         # Gs_insurance à null - ASYCUDA calcule automatiquement depuis les item_insurance des articles
         self._add_currency_amount(valuation_elem, 'Gs_insurance', None, allow_null=True)
         self._add_currency_amount(valuation_elem, 'Gs_other_cost', val.other_cost if val else None)
@@ -677,9 +678,10 @@ class XMLGenerator:
 
             # Currency amounts pour item
             self._add_currency_amount(val_item_elem, 'Item_Invoice', val_item.invoice)
-            # item_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
+            # item_external_freight - calculé proportionnellement depuis le fret étranger RFCV
             self._add_currency_amount(val_item_elem, 'item_external_freight', val_item.external_freight, allow_null=True)
-            self._add_currency_amount(val_item_elem, 'item_internal_freight', val_item.internal_freight)
+            # item_internal_freight à null - Le fret RFCV concerne uniquement le fret étranger (external)
+            self._add_currency_amount(val_item_elem, 'item_internal_freight', None, allow_null=True)
             self._add_currency_amount(val_item_elem, 'item_insurance', val_item.insurance, allow_null=True)
             self._add_currency_amount(val_item_elem, 'item_other_cost', val_item.other_cost)
             self._add_currency_amount(val_item_elem, 'item_deduction', val_item.deduction)
