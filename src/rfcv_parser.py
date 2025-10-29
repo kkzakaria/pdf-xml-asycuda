@@ -103,6 +103,21 @@ class RFCVParser:
         calculator = ProportionalCalculator()
         rfcv_data = calculator.apply_to_rfcv(rfcv_data)
 
+        # Répartir le nombre total de colis (Section 24) sur les articles
+        if rfcv_data.property and rfcv_data.property.total_packages and rfcv_data.items:
+            total_packages = int(rfcv_data.property.total_packages)
+            nb_articles = len(rfcv_data.items)
+
+            # Distribution proportionnelle simple (répartition égale)
+            base_packages = total_packages // nb_articles
+            remainder = total_packages % nb_articles
+
+            # Assigner aux articles
+            for i, item in enumerate(rfcv_data.items):
+                if item.packages:
+                    # Les 'remainder' premiers articles reçoivent +1 colis
+                    item.packages.number_of_packages = float(base_packages + (1 if i < remainder else 0))
+
         return rfcv_data
 
     def _extract_field(self, pattern: str, group: int = 1) -> Optional[str]:
@@ -132,8 +147,9 @@ class RFCVParser:
                 prop.form_number = int(parts[0].strip())
                 prop.total_forms = int(parts[1].strip())
 
-        # Total packages
-        packages_match = self._extract_field(r'(\d+)\s+PACKAGES')
+        # Total packages - Chercher le nombre dans la section 24
+        # Pattern: "216 CARTONS" ou "216 PACKAGES" ou "216 COLIS"
+        packages_match = self._extract_field(r'(\d+)\s+(?:CARTONS|PACKAGES|COLIS|PALETTES|PIECES)', re.IGNORECASE)
         if packages_match:
             prop.total_packages = int(packages_match)
 
@@ -731,7 +747,7 @@ class RFCVParser:
 
             # Package info avec châssis si présent
             item.packages = Package(
-                number_of_packages=quantity,  # Quantité individuelle de l'article (section 26)
+                number_of_packages=None,  # Sera calculé après depuis total_packages (Section 24)
                 kind_code=kind_code,
                 kind_name=kind_name,
                 marks1=commercial_description if commercial_description else goods_description_clean,
