@@ -562,20 +562,29 @@ class RFCVParser:
         else:
             valuation.external_freight = None
 
-        # Section 21: Assurance Attestée (insurance) - toujours en XOF
+        # Section 21: Assurance Attestée (insurance)
         # Structure réelle du PDF:
         # "21. Assurance Attestée 22. Charges Attestées..."
         # "ONEYCANF66571400 Transport maritime"  (ligne avec texte)
         # "44,05 14 727,70"  (ASSURANCE CHARGES)
         # L'assurance est le premier nombre 2 lignes après "21. Assurance Attestée"
+        #
+        # IMPORTANT: L'assurance est dans la devise de la section 16 (USD, EUR, etc.)
+        # Il faut la convertir en XOF en multipliant par le taux de change (section 17)
         assurance_str = self._extract_field(r'21\.\s*Assurance Attestée.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
 
-        if assurance_str:
-            assurance_value = self._parse_number(assurance_str)
-            if assurance_value is not None:
+        if assurance_str and currency and currency_rate:
+            # Assurance en devise étrangère (section 16)
+            assurance_foreign = self._parse_number(assurance_str)
+            rate_value = self._parse_number(currency_rate)
+
+            if assurance_foreign is not None and rate_value is not None:
+                # Convertir en XOF: assurance_devise × taux_change
+                assurance_xof = assurance_foreign * rate_value
+
                 valuation.insurance = CurrencyAmount(
-                    amount_national=assurance_value,
-                    amount_foreign=None,
+                    amount_national=assurance_xof,
+                    amount_foreign=assurance_xof,  # XOF: amount_national = amount_foreign
                     currency_code='XOF',
                     currency_name='Franc CFA',
                     currency_rate=1.0
