@@ -97,12 +97,6 @@ class RFCVParser:
                         currency_rate=rate_value
                     )
 
-        # Enrichir number_of_packages avec le total de la section 24 (Colisage)
-        if rfcv_data.property and rfcv_data.property.total_packages:
-            for item in rfcv_data.items:
-                if item.packages:
-                    item.packages.number_of_packages = rfcv_data.property.total_packages
-
         # Appliquer les calculs de répartition proportionnelle
         # Distribue FRET, ASSURANCE, POIDS BRUT, POIDS NET sur les articles
         # proportionnellement à leur FOB en utilisant la méthode du reste le plus grand
@@ -737,7 +731,7 @@ class RFCVParser:
 
             # Package info avec châssis si présent
             item.packages = Package(
-                number_of_packages=None,  # Sera enrichi après avec total_packages de section 24
+                number_of_packages=quantity,  # Quantité individuelle de l'article (section 26)
                 kind_code=kind_code,
                 kind_name=kind_name,
                 marks1=commercial_description if commercial_description else goods_description_clean,
