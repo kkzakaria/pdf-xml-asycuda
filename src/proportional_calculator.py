@@ -139,9 +139,10 @@ class ProportionalCalculator:
         """
         if currency_code == "XOF":
             # Monnaie nationale (XOF)
+            # Pour ASYCUDA: XOF nécessite le même montant dans amount_national ET amount_foreign
             return CurrencyAmount(
                 amount_national=amount,
-                amount_foreign=None,
+                amount_foreign=amount,  # Même valeur pour XOF (taux de change = 1)
                 currency_code=currency_code,
                 currency_name="Franc CFA",
                 currency_rate=1.0

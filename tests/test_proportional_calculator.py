@@ -216,7 +216,8 @@ class TestCurrencyAmount:
         )
 
         assert result.amount_national == 100.0
-        assert result.amount_foreign is None
+        # Pour XOF: amount_foreign doit être égal à amount_national (format ASYCUDA)
+        assert result.amount_foreign == 100.0
         assert result.currency_code == "XOF"
         assert result.currency_name == "Franc CFA"
         assert result.currency_rate == 1.0
