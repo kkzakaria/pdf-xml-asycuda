@@ -556,7 +556,9 @@ class XMLGenerator:
         if item.packages:
             packages = ET.SubElement(item_elem, 'Packages')
             pkg = item.packages
-            self._add_simple_element(packages, 'Number_of_packages', str(pkg.number_of_packages) if pkg.number_of_packages else '')
+            # Convertir en entier pour Number_of_packages (ex: 1.0 -> 1)
+            num_packages = str(int(pkg.number_of_packages)) if pkg.number_of_packages else ''
+            self._add_simple_element(packages, 'Number_of_packages', num_packages)
             self._add_simple_element(packages, 'Marks1_of_packages', pkg.marks1 if pkg.marks1 else '')
             self._add_element(packages, 'Marks2_of_packages', pkg.marks2)
             self._add_simple_element(packages, 'Kind_of_packages_code', pkg.kind_code if pkg.kind_code else 'PK')
