@@ -424,7 +424,10 @@ class XMLGenerator:
         self._add_simple_element(valuation_elem, 'Calculation_working_mode', val.calculation_mode if val else '2')
 
         weight = ET.SubElement(valuation_elem, 'Weight')
-        self._add_simple_element(weight, 'Gross_weight', str(val.gross_weight) if val and val.gross_weight else '')
+        # Gross_weight à null - ASYCUDA calcule automatiquement depuis les Gross_weight_itm des articles
+        self._add_simple_element(weight, 'Gross_weight', '')
+        # Net_weight à null - ASYCUDA calcule automatiquement depuis les Net_weight_itm des articles
+        self._add_simple_element(weight, 'Net_weight', '')
 
         self._add_simple_element(valuation_elem, 'Total_cost', str(val.total_cost) if val and val.total_cost else '')
         self._add_simple_element(valuation_elem, 'Total_CIF', str(val.total_cif) if val and val.total_cif else '')
@@ -432,11 +435,11 @@ class XMLGenerator:
         # Currency amounts
         # Gs_Invoice: Utilise section 19 (Total Valeur FOB attestée) - valeur de la facture commerciale
         self._add_currency_amount(valuation_elem, 'Gs_Invoice', val.invoice if val else None, allow_null=True)
-        # Gs_external_freight à null - sections 18 et 20 du RFCV non utilisées par ASYCUDA
-        self._add_currency_amount(valuation_elem, 'Gs_external_freight', val.external_freight if val else None, allow_null=True)
+        # Gs_external_freight à null - ASYCUDA calcule automatiquement depuis les item_external_freight des articles
+        self._add_currency_amount(valuation_elem, 'Gs_external_freight', None, allow_null=True)
         self._add_currency_amount(valuation_elem, 'Gs_internal_freight', val.internal_freight if val else None)
-        # Gs_insurance à null - valeur calculée par ASYCUDA, pas extraite du RFCV
-        self._add_currency_amount(valuation_elem, 'Gs_insurance', val.insurance if val else None, allow_null=True)
+        # Gs_insurance à null - ASYCUDA calcule automatiquement depuis les item_insurance des articles
+        self._add_currency_amount(valuation_elem, 'Gs_insurance', None, allow_null=True)
         self._add_currency_amount(valuation_elem, 'Gs_other_cost', val.other_cost if val else None)
         self._add_currency_amount(valuation_elem, 'Gs_deduction', val.deduction if val else None)
 
