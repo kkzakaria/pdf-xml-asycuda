@@ -163,6 +163,13 @@ L'API sera disponible sur `http://localhost:8000`
 
 **⚠️ Important**: Le paramètre `taux_douane` (taux de change douanier) est **obligatoire** pour toutes les conversions. Ce taux est communiqué par la douane avant chaque conversion.
 
+**📌 Format du taux douanier**:
+- ✅ **Séparateur décimal**: POINT (`.`) - format international
+- ❌ **Virgule (`,`)**: NON ACCEPTÉE
+- ✅ **Exemples valides**: `573.139`, `573.14`, `573` (devient 573.0)
+- ❌ **Exemples invalides**: `573,139`, `573,14` (erreur de validation)
+- ℹ️ **Zéros après la virgule**: Pas nécessaires (`573.139` = `573.1390`)
+
 **Conversion simple avec curl:**
 ```bash
 # Upload et conversion synchrone (taux_douane requis)
@@ -268,9 +275,12 @@ Variables disponibles:
 
 **⚠️ Important**: Le paramètre `--taux-douane` (taux de change douanier) est **obligatoire** pour toutes les conversions.
 
+**📌 Format du taux**: Utiliser le **point** (`.`) comme séparateur décimal, pas la virgule (`,`).
+
 ```bash
 # Conversion simple avec taux douanier obligatoire
-python converter.py input.pdf --taux-douane 573.1390
+python converter.py input.pdf --taux-douane 573.139    # ✅ Point
+# python converter.py input.pdf --taux-douane 573,139  # ❌ Virgule = ERREUR
 
 # Avec fichier de sortie personnalisé
 python converter.py input.pdf --taux-douane 573.1390 -o output/custom.xml
@@ -421,9 +431,13 @@ Assurance XOF = ceiling(2500 + (FOB + FRET) × TAUX × 0.15%)
 - **2500** : Montant fixe en XOF (Franc CFA)
 - **FOB** : Total Valeur FOB attestée (section 19)
 - **FRET** : Fret Attesté (section 20)
-- **TAUX** : Taux de change douanier (variable, communiqué par la douane)
+- **TAUX** : Taux de change douanier (variable, communiqué par la douane, format: point `.` requis)
 - **0.15%** : Taux d'assurance (0.0015)
 - **ceiling()** : Arrondi à l'entier supérieur pour obtenir un montant entier
+
+**📌 Format du TAUX** : Utiliser le **point** (`.`) comme séparateur décimal
+- ✅ Valide : `573.139`, `573.14`, `573`
+- ❌ Invalide : `573,139`, `573,14` (virgule refusée)
 
 ### Caractéristiques
 

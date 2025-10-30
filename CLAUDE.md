@@ -181,32 +181,47 @@ Where:
 
 **ALL conversions** require the `taux_douane` parameter (customs exchange rate):
 
+**Format Requirements**:
+- ✅ **Decimal separator**: PERIOD (`.`) - international format
+- ❌ **Comma (`,`)**: NOT ACCEPTED - will cause validation error
+- ✅ **Valid examples**: `573.139`, `573.14`, `573` (becomes 573.0)
+- ❌ **Invalid examples**: `573,139`, `573,14` (comma causes error)
+- ℹ️ **Trailing zeros**: Not required (`573.139` equals `573.1390`)
+
 **CLI Usage**:
 ```bash
-# Single file conversion
-python converter.py "DOSSIER 18236.pdf" --taux-douane 573.1390 -v
+# Single file conversion - CORRECT (period)
+python converter.py "DOSSIER 18236.pdf" --taux-douane 573.139 -v    # ✅
 
-# Batch processing (NOT YET IMPLEMENTED)
-python converter.py -d tests/ --batch --taux-douane 573.1390 --workers 4
+# Single file conversion - INCORRECT (comma)
+# python converter.py "DOSSIER 18236.pdf" --taux-douane 573,139 -v  # ❌ ERROR
+
+# Batch processing
+python converter.py -d tests/ --batch --taux-douane 573.139 --workers 4
 ```
 
 **API Usage**:
 ```bash
-# Synchronous conversion
+# Synchronous conversion - CORRECT (period)
 curl -X POST "http://localhost:8000/api/v1/convert" \
   -F "file=@DOSSIER.pdf" \
-  -F "taux_douane=573.1390"
+  -F "taux_douane=573.139"    # ✅ Period
+
+# Synchronous conversion - INCORRECT (comma)
+# curl -X POST "http://localhost:8000/api/v1/convert" \
+#   -F "file=@DOSSIER.pdf" \
+#   -F "taux_douane=573,139"  # ❌ Comma = 422 Validation Error
 
 # Asynchronous conversion
 curl -X POST "http://localhost:8000/api/v1/convert/async" \
   -F "file=@DOSSIER.pdf" \
-  -F "taux_douane=573.1390"
+  -F "taux_douane=573.139"
 
-# Batch conversion with per-file rates
+# Batch conversion with per-file rates (period required in JSON list)
 curl -X POST "http://localhost:8000/api/v1/batch" \
   -F "files=@DOSSIER1.pdf" \
   -F "files=@DOSSIER2.pdf" \
-  -F "taux_douanes=[573.1390, 580.2500]"
+  -F "taux_douanes=[573.139, 580.25]"    # ✅ Periods in JSON
 ```
 
 ### Null Handling
