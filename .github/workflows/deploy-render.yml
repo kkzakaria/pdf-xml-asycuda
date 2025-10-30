@@ -79,10 +79,10 @@ jobs:
           echo "Image cible: ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
           echo ""
           echo "📊 Contexte:"
-          echo "  - Le workflow Docker peut prendre 30-60s pour pusher toutes les plateformes"
-          echo "  - Attente de sécurité: 60 secondes"
+          echo "  - Le workflow Docker peut prendre 1-2min pour pusher toutes les plateformes"
+          echo "  - Attente de sécurité: 90 secondes"
           echo ""
-          sleep 60
+          sleep 90
 
       - name: Verify image in registry
         env:
