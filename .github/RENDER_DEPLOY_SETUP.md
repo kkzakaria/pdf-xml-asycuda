@@ -80,7 +80,57 @@ docker inspect ghcr.io/kkzakaria/pdf-xml-asycuda:v1.4.6 | jq -r '.[0].Id'
 curl https://pdf-xml-asycuda-api.onrender.com/api/v1/health | jq .
 ```
 
+## ⚡ Protection Race Condition (v1.6.1+)
+
+### Problème Identifié
+
+**Race condition** entre le push Docker et le déploiement Render:
+
+```
+Timeline problématique (avant v1.6.1):
+├─ 00:00 ⏰ Workflow docker.yml COMPLETED (status "success")
+├─ 00:03 🚀 deploy-render.yml DÉMARRE immédiatement
+├─ 00:03 📡 Render reçoit la commande de redéploiement
+└─ 00:23 📦 Image :latest FINIT d'être pushée (20s APRÈS!)
+
+Résultat: Render pull l'ancienne image car la nouvelle n'est pas encore dans GHCR!
+```
+
+### Solution Implémentée (Combinée)
+
+Le workflow `deploy-render.yml` inclut maintenant deux protections:
+
+#### 1. **Délai de Sécurité** (60 secondes)
+Attente fixe pour que le push Docker multi-plateforme se termine:
+```yaml
+- name: Wait for image availability
+  run: sleep 60
+```
+
+#### 2. **Vérification Manifest avec Retries**
+Vérification active que l'image est disponible dans GHCR:
+```yaml
+- name: Verify image in registry
+  run: |
+    docker manifest inspect ghcr.io/kkzakaria/pdf-xml-asycuda:${TAG}
+    # Max 5 tentatives, 15s entre chaque
+```
+
+**Garanties**:
+- ✅ L'image est vérifiée disponible avant le déploiement Render
+- ✅ Multi-plateforme confirmé (linux/amd64, linux/arm64)
+- ✅ Échec rapide si l'image n'est pas disponible après 135s total
+
 ## 🐛 Résolution de Problèmes
+
+### Problème: Render déploie une ancienne version
+
+**Cause**: Race condition entre Docker push et Render deploy (résolu en v1.6.1+)
+
+**Solution**:
+1. ✅ Le workflow inclut maintenant un délai + vérification manifest
+2. ✅ L'image est garantie disponible avant déclenchement Render
+3. ✅ Vérifier les logs GitHub Actions → "Verify image in registry"
 
 ### Problème: Render ne redéploie pas automatiquement
 

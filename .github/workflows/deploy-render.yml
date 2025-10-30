@@ -68,6 +68,57 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "🏷️  Image Docker à déployer: ghcr.io/${{ github.repository }}:$TAG"
 
+      - name: Wait for image availability
+        env:
+          IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
+        run: |
+          echo "⏳ Attente de la disponibilité complète de l'image dans GHCR..."
+          echo "Image cible: ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
+          echo ""
+          echo "📊 Contexte:"
+          echo "  - Le workflow Docker peut prendre 30-60s pour pusher toutes les plateformes"
+          echo "  - Attente de sécurité: 60 secondes"
+          echo ""
+          sleep 60
+
+      - name: Verify image in registry
+        env:
+          IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Vérification de l'image dans GHCR..."
+          IMAGE_URL="ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
+
+          # Login au registre pour accéder aux images privées
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          # Vérification avec retries (max 5 tentatives, 15s entre chaque)
+          MAX_RETRIES=5
+          RETRY_DELAY=15
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Tentative $i/$MAX_RETRIES..."
+
+            if docker manifest inspect "$IMAGE_URL" > /dev/null 2>&1; then
+              echo "✅ Image vérifiée et disponible dans GHCR!"
+              echo "📦 Manifest:"
+              docker manifest inspect "$IMAGE_URL" | jq -r '.manifests[] | "  - \(.platform.os)/\(.platform.architecture)"'
+              exit 0
+            else
+              if [ $i -lt $MAX_RETRIES ]; then
+                echo "⚠️  Image non encore disponible, nouvelle tentative dans ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+              else
+                echo "❌ Erreur: Image toujours indisponible après $MAX_RETRIES tentatives"
+                echo "Image recherchée: $IMAGE_URL"
+                echo ""
+                echo "Vérification manuelle nécessaire:"
+                echo "  docker manifest inspect $IMAGE_URL"
+                exit 1
+              fi
+            fi
+          done
+
       - name: Deploy to Render
         env:
           IMAGE_TAG: ${{ steps.image_tag.outputs.tag }}
