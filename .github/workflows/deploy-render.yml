@@ -56,10 +56,11 @@ jobs:
 
             # Vérifier si c'est un tag de version
             if [[ "$TRIGGER_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-              # Utiliser le tag de version pour Render
-              TAG="$TRIGGER_REF"
-              echo "📦 Tag de version détecté: $TAG"
-              echo "🎯 Render déploiera l'image spécifique: $TAG"
+              # Strip le préfixe "v" pour matcher la sortie de docker/metadata-action
+              # Exemple: v1.6.5 → 1.6.5 (car Docker metadata crée "1.6.5" sans "v")
+              TAG="${TRIGGER_REF#v}"
+              echo "📦 Tag de version détecté: $TRIGGER_REF"
+              echo "🎯 Render déploiera l'image: $TAG (sans préfixe v)"
             else
               # Branche main: utiliser latest
               TAG="latest"
