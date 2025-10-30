@@ -55,8 +55,8 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: L
 @router.post(
     "",
     response_model=BatchJobResponse,
-    summary="Conversion batch",
-    description="Upload plusieurs PDFs RFCV et les convertit en parallèle",
+    summary="Conversion batch de PDFs RFCV",
+    description="Upload plusieurs PDFs RFCV et les convertit en parallèle. **Liste de taux douaniers obligatoire** (un par fichier) pour le calcul de l'assurance.",
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.BATCH)

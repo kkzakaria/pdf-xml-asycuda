@@ -25,8 +25,8 @@ router = APIRouter(prefix="/api/v1/convert", tags=["Conversion"])
 @router.post(
     "",
     response_model=ConvertResponse,
-    summary="Conversion synchrone",
-    description="Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement",
+    summary="Conversion synchrone PDF → XML ASYCUDA",
+    description="Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement. **Taux douanier obligatoire** pour le calcul de l'assurance.",
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
@@ -146,8 +146,8 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
 @router.post(
     "/async",
     response_model=ConvertAsyncResponse,
-    summary="Conversion asynchrone",
-    description="Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard",
+    summary="Conversion asynchrone PDF → XML ASYCUDA",
+    description="Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard. **Taux douanier obligatoire** pour le calcul de l'assurance.",
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.UPLOAD_ASYNC)
