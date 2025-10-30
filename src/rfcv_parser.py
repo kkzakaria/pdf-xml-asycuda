@@ -3,6 +3,7 @@ Module de parsing des documents PDF RFCV
 Extrait les données structurées et les mappe aux modèles
 """
 import re
+import math
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -577,7 +578,8 @@ class RFCVParser:
 
             if fob_value is not None and fret_value is not None and fob_value > 0 and fret_value > 0:
                 # Calcul : 2500 + (FOB + FRET) × TAUX × 0.0015
-                assurance_xof = 2500 + (fob_value + fret_value) * self.taux_douane * 0.0015
+                # Arrondi à l'entier supérieur (ceiling) pour avoir un montant entier
+                assurance_xof = math.ceil(2500 + (fob_value + fret_value) * self.taux_douane * 0.0015)
 
                 valuation.insurance = CurrencyAmount(
                     amount_national=assurance_xof,
