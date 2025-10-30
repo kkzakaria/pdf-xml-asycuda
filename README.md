@@ -414,7 +414,7 @@ Le système calcule automatiquement l'assurance (section 21) selon la formule do
 ### Formule de calcul
 
 ```
-Assurance XOF = 2500 + (FOB + FRET) × TAUX × 0.15%
+Assurance XOF = ceiling(2500 + (FOB + FRET) × TAUX × 0.15%)
 ```
 
 **Composantes :**
@@ -423,31 +423,41 @@ Assurance XOF = 2500 + (FOB + FRET) × TAUX × 0.15%
 - **FRET** : Fret Attesté (section 20)
 - **TAUX** : Taux de change douanier (variable, communiqué par la douane)
 - **0.15%** : Taux d'assurance (0.0015)
+- **ceiling()** : Arrondi à l'entier supérieur pour obtenir un montant entier
 
 ### Caractéristiques
 
 - ✅ **Devise** : Toujours en XOF (Franc CFA) avec taux 1.0
+- ✅ **Arrondi à l'entier supérieur** : Le résultat est toujours un nombre entier (ceiling)
 - ✅ **Répartition proportionnelle** : Distribution automatique sur les articles selon leur FOB
+- ✅ **Somme exacte garantie** : Méthode du plus grand reste pour que Σ articles = total
 - ✅ **Gestion des valeurs nulles** : Si FOB ou FRET manquant, assurance = null
 - ✅ **Taux obligatoire** : Le paramètre `taux_douane` est requis pour toutes les conversions
 
 ### Exemple de calcul
 
 **Données :**
-- FOB : 10,220 USD
+- FOB : 12,683.65 USD
 - FRET : 2,000 USD
 - TAUX : 573.139 (USD)
 
 **Calcul :**
 ```
-Assurance = 2500 + (10220 + 2000) × 573.139 × 0.0015
-         = 2500 + 12220 × 573.139 × 0.0015
-         = 2500 + 10505.64
-         = 13005.64 XOF
+Calcul brut = 2500 + (12683.65 + 2000) × 573.139 × 0.0015
+            = 2500 + 14683.65 × 573.139 × 0.0015
+            = 2500 + 12623.658...
+            = 15123.658... XOF
+
+Assurance finale = ceiling(15123.658...) = 15124 XOF
 ```
 
-**Répartition :**
-L'assurance totale est ensuite répartie proportionnellement sur les articles selon leur FOB respectif, avec application de la méthode du reste le plus grand (Largest Remainder Method) pour garantir que la somme des articles égale exactement le total.
+**Répartition proportionnelle :**
+
+L'assurance totale arrondie (15124 XOF) est ensuite répartie proportionnellement sur les articles selon leur FOB respectif :
+
+1. **Calcul des proportions** : Chaque article reçoit `(FOB_article / FOB_total) × Assurance_totale`
+2. **Méthode du plus grand reste** : Les restes décimaux sont distribués aux articles ayant les plus grands restes jusqu'à épuisement
+3. **Garantie de somme exacte** : `Σ assurance_articles = 15124 XOF` (pas de différence d'arrondi)
 
 ## 🛠️ Technologies
 

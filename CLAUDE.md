@@ -166,13 +166,16 @@ The system calculates insurance (assurance) using a customs-mandated formula tha
 
 ### Calculation Formula
 
-**Formula**: `2500 + (FOB + FRET) × TAUX × 0.15%`
+**Formula**: `ceiling(2500 + (FOB + FRET) × TAUX × 0.15%)`
 
 Where:
 - **FOB**: Total FOB value from section "19. Total Valeur FOB attestée"
 - **FRET**: Freight value from section "20. Fret Attesté"
 - **TAUX**: Customs exchange rate (communicated by customs, variable, 4 decimals)
+- **ceiling()**: Round up to the nearest integer (ensures integer XOF amount)
 - **Result**: Always in XOF (Franc CFA) with rate 1.0
+
+**Important**: The insurance amount is rounded UP (ceiling) before proportional distribution to ensure an integer value. The proportional distribution then uses the Largest Remainder Method to guarantee that the sum of article insurances equals exactly the total insurance amount.
 
 ### Required Parameter: `taux_douane`
 
