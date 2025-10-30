@@ -23,7 +23,8 @@ class ConversionService:
     def convert_pdf_to_xml(
         pdf_path: str,
         output_path: str,
-        verbose: bool = False
+        verbose: bool = False,
+        taux_douane: float = None
     ) -> Dict[str, Any]:
         """
         Convertit un PDF RFCV en XML ASYCUDA
@@ -32,6 +33,7 @@ class ConversionService:
             pdf_path: Chemin du fichier PDF
             output_path: Chemin de sortie XML
             verbose: Mode verbeux
+            taux_douane: Taux de change douanier pour calcul assurance (optionnel)
 
         Returns:
             Dictionnaire avec résultats et métriques
@@ -55,8 +57,10 @@ class ConversionService:
             # Parser le PDF
             if verbose:
                 print(f"Parsing PDF: {pdf_path}")
+                if taux_douane:
+                    print(f"  Taux douanier: {taux_douane:.4f}")
 
-            parser = RFCVParser(pdf_path)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane)
             rfcv_data = parser.parse()
 
             # Générer le XML
@@ -99,12 +103,13 @@ class ConversionService:
         return result
 
     @staticmethod
-    def validate_pdf(pdf_path: str) -> Dict[str, Any]:
+    def validate_pdf(pdf_path: str, taux_douane: float = None) -> Dict[str, Any]:
         """
         Valide un PDF RFCV sans faire la conversion complète
 
         Args:
             pdf_path: Chemin du fichier PDF
+            taux_douane: Taux de change douanier (optionnel)
 
         Returns:
             Résultat de validation
@@ -123,7 +128,7 @@ class ConversionService:
                 return result
 
             # Essayer de parser sans générer XML
-            parser = RFCVParser(pdf_path)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane)
             rfcv_data = parser.parse()
 
             # Vérifications basiques

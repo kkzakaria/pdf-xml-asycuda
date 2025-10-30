@@ -1,7 +1,7 @@
 """
 Routes batch
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, BackgroundTasks, Body, Depends, Request
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, BackgroundTasks, Body, Depends, Request
 from typing import List
 from pathlib import Path
 
@@ -21,7 +21,7 @@ from ..core.rate_limit import limiter, RateLimits
 router = APIRouter(prefix="/api/v1/batch", tags=["Batch"])
 
 
-async def _async_batch_task(batch_id: str, pdf_paths: List[str], output_dir: str, workers: int):
+async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: List[float], output_dir: str, workers: int):
     """Tâche de traitement batch asynchrone"""
 
     # Mettre à jour le status à PROCESSING
@@ -34,6 +34,7 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], output_dir: str
     # Traiter le batch
     results = batch_service.process_files(
         pdf_files=pdf_paths,
+        taux_douanes=taux_douanes,
         output_dir=output_dir,
         workers=workers,
         verbose=False
@@ -63,12 +64,14 @@ async def batch_convert(
     request: Request,
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(..., description="Fichiers PDF à convertir"),
+    taux_douanes: str = Form(..., description="Liste JSON de taux douaniers (ex: [573.1390, 580.2500])"),
     workers: int = Body(default=4, ge=1, le=8, description="Nombre de workers parallèles")
 ):
     """
     Conversion batch de plusieurs PDFs
 
     - **files**: Liste de fichiers PDF à convertir
+    - **taux_douanes**: Liste de taux douaniers (un par fichier, format JSON)
     - **workers**: Nombre de workers pour traitement parallèle (1-8)
 
     Retourne un batch_id pour suivre la progression
@@ -78,6 +81,33 @@ async def batch_convert(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Aucun fichier fourni"
         )
+
+    # Parser les taux douaniers
+    try:
+        import json
+        taux_list = json.loads(taux_douanes)
+        if not isinstance(taux_list, list):
+            raise ValueError("taux_douanes doit être une liste JSON")
+    except (json.JSONDecodeError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Format taux_douanes invalide: {str(e)}"
+        )
+
+    # Valider la cohérence des taux
+    if len(taux_list) != len(files):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Le nombre de taux ({len(taux_list)}) doit correspondre au nombre de fichiers ({len(files)})"
+        )
+
+    # Valider que tous les taux sont positifs
+    for i, taux in enumerate(taux_list):
+        if not isinstance(taux, (int, float)) or taux <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Taux invalide pour le fichier {i+1}: {taux} (doit être > 0)"
+            )
 
     # Générer un batch ID
     batch_id = storage_service.generate_batch_id()
@@ -98,6 +128,7 @@ async def batch_convert(
             _async_batch_task,
             batch_id=batch_id,
             pdf_paths=pdf_paths,
+            taux_douanes=taux_list,
             output_dir=f"output/{batch_id}",
             workers=workers
         )

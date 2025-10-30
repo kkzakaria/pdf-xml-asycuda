@@ -27,11 +27,13 @@ class ReportFormat(str, Enum):
 class ConvertRequest(BaseModel):
     """Requête de conversion (pour async avec metadata)"""
     filename: str
+    taux_douane: float = Field(..., gt=0, description="Taux de change douanier pour calcul assurance (format: 573.1390)")
     verbose: bool = False
 
 
 class BatchConvertRequest(BaseModel):
     """Requête de conversion batch"""
+    taux_douane: float = Field(..., gt=0, description="Taux de change douanier global pour tous les fichiers (format: 573.1390)")
     recursive: bool = False
     pattern: str = "*.pdf"
     workers: int = Field(default=4, ge=1, le=8)
@@ -39,6 +41,7 @@ class BatchConvertRequest(BaseModel):
 
     model_config = ConfigDict(json_schema_extra={
         "example": {
+            "taux_douane": 573.1390,
             "recursive": False,
             "pattern": "*.pdf",
             "workers": 4,

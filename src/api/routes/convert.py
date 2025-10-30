@@ -1,7 +1,7 @@
 """
 Routes de conversion
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, BackgroundTasks, Depends, Request
 from fastapi.responses import FileResponse
 from pathlib import Path
 
@@ -32,12 +32,14 @@ router = APIRouter(prefix="/api/v1/convert", tags=["Conversion"])
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
 async def convert_pdf(
     request: Request,
-    file: UploadFile = File(..., description="Fichier PDF RFCV à convertir")
+    file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
+    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0)
 ):
     """
     Conversion synchrone PDF → XML
 
     - **file**: Fichier PDF à convertir (max 50MB)
+    - **taux_douane**: Taux de change douanier pour calcul assurance (format: 573.1390)
 
     Retourne le résultat immédiatement avec les métriques
     """
@@ -58,7 +60,8 @@ async def convert_pdf(
         result = conversion_service.convert_pdf_to_xml(
             pdf_path=pdf_path,
             output_path=output_path,
-            verbose=False
+            verbose=False,
+            taux_douane=taux_douane
         )
 
         if not result['success']:
@@ -102,7 +105,7 @@ async def convert_pdf(
         )
 
 
-async def _async_convert_task(job_id: str, pdf_path: str, output_path: str):
+async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float):
     """Tâche de conversion asynchrone (background)"""
 
     # Mettre à jour le status à PROCESSING
@@ -117,7 +120,8 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str):
     result = conversion_service.convert_pdf_to_xml(
         pdf_path=pdf_path,
         output_path=output_path,
-        verbose=False
+        verbose=False,
+        taux_douane=taux_douane
     )
 
     # Mettre à jour le job avec le résultat
@@ -150,12 +154,14 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str):
 async def convert_pdf_async(
     request: Request,
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(..., description="Fichier PDF RFCV à convertir")
+    file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
+    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0)
 ):
     """
     Conversion asynchrone PDF → XML
 
     - **file**: Fichier PDF à convertir
+    - **taux_douane**: Taux de change douanier pour calcul assurance (format: 573.1390)
 
     Retourne un job_id pour suivre la progression avec GET /convert/{job_id}
     """
@@ -185,7 +191,8 @@ async def convert_pdf_async(
             _async_convert_task,
             job_id=job_id,
             pdf_path=pdf_path,
-            output_path=output_path
+            output_path=output_path,
+            taux_douane=taux_douane
         )
 
         return ConvertAsyncResponse(

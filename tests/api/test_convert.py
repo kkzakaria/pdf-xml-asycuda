@@ -11,7 +11,8 @@ async def test_convert_sync_success(client, sample_pdf):
     """Test de conversion synchrone réussie"""
     with open(sample_pdf, "rb") as f:
         files = {"file": (sample_pdf.name, f, "application/pdf")}
-        response = await client.post("/api/v1/convert", files=files)
+        data = {"taux_douane": "573.139"}
+        response = await client.post("/api/v1/convert", files=files, data=data)
 
     assert response.status_code == 200
     data = response.json()
@@ -55,7 +56,8 @@ async def test_convert_async_success(client, sample_pdf):
     """Test de conversion asynchrone"""
     with open(sample_pdf, "rb") as f:
         files = {"file": (sample_pdf.name, f, "application/pdf")}
-        response = await client.post("/api/v1/convert/async", files=files)
+        data = {"taux_douane": "573.139"}
+        response = await client.post("/api/v1/convert/async", files=files, data=data)
 
     assert response.status_code == 200
     data = response.json()
@@ -95,7 +97,8 @@ async def test_get_job_result_success(client, sample_pdf):
     # D'abord créer un job async
     with open(sample_pdf, "rb") as f:
         files = {"file": (sample_pdf.name, f, "application/pdf")}
-        response = await client.post("/api/v1/convert/async", files=files)
+        data = {"taux_douane": "573.139"}
+        response = await client.post("/api/v1/convert/async", files=files, data=data)
 
     job_id = response.json()["job_id"]
 
@@ -123,7 +126,8 @@ async def test_download_xml_success(client, sample_pdf):
     # D'abord faire une conversion asynchrone (qui crée un job dans job_service)
     with open(sample_pdf, "rb") as f:
         files = {"file": (sample_pdf.name, f, "application/pdf")}
-        response = await client.post("/api/v1/convert/async", files=files)
+        data = {"taux_douane": "573.139"}
+        response = await client.post("/api/v1/convert/async", files=files, data=data)
 
     assert response.status_code == 200
     job_id = response.json()["job_id"]
@@ -165,7 +169,8 @@ async def test_concurrent_conversions(client, sample_pdf):
         async def convert():
             with open(sample_pdf, "rb") as f:
                 files = {"file": (sample_pdf.name, f, "application/pdf")}
-                return await client.post("/api/v1/convert/async", files=files)
+                data = {"taux_douane": "573.139"}
+                return await client.post("/api/v1/convert/async", files=files, data=data)
 
         tasks.append(convert())
 

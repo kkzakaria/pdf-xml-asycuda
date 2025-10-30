@@ -22,14 +22,16 @@ logger = logging.getLogger(__name__)
 class RFCVParser:
     """Parser pour documents RFCV"""
 
-    def __init__(self, pdf_path: str):
+    def __init__(self, pdf_path: str, taux_douane: Optional[float] = None):
         """
         Initialise le parser
 
         Args:
             pdf_path: Chemin vers le PDF RFCV
+            taux_douane: Taux de change douanier pour calcul assurance (format: 566.6700)
         """
         self.pdf_path = pdf_path
+        self.taux_douane = taux_douane
         self.text = ""
         self.tables = []
 
@@ -562,25 +564,20 @@ class RFCVParser:
         else:
             valuation.external_freight = None
 
-        # Section 21: Assurance Attestée (insurance)
-        # Structure réelle du PDF:
-        # "21. Assurance Attestée 22. Charges Attestées..."
-        # "ONEYCANF66571400 Transport maritime"  (ligne avec texte)
-        # "44,05 14 727,70"  (ASSURANCE CHARGES)
-        # L'assurance est le premier nombre 2 lignes après "21. Assurance Attestée"
-        #
-        # IMPORTANT: L'assurance est dans la devise de la section 16 (USD, EUR, etc.)
-        # Il faut la convertir en XOF en multipliant par le taux de change (section 17)
-        assurance_str = self._extract_field(r'21\.\s*Assurance Attestée.*?\n.*?\n([\d\s]+,\d{2})\s+[\d\s]+,\d{2}')
+        # Section 21: Assurance - CALCUL selon nouvelle formule douanière
+        # Formule : 2500 + (FOB + FRET) × TAUX_DOUANE × 0.15%
+        # FOB: section 19 (Total Valeur FOB attestée)
+        # FRET: section 20 (Fret Attesté)
+        # TAUX_DOUANE: fourni par l'utilisateur (variable selon la douane)
+        # Résultat: toujours en XOF avec taux 1.0
 
-        if assurance_str and currency and currency_rate:
-            # Assurance en devise étrangère (section 16)
-            assurance_foreign = self._parse_number(assurance_str)
-            rate_value = self._parse_number(currency_rate)
+        if fob and fret_str and self.taux_douane:
+            fob_value = self._parse_number(fob)
+            fret_value = self._parse_number(fret_str)
 
-            if assurance_foreign is not None and rate_value is not None:
-                # Convertir en XOF: assurance_devise × taux_change
-                assurance_xof = assurance_foreign * rate_value
+            if fob_value is not None and fret_value is not None and fob_value > 0 and fret_value > 0:
+                # Calcul : 2500 + (FOB + FRET) × TAUX × 0.0015
+                assurance_xof = 2500 + (fob_value + fret_value) * self.taux_douane * 0.0015
 
                 valuation.insurance = CurrencyAmount(
                     amount_national=assurance_xof,
@@ -589,7 +586,11 @@ class RFCVParser:
                     currency_name='Franc CFA',
                     currency_rate=1.0
                 )
+            else:
+                # FOB ou FRET manquant/invalide → assurance à null
+                valuation.insurance = None
         else:
+            # Données insuffisantes pour calcul → assurance à null
             valuation.insurance = None
 
         # Total_invoice: Utilise la valeur FOB (section 19) en devise étrangère
@@ -984,15 +985,16 @@ class RFCVParser:
                 ))
 
 
-def parse_rfcv(pdf_path: str) -> RFCVData:
+def parse_rfcv(pdf_path: str, taux_douane: Optional[float] = None) -> RFCVData:
     """
     Fonction utilitaire pour parser un PDF RFCV
 
     Args:
         pdf_path: Chemin du fichier PDF
+        taux_douane: Taux de change douanier pour calcul assurance (optionnel)
 
     Returns:
         Données RFCV structurées
     """
-    parser = RFCVParser(pdf_path)
+    parser = RFCVParser(pdf_path, taux_douane=taux_douane)
     return parser.parse()
