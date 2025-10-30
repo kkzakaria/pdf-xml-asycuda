@@ -40,7 +40,10 @@ jobs:
       - name: Determine Docker image tag
         id: image_tag
         run: |
-          # Détecter le tag à utiliser selon le contexte
+          # IMPORTANT: Render utilise TOUJOURS :latest (configuré dans render.yaml)
+          # Même si un tag de version a déclenché le build Docker, on vérifie
+          # et déploie toujours l'image :latest pour Render
+
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             # Déploiement manuel avec tag spécifié
             if [ -n "${{ inputs.image_tag }}" ]; then
@@ -48,21 +51,14 @@ jobs:
             else
               TAG="latest"
             fi
-          elif [ "${{ github.event.workflow_run.event }}" == "push" ]; then
-            # Déploiement automatique après build Docker
-            # Récupérer le ref qui a déclenché le workflow_run
-            TRIGGER_REF="${{ github.event.workflow_run.head_branch }}"
-
-            # Vérifier si c'est un tag de version (avec ou sans suffixe)
-            if [[ "$TRIGGER_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-              TAG="$TRIGGER_REF"
-              echo "📦 Tag de version détecté: $TAG"
-            else
-              TAG="latest"
-              echo "📦 Branche main détectée, utilisation de: $TAG"
-            fi
           else
+            # Déploiement automatique: toujours utiliser :latest pour Render
             TAG="latest"
+
+            # Log du contexte pour debugging
+            TRIGGER_REF="${{ github.event.workflow_run.head_branch }}"
+            echo "📦 Workflow déclenché par: $TRIGGER_REF"
+            echo "🎯 Image à déployer sur Render: :latest (configuration render.yaml)"
           fi
 
           echo "tag=$TAG" >> $GITHUB_OUTPUT
