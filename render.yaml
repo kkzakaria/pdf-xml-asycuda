@@ -4,6 +4,10 @@ services:
     name: pdf-xml-asycuda-api
     runtime: image
     image:
+      # IMPORTANT: Cette URL est remplacée automatiquement par le workflow deploy-render.yml
+      # Pour les releases (tags v*.*.*): l'image spécifique est déployée (ex: v1.6.3)
+      # Pour les commits sur main: l'image :latest est déployée
+      # Le workflow envoie l'imageUrl exacte via l'API Render
       url: ghcr.io/kkzakaria/pdf-xml-asycuda:latest
     region: frankfurt # Or: oregon, ohio, singapore
     plan: free # Options: free, starter, standard, pro

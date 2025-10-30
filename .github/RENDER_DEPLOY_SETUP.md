@@ -34,18 +34,28 @@ services:
 
 ## 🚀 Fonctionnement
 
-### Avec API Render (Recommandé)
+### Stratégie de Déploiement (Tags de Version Spécifiques)
+
+**Nouvelle approche (v1.6.3+)**: Utilisation de tags de version spécifiques pour garantir que Render détecte les changements.
 
 **Avantages**:
-- ✅ Redéploiement instantané et forcé
-- ✅ Confirmation du déclenchement
-- ✅ Logs détaillés dans GitHub Actions
+- ✅ Render détecte toujours les nouveaux déploiements (pas de problème de cache)
+- ✅ Traçabilité: chaque version a son image unique
+- ✅ Rollback facile vers une version précédente
+- ✅ Pas de confusion avec `:latest`
 
-**Workflow**:
-1. Push sur `main` ou création d'un tag `v*.*.*`
+**Workflow pour Releases (Tags v*.*.*):**
+1. Création d'un tag `v1.6.3`
+2. GitHub Actions construit l'image Docker avec `VERSION=1.6.3`
+3. L'image est poussée vers GHCR avec les tags: `v1.6.3`, `1.6`, `1`, `latest`
+4. GitHub Actions appelle l'API Render avec `imageUrl: ghcr.io/.../pdf-xml-asycuda:v1.6.3`
+5. Render pull **l'image spécifique v1.6.3** et redéploie
+
+**Workflow pour Commits sur Main:**
+1. Push sur `main`
 2. GitHub Actions construit l'image Docker
-3. L'image est poussée vers GHCR avec le tag `:latest` (toujours)
-4. GitHub Actions appelle l'API Render pour forcer le redéploiement
+3. L'image est poussée vers GHCR avec le tag `:latest` uniquement
+4. GitHub Actions appelle l'API Render avec `imageUrl: ghcr.io/.../pdf-xml-asycuda:latest`
 5. Render pull l'image `:latest` et redéploie
 
 ### Sans API Render (Fallback)

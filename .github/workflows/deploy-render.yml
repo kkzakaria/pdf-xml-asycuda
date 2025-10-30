@@ -40,9 +40,8 @@ jobs:
       - name: Determine Docker image tag
         id: image_tag
         run: |
-          # IMPORTANT: Render utilise TOUJOURS :latest (configuré dans render.yaml)
-          # Même si un tag de version a déclenché le build Docker, on vérifie
-          # et déploie toujours l'image :latest pour Render
+          # NOUVELLE STRATÉGIE: Utiliser le tag de version spécifique pour Render
+          # Cela garantit que Render détecte le changement et redéploie correctement
 
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             # Déploiement manuel avec tag spécifié
@@ -52,13 +51,21 @@ jobs:
               TAG="latest"
             fi
           else
-            # Déploiement automatique: toujours utiliser :latest pour Render
-            TAG="latest"
-
-            # Log du contexte pour debugging
+            # Déploiement automatique: utiliser le tag qui a déclenché le build
             TRIGGER_REF="${{ github.event.workflow_run.head_branch }}"
-            echo "📦 Workflow déclenché par: $TRIGGER_REF"
-            echo "🎯 Image à déployer sur Render: :latest (configuration render.yaml)"
+
+            # Vérifier si c'est un tag de version
+            if [[ "$TRIGGER_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+              # Utiliser le tag de version pour Render
+              TAG="$TRIGGER_REF"
+              echo "📦 Tag de version détecté: $TAG"
+              echo "🎯 Render déploiera l'image spécifique: $TAG"
+            else
+              # Branche main: utiliser latest
+              TAG="latest"
+              echo "📦 Branche main détectée"
+              echo "🎯 Render déploiera l'image: :latest"
+            fi
           fi
 
           echo "tag=$TAG" >> $GITHUB_OUTPUT
@@ -131,15 +138,20 @@ jobs:
           echo "  - Image tag: ${IMAGE_TAG}"
           echo ""
 
-          # Force Render à repuller l'image :latest via l'API
+          # Déclencher le déploiement avec l'image spécifique via l'API Render
           if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
             echo "🔄 Déclenchement du redéploiement via API Render..."
+            echo "   Image: ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
 
+            # Construire l'URL complète de l'image
+            IMAGE_URL="ghcr.io/${{ github.repository }}:${IMAGE_TAG}"
+
+            # Envoyer la requête avec l'image spécifique
             RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
               "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
               -H "Authorization: Bearer ${RENDER_API_KEY}" \
               -H "Content-Type: application/json" \
-              -d '{"clearCache":"clear"}')
+              -d "{\"clearCache\":\"clear\",\"imageUrl\":\"${IMAGE_URL}\"}")
 
             HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
             BODY=$(echo "$RESPONSE" | head -n -1)
