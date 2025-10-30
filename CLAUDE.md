@@ -160,6 +160,118 @@ INFO: Article 1: Châssis détecté (Véhicules transport marchandises) - LLCLHJ
 WARNING: Article 5: Code HS 8704 nécessite un châssis mais aucun détecté dans description
 ```
 
+## Insurance Calculation (Assurance)
+
+The system calculates insurance (assurance) using a customs-mandated formula that requires a variable exchange rate provided by the user before each conversion.
+
+### Calculation Formula
+
+**Formula**: `2500 + (FOB + FRET) × TAUX × 0.15%`
+
+Where:
+- **FOB**: Total FOB value from section "19. Total Valeur FOB attestée"
+- **FRET**: Freight value from section "20. Fret Attesté"
+- **TAUX**: Customs exchange rate (communicated by customs, variable, 4 decimals)
+- **Result**: Always in XOF (Franc CFA) with rate 1.0
+
+### Required Parameter: `taux_douane`
+
+**ALL conversions** require the `taux_douane` parameter (customs exchange rate):
+
+**CLI Usage**:
+```bash
+# Single file conversion
+python converter.py "DOSSIER 18236.pdf" --taux-douane 573.1390 -v
+
+# Batch processing (NOT YET IMPLEMENTED)
+python converter.py -d tests/ --batch --taux-douane 573.1390 --workers 4
+```
+
+**API Usage**:
+```bash
+# Synchronous conversion
+curl -X POST "http://localhost:8000/api/v1/convert" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.1390"
+
+# Asynchronous conversion
+curl -X POST "http://localhost:8000/api/v1/convert/async" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.1390"
+
+# Batch conversion with per-file rates
+curl -X POST "http://localhost:8000/api/v1/batch" \
+  -F "files=@DOSSIER1.pdf" \
+  -F "files=@DOSSIER2.pdf" \
+  -F "taux_douanes=[573.1390, 580.2500]"
+```
+
+### Null Handling
+
+Insurance is set to `null` when:
+- FOB value is missing, zero, or invalid
+- FRET value is missing, zero, or invalid
+- `taux_douane` parameter is not provided
+- All linked fields (proportional distribution) are also set to null
+
+### Implementation
+
+**Core Files**:
+- `src/rfcv_parser.py`: Extracts FOB/FRET, calculates insurance (lines 567-594)
+- `src/proportional_calculator.py`: Handles `insurance=None` gracefully
+- `converter.py`: CLI validation requires `--taux-douane`
+- `src/api/routes/convert.py`: Form parameter `taux_douane` required
+- `src/api/routes/batch.py`: JSON list of taux (one per file)
+- `src/batch_processor.py`: Per-file taux support in BatchConfig
+
+**Calculation Logic** (rfcv_parser.py:567-594):
+```python
+# Section 21: Assurance - CALCUL selon nouvelle formule douanière
+if fob and fret_str and self.taux_douane:
+    fob_value = self._parse_number(fob)
+    fret_value = self._parse_number(fret_str)
+
+    if fob_value is not None and fret_value is not None and fob_value > 0 and fret_value > 0:
+        # Formula: 2500 + (FOB + FRET) × TAUX × 0.15%
+        assurance_xof = 2500 + (fob_value + fret_value) * self.taux_douane * 0.0015
+
+        valuation.insurance = CurrencyAmount(
+            amount_national=assurance_xof,
+            amount_foreign=assurance_xof,
+            currency_code='XOF',
+            currency_name='Franc CFA',
+            currency_rate=1.0
+        )
+    else:
+        valuation.insurance = None
+else:
+    valuation.insurance = None
+```
+
+### Test Rate
+
+For testing purposes, use USD rate: **573.139** (4 decimals)
+
+### XML Output
+
+Insurance appears in the `<Valuation>` section:
+```xml
+<Valuation>
+  <Gs_Invoice>
+    <Gs_Invoice_fob_value_national>12500000</Gs_Invoice_fob_value_national>
+    <Gs_Invoice_freight_national>850000</Gs_Invoice_freight_national>
+    <Gs_Invoice_insurance_national>156923.75</Gs_Invoice_insurance_national>
+    <Gs_Invoice_insurance_rate>1.0</Gs_Invoice_insurance_rate>
+    <Gs_invoice_insurance_currency>XOF</Gs_invoice_insurance_currency>
+  </Gs_Invoice>
+</Valuation>
+```
+
+When null:
+```xml
+<Gs_Invoice_insurance_national><null/></Gs_Invoice_insurance_national>
+```
+
 ## Architecture
 
 ### Core Processing Pipeline

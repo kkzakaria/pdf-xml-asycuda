@@ -24,13 +24,14 @@ class ConverterTester:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.collector = MetricsCollector()
 
-    def test_single_pdf(self, pdf_path: str, verbose: bool = False) -> ConversionMetrics:
+    def test_single_pdf(self, pdf_path: str, verbose: bool = False, taux_douane: float = 573.139) -> ConversionMetrics:
         """
         Teste la conversion d'un seul PDF
 
         Args:
             pdf_path: Chemin du PDF à tester
             verbose: Afficher les détails
+            taux_douane: Taux de change douanier (défaut: 573.139 pour tests)
 
         Returns:
             Métriques de la conversion
@@ -63,7 +64,7 @@ class ConverterTester:
 
             # Étape 2: Parsing RFCV
             start_parse = time.time()
-            parser = RFCVParser(pdf_path)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane)
             rfcv_data = parser.parse()
             parse_time = time.time() - start_parse
 

@@ -11,7 +11,8 @@ async def test_download_xml_by_id(client, sample_pdf):
     # D'abord créer un fichier XML via conversion
     with open(sample_pdf, "rb") as f:
         files = {"file": (sample_pdf.name, f, "application/pdf")}
-        response = await client.post("/api/v1/convert", files=files)
+        data = {"taux_douane": "573.139"}
+        response = await client.post("/api/v1/convert", files=files, data=data)
 
     assert response.status_code == 200
     output_file = response.json()["output_file"]
@@ -44,7 +45,8 @@ async def test_file_metadata(client, sample_pdf):
     # D'abord créer un fichier XML
     with open(sample_pdf, "rb") as f:
         files = {"file": (sample_pdf.name, f, "application/pdf")}
-        response = await client.post("/api/v1/convert", files=files)
+        data = {"taux_douane": "573.139"}
+        response = await client.post("/api/v1/convert", files=files, data=data)
 
     assert response.status_code == 200
     output_file = response.json()["output_file"]
@@ -78,7 +80,8 @@ async def test_download_with_extension(client, sample_pdf):
     # Créer un fichier XML
     with open(sample_pdf, "rb") as f:
         files = {"file": (sample_pdf.name, f, "application/pdf")}
-        response = await client.post("/api/v1/convert", files=files)
+        data = {"taux_douane": "573.139"}
+        response = await client.post("/api/v1/convert", files=files, data=data)
 
     output_file = response.json()["output_file"]
     file_id = Path(output_file).stem

@@ -59,6 +59,7 @@ class BatchService:
     @staticmethod
     def process_files(
         pdf_files: List[str],
+        taux_douanes: List[float],
         output_dir: str,
         workers: int = 4,
         verbose: bool = False
@@ -68,6 +69,7 @@ class BatchService:
 
         Args:
             pdf_files: Liste des fichiers PDF à traiter
+            taux_douanes: Liste des taux douaniers (un par fichier)
             output_dir: Dossier de sortie
             workers: Nombre de workers
             verbose: Mode verbeux
@@ -75,14 +77,24 @@ class BatchService:
         Returns:
             Résultats du batch
         """
-        return BatchService.process_batch(
+        # Créer la configuration avec les taux douaniers
+        config = BatchConfig(
             input_paths=pdf_files,
             output_dir=output_dir,
             recursive=False,
             pattern="*.pdf",
             workers=workers,
-            verbose=verbose
+            continue_on_error=True,
+            verbose=verbose,
+            progress_bar=False,  # Désactivé pour l'API
+            taux_douanes=taux_douanes  # Ajouter les taux
         )
+
+        # Exécuter le batch
+        processor = BatchProcessor(config)
+        results = processor.process()
+
+        return results
 
 
 # Instance globale

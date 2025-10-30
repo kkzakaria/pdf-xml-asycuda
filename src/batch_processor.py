@@ -44,6 +44,7 @@ class BatchConfig:
     continue_on_error: bool = True
     verbose: bool = False
     progress_bar: bool = True
+    taux_douanes: List[float] = field(default_factory=list)  # Taux douaniers par fichier
 
     def __post_init__(self):
         """Validation de la configuration"""
@@ -104,7 +105,7 @@ class BatchProcessor:
         return pdf_files
 
     @staticmethod
-    def _process_single_file(pdf_path: Path, output_dir: str, verbose: bool = False) -> BatchResult:
+    def _process_single_file(pdf_path: Path, output_dir: str, verbose: bool = False, taux_douane: Optional[float] = None) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -112,6 +113,7 @@ class BatchProcessor:
             pdf_path: Chemin du fichier PDF
             output_dir: Dossier de sortie
             verbose: Mode verbeux
+            taux_douane: Taux de change douanier pour calcul assurance (optionnel)
 
         Returns:
             Résultat du traitement
@@ -129,7 +131,7 @@ class BatchProcessor:
             output_file.parent.mkdir(parents=True, exist_ok=True)
 
             # Parser le PDF
-            parser = RFCVParser(str(pdf_path))
+            parser = RFCVParser(str(pdf_path), taux_douane=taux_douane)
             rfcv_data = parser.parse()
 
             # Générer le XML
@@ -179,11 +181,15 @@ class BatchProcessor:
         if TQDM_AVAILABLE and self.config.progress_bar:
             iterator = tqdm(pdf_files, desc="Processing PDFs", unit="file")
 
-        for pdf_file in iterator:
+        for i, pdf_file in enumerate(iterator):
+            # Récupérer le taux douanier pour ce fichier (si disponible)
+            taux_douane = self.config.taux_douanes[i] if i < len(self.config.taux_douanes) else None
+
             result = self._process_single_file(
                 pdf_file,
                 self.config.output_dir,
-                self.config.verbose
+                self.config.verbose,
+                taux_douane=taux_douane
             )
             results.append(result)
 
@@ -207,15 +213,16 @@ class BatchProcessor:
         results = []
 
         with ProcessPoolExecutor(max_workers=self.config.workers) as executor:
-            # Soumettre tous les jobs
+            # Soumettre tous les jobs avec les taux douaniers
             future_to_pdf = {
                 executor.submit(
                     self._process_single_file,
                     pdf_file,
                     self.config.output_dir,
-                    self.config.verbose
+                    self.config.verbose,
+                    taux_douane=self.config.taux_douanes[i] if i < len(self.config.taux_douanes) else None
                 ): pdf_file
-                for pdf_file in pdf_files
+                for i, pdf_file in enumerate(pdf_files)
             }
 
             # Créer la barre de progression si disponible

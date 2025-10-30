@@ -38,7 +38,7 @@ class TestIntegrationProportional:
     def test_pipeline_complet(self, rfcv_test_path):
         """Test du pipeline complet: PDF → Parsing → Calcul proportionnel"""
         # Parse la RFCV (inclut automatiquement le calcul proportionnel)
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         # Vérifications de base
@@ -62,7 +62,7 @@ class TestIntegrationProportional:
 
     def test_coherence_fret(self, rfcv_test_path):
         """Vérifie que sum(FRET_articles) == FRET_total"""
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         # Total global
@@ -81,7 +81,7 @@ class TestIntegrationProportional:
 
     def test_coherence_assurance(self, rfcv_test_path):
         """Vérifie que sum(ASSURANCE_articles) == ASSURANCE_total"""
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         # Total global (en XOF)
@@ -104,7 +104,7 @@ class TestIntegrationProportional:
 
     def test_coherence_poids_brut(self, rfcv_test_path):
         """Vérifie que sum(POIDS_BRUT_articles) == POIDS_BRUT_total"""
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         # Total global
@@ -123,7 +123,7 @@ class TestIntegrationProportional:
 
     def test_coherence_poids_net(self, rfcv_test_path):
         """Vérifie que sum(POIDS_NET_articles) == POIDS_NET_total"""
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         # Total global
@@ -142,7 +142,7 @@ class TestIntegrationProportional:
 
     def test_devises_correctes(self, rfcv_test_path):
         """Vérifie que les devises sont correctes (FOB/FRET dans devise RFCV, ASSURANCE en XOF)"""
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         # Récupérer la devise de la RFCV
@@ -172,7 +172,7 @@ class TestIntegrationProportional:
 
     def test_valeurs_positives(self, rfcv_test_path):
         """Vérifie que toutes les valeurs calculées sont positives ou nulles"""
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         for i, item in enumerate(rfcv_data.items):
@@ -201,7 +201,7 @@ class TestIntegrationProportional:
         - POIDS BRUT: majorité 651, quelques 652
         - POIDS NET: majorité 635, quelques 636
         """
-        parser = RFCVParser(rfcv_test_path)
+        parser = RFCVParser(rfcv_test_path, taux_douane=573.139)
         rfcv_data = parser.parse()
 
         # Extraire les valeurs FRET de tous les articles

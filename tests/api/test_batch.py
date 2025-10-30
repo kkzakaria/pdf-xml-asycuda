@@ -3,6 +3,7 @@ Tests des endpoints batch
 """
 import pytest
 import asyncio
+import json
 
 
 @pytest.mark.asyncio
@@ -13,7 +14,12 @@ async def test_batch_convert_success(client, multiple_pdfs):
         with open(pdf, "rb") as f:
             files.append(("files", (pdf.name, f.read(), "application/pdf")))
 
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 2})
+    # Un taux douanier pour chaque fichier
+    taux_list = [573.139] * len(multiple_pdfs)
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 2,
+        "taux_douanes": json.dumps(taux_list)
+    })
 
     assert response.status_code == 200
     data = response.json()
@@ -42,7 +48,11 @@ async def test_batch_status(client, multiple_pdfs):
         with open(pdf, "rb") as f:
             files.append(("files", (pdf.name, f.read(), "application/pdf")))
 
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 2})
+    taux_list = [573.139] * len(multiple_pdfs)
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 2,
+        "taux_douanes": json.dumps(taux_list)
+    })
     batch_id = response.json()["batch_id"]
 
     # Récupérer le status
@@ -73,7 +83,11 @@ async def test_batch_results(client, multiple_pdfs):
         with open(pdf, "rb") as f:
             files.append(("files", (pdf.name, f.read(), "application/pdf")))
 
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 2})
+    taux_list = [573.139] * len(multiple_pdfs)
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 2,
+        "taux_douanes": json.dumps(taux_list)
+    })
     batch_id = response.json()["batch_id"]
 
     # Attendre que le batch se termine
@@ -106,7 +120,11 @@ async def test_batch_report(client, multiple_pdfs):
         with open(pdf, "rb") as f:
             files.append(("files", (pdf.name, f.read(), "application/pdf")))
 
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 2})
+    taux_list = [573.139] * len(multiple_pdfs)
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 2,
+        "taux_douanes": json.dumps(taux_list)
+    })
     batch_id = response.json()["batch_id"]
 
     # Attendre que le batch se termine
@@ -139,14 +157,38 @@ async def test_batch_workers_validation(client, multiple_pdfs):
         with open(pdf, "rb") as f:
             files.append(("files", (pdf.name, f.read(), "application/pdf")))
 
+    taux_list = [573.139] * len(multiple_pdfs)
+    taux_json = json.dumps(taux_list)
+
     # Workers valides (1-8)
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 4})
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 4,
+        "taux_douanes": taux_json
+    })
     assert response.status_code == 200
 
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 1})
+    # Reload files for next test
+    files = []
+    for pdf in multiple_pdfs:
+        with open(pdf, "rb") as f:
+            files.append(("files", (pdf.name, f.read(), "application/pdf")))
+
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 1,
+        "taux_douanes": taux_json
+    })
     assert response.status_code == 200
 
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 8})
+    # Reload files for next test
+    files = []
+    for pdf in multiple_pdfs:
+        with open(pdf, "rb") as f:
+            files.append(("files", (pdf.name, f.read(), "application/pdf")))
+
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 8,
+        "taux_douanes": taux_json
+    })
     assert response.status_code == 200
 
     # Workers invalide (hors limites) - devrait être rejeté par validation
@@ -155,7 +197,10 @@ async def test_batch_workers_validation(client, multiple_pdfs):
         with open(pdf, "rb") as f:
             files2.append(("files", (pdf.name, f.read(), "application/pdf")))
 
-    response = await client.post("/api/v1/batch", files=files2, data={"workers": 100})
+    response = await client.post("/api/v1/batch", files=files2, data={
+        "workers": 100,
+        "taux_douanes": taux_json
+    })
     assert response.status_code == 422  # Validation error
 
 
@@ -168,7 +213,11 @@ async def test_batch_progress_tracking(client, multiple_pdfs):
         with open(pdf, "rb") as f:
             files.append(("files", (pdf.name, f.read(), "application/pdf")))
 
-    response = await client.post("/api/v1/batch", files=files, data={"workers": 1})
+    taux_list = [573.139] * len(multiple_pdfs)
+    response = await client.post("/api/v1/batch", files=files, data={
+        "workers": 1,
+        "taux_douanes": json.dumps(taux_list)
+    })
     batch_id = response.json()["batch_id"]
 
     # Suivre la progression plusieurs fois

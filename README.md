@@ -161,15 +161,19 @@ L'API sera disponible sur `http://localhost:8000`
 
 #### Exemples d'utilisation de l'API
 
+**⚠️ Important**: Le paramètre `taux_douane` (taux de change douanier) est **obligatoire** pour toutes les conversions. Ce taux est communiqué par la douane avant chaque conversion.
+
 **Conversion simple avec curl:**
 ```bash
-# Upload et conversion synchrone
+# Upload et conversion synchrone (taux_douane requis)
 curl -X POST "http://localhost:8000/api/v1/convert" \
-  -F "file=@DOSSIER_18236.pdf"
+  -F "file=@DOSSIER_18236.pdf" \
+  -F "taux_douane=573.1390"
 
 # Conversion asynchrone
 curl -X POST "http://localhost:8000/api/v1/convert/async" \
-  -F "file=@DOSSIER_18236.pdf"
+  -F "file=@DOSSIER_18236.pdf" \
+  -F "taux_douane=573.1390"
 
 # Vérifier le status
 curl "http://localhost:8000/api/v1/convert/{job_id}"
@@ -180,12 +184,13 @@ curl -O "http://localhost:8000/api/v1/convert/{job_id}/download"
 
 **Batch processing:**
 ```bash
-# Upload multiple PDFs
+# Upload multiple PDFs avec taux individuels (format JSON)
 curl -X POST "http://localhost:8000/api/v1/batch" \
   -F "files=@file1.pdf" \
   -F "files=@file2.pdf" \
   -F "files=@file3.pdf" \
-  -F "workers=4"
+  -F "workers=4" \
+  -F "taux_douanes=[573.1390, 573.1390, 573.1390]"
 
 # Status du batch
 curl "http://localhost:8000/api/v1/batch/{batch_id}/status"
@@ -197,28 +202,36 @@ curl "http://localhost:8000/api/v1/batch/{batch_id}/report"
 **Exemple Python avec requests:**
 ```python
 import requests
+import json
 
-# Conversion synchrone
+# Conversion synchrone (taux_douane requis)
 with open('DOSSIER_18236.pdf', 'rb') as f:
     response = requests.post(
         'http://localhost:8000/api/v1/convert',
-        files={'file': f}
+        files={'file': f},
+        data={'taux_douane': 573.1390}  # Taux douanier obligatoire
     )
     result = response.json()
     print(f"Conversion: {result['success']}")
     print(f"Output: {result['output_file']}")
     print(f"Métriques: {result['metrics']}")
 
-# Batch conversion
+# Batch conversion avec taux individuels
 files = [
     ('files', open('file1.pdf', 'rb')),
     ('files', open('file2.pdf', 'rb')),
     ('files', open('file3.pdf', 'rb'))
 ]
+# Taux pour chaque fichier (même ordre que les fichiers)
+taux_list = [573.1390, 573.1390, 573.1390]
+
 response = requests.post(
     'http://localhost:8000/api/v1/batch',
     files=files,
-    data={'workers': 4}
+    data={
+        'workers': 4,
+        'taux_douanes': json.dumps(taux_list)  # Liste JSON de taux
+    }
 )
 batch = response.json()
 batch_id = batch['batch_id']
@@ -253,15 +266,17 @@ Variables disponibles:
 
 ### CLI - Conversion d'un seul fichier
 
+**⚠️ Important**: Le paramètre `--taux-douane` (taux de change douanier) est **obligatoire** pour toutes les conversions.
+
 ```bash
-# Conversion simple
-python converter.py input.pdf
+# Conversion simple avec taux douanier obligatoire
+python converter.py input.pdf --taux-douane 573.1390
 
 # Avec fichier de sortie personnalisé
-python converter.py input.pdf -o output/custom.xml
+python converter.py input.pdf --taux-douane 573.1390 -o output/custom.xml
 
 # Mode verbeux
-python converter.py input.pdf -v
+python converter.py input.pdf --taux-douane 573.1390 -v
 ```
 
 ### Traitement par lot (Batch)
@@ -271,64 +286,64 @@ Le système supporte plusieurs modes de traitement par lot :
 #### Mode batch simple (fichiers multiples)
 
 ```bash
-# Traiter plusieurs fichiers spécifiés
-python converter.py file1.pdf file2.pdf file3.pdf --batch
+# Traiter plusieurs fichiers spécifiés avec même taux
+python converter.py file1.pdf file2.pdf file3.pdf --batch --taux-douane 573.1390
 
 # Avec pattern shell
-python converter.py tests/*.pdf --batch
+python converter.py tests/*.pdf --batch --taux-douane 573.1390
 ```
 
 #### Mode batch avec dossier
 
 ```bash
-# Traiter tous les PDFs d'un dossier
-python converter.py -d tests/ --batch
+# Traiter tous les PDFs d'un dossier avec même taux
+python converter.py -d tests/ --batch --taux-douane 573.1390
 
 # Recherche récursive dans sous-dossiers
-python converter.py -d pdfs/ --recursive --batch
+python converter.py -d pdfs/ --recursive --batch --taux-douane 573.1390
 
 # Avec pattern de filtrage
-python converter.py -d tests/ --pattern "RFCV*.pdf" --batch
+python converter.py -d tests/ --pattern "RFCV*.pdf" --batch --taux-douane 573.1390
 ```
 
 #### Traitement parallèle
 
 ```bash
 # Traiter avec 4 workers (plus rapide)
-python converter.py -d tests/ --batch --workers 4
+python converter.py -d tests/ --batch --workers 4 --taux-douane 573.1390
 
 # Optimisation automatique selon CPU
-python converter.py -d tests/ --batch --workers 8
+python converter.py -d tests/ --batch --workers 8 --taux-douane 573.1390
 ```
 
 #### Génération de rapports batch
 
 ```bash
 # Rapport complet (JSON + CSV + Markdown)
-python converter.py -d tests/ --batch --report batch_report
+python converter.py -d tests/ --batch --report batch_report --taux-douane 573.1390
 
 # Rapport JSON uniquement
-python converter.py -d tests/ --batch --report results.json
+python converter.py -d tests/ --batch --report results.json --taux-douane 573.1390
 
 # Rapport CSV uniquement
-python converter.py -d tests/ --batch --report results.csv
+python converter.py -d tests/ --batch --report results.csv --taux-douane 573.1390
 
 # Rapport Markdown uniquement
-python converter.py -d tests/ --batch --report results.md
+python converter.py -d tests/ --batch --report results.md --taux-douane 573.1390
 ```
 
 #### Options avancées
 
 ```bash
 # Dossier de sortie personnalisé
-python converter.py -d tests/ --batch -o output/batch_results/
+python converter.py -d tests/ --batch -o output/batch_results/ --taux-douane 573.1390
 
 # Sans barre de progression
-python converter.py -d tests/ --batch --no-progress
+python converter.py -d tests/ --batch --no-progress --taux-douane 573.1390
 
 # Combinaison complète
 python converter.py -d pdfs/ --recursive --pattern "*.pdf" \
-  --batch --workers 4 --report full_report -o output/
+  --batch --workers 4 --report full_report -o output/ --taux-douane 573.1390
 ```
 
 ### Performance batch
@@ -391,6 +406,48 @@ pdf-xml-asycuda/
 - **Valuation** : Valeurs FOB, CIF, fret, assurance, devises
 - **Items** : Articles avec codes SH, quantités, valeurs
 - **Containers** : Liste des conteneurs avec types et identifiants
+
+## 💰 Calcul de l'Assurance
+
+Le système calcule automatiquement l'assurance (section 21) selon la formule douanière officielle.
+
+### Formule de calcul
+
+```
+Assurance XOF = 2500 + (FOB + FRET) × TAUX × 0.15%
+```
+
+**Composantes :**
+- **2500** : Montant fixe en XOF (Franc CFA)
+- **FOB** : Total Valeur FOB attestée (section 19)
+- **FRET** : Fret Attesté (section 20)
+- **TAUX** : Taux de change douanier (variable, communiqué par la douane)
+- **0.15%** : Taux d'assurance (0.0015)
+
+### Caractéristiques
+
+- ✅ **Devise** : Toujours en XOF (Franc CFA) avec taux 1.0
+- ✅ **Répartition proportionnelle** : Distribution automatique sur les articles selon leur FOB
+- ✅ **Gestion des valeurs nulles** : Si FOB ou FRET manquant, assurance = null
+- ✅ **Taux obligatoire** : Le paramètre `taux_douane` est requis pour toutes les conversions
+
+### Exemple de calcul
+
+**Données :**
+- FOB : 10,220 USD
+- FRET : 2,000 USD
+- TAUX : 573.139 (USD)
+
+**Calcul :**
+```
+Assurance = 2500 + (10220 + 2000) × 573.139 × 0.0015
+         = 2500 + 12220 × 573.139 × 0.0015
+         = 2500 + 10505.64
+         = 13005.64 XOF
+```
+
+**Répartition :**
+L'assurance totale est ensuite répartie proportionnellement sur les articles selon leur FOB respectif, avec application de la méthode du reste le plus grand (Largest Remainder Method) pour garantir que la somme des articles égale exactement le total.
 
 ## 🛠️ Technologies
 

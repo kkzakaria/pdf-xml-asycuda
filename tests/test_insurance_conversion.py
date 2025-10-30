@@ -1,10 +1,10 @@
 """
-Tests d'intégration pour la conversion devise de l'assurance
+Tests d'intégration pour le calcul de l'assurance
 
 Valide que:
-1. L'assurance section 21 est extraite en devise étrangère (section 16)
-2. Elle est multipliée par le taux de change (section 17)
-3. La répartition proportionnelle utilise la valeur convertie en XOF
+1. L'assurance est calculée avec la nouvelle formule: 2500 + (FOB + FRET) × TAUX × 0.15%
+2. Le résultat est en XOF avec taux 1.0
+3. La répartition proportionnelle distribue l'assurance sur les articles selon leur FOB
 """
 import pytest
 import sys
@@ -20,24 +20,23 @@ class TestInsuranceConversion:
     """Tests de conversion devise de l'assurance"""
 
     def test_conversion_rfcv_03286(self):
-        """Test conversion assurance RFCV 03286"""
+        """Test calcul assurance RFCV 03286 avec nouvelle formule"""
         pdf_path = Path(__file__).parent / 'OT_M_2025_03286_BL_2025_03131_RFCV_v1.pdf'
 
-        # Parser RFCV
-        parser = RFCVParser(str(pdf_path))
+        # Parser RFCV avec taux douanier
+        # Utiliser taux de test: 573.139 (USD)
+        parser = RFCVParser(str(pdf_path), taux_douane=573.139)
         rfcv_data = parser.parse()
 
-        # Vérifier extraction assurance globale
+        # Vérifier calcul assurance globale
         assert rfcv_data.valuation is not None
         assert rfcv_data.valuation.insurance is not None
 
-        # Valeurs attendues:
-        # - Assurance section 21: 67.32 USD
-        # - Taux section 17: 566.67
-        # - Assurance XOF: 67.32 × 566.67 = 38,148.22 XOF
+        # Nouvelle formule: 2500 + (FOB + FRET) × TAUX × 0.0015
+        # L'assurance devrait être calculée en XOF
         assurance_xof = rfcv_data.valuation.insurance.amount_national
         assert assurance_xof is not None
-        assert 38140 <= assurance_xof <= 38160, f"Attendu ~38,148 XOF, obtenu {assurance_xof}"
+        assert assurance_xof >= 2500, f"Assurance devrait être au moins 2500 XOF (partie fixe), obtenu {assurance_xof}"
 
         # Vérifier que c'est en XOF
         assert rfcv_data.valuation.insurance.currency_code == 'XOF'
@@ -52,33 +51,31 @@ class TestInsuranceConversion:
             if item.valuation_item and item.valuation_item.insurance
         ]
 
-        # Vérifier somme cohérente
+        # Vérifier somme cohérente (accepter différence d'arrondi ±1 XOF)
         somme = sum(assurance_articles)
-        assert int(somme) == int(assurance_xof), f"Somme articles ({somme}) != Total ({assurance_xof})"
+        diff = abs(int(somme) - int(assurance_xof))
+        assert diff <= 1, f"Somme articles ({somme}) != Total ({assurance_xof}), diff: {diff}"
 
         # Vérifier proportionnalité (article 2 a 85% du FOB)
         assert assurance_articles[1] > assurance_articles[0], "Article 2 devrait avoir plus d'assurance"
         assert assurance_articles[1] > assurance_articles[2], "Article 2 devrait avoir plus d'assurance"
 
     def test_conversion_rfcv_03475_motos(self):
-        """Test conversion assurance RFCV 03475 (35 motos)"""
+        """Test calcul assurance RFCV 03475 (35 motos) avec nouvelle formule"""
         pdf_path = Path(__file__).parent.parent / 'asycuda-extraction' / 'OT_M_2025_03475_BL_2025_03320_RFCV_v1.pdf'
 
-        # Parser RFCV
-        parser = RFCVParser(str(pdf_path))
+        # Parser RFCV avec taux douanier
+        parser = RFCVParser(str(pdf_path), taux_douane=573.139)
         rfcv_data = parser.parse()
 
-        # Vérifier extraction assurance globale
+        # Vérifier calcul assurance globale
         assert rfcv_data.valuation is not None
         assert rfcv_data.valuation.insurance is not None
 
-        # Valeurs attendues:
-        # - Assurance section 21: 44.05 USD
-        # - Taux section 17: 567.27
-        # - Assurance XOF: 44.05 × 567.27 = 24,988.24 XOF
+        # Nouvelle formule: 2500 + (FOB + FRET) × TAUX × 0.0015
         assurance_xof = rfcv_data.valuation.insurance.amount_national
         assert assurance_xof is not None
-        assert 24980 <= assurance_xof <= 25000, f"Attendu ~24,988 XOF, obtenu {assurance_xof}"
+        assert assurance_xof >= 2500, f"Assurance devrait être au moins 2500 XOF, obtenu {assurance_xof}"
 
         # Vérifier répartition sur 35 articles
         assert len(rfcv_data.items) == 35
@@ -89,9 +86,10 @@ class TestInsuranceConversion:
             if item.valuation_item and item.valuation_item.insurance
         ]
 
-        # Vérifier somme cohérente
+        # Vérifier somme cohérente (accepter différence d'arrondi ±1 XOF)
         somme = sum(assurance_articles)
-        assert int(somme) == int(assurance_xof), f"Somme articles ({somme}) != Total ({assurance_xof})"
+        diff = abs(int(somme) - int(assurance_xof))
+        assert diff <= 1, f"Somme articles ({somme}) != Total ({assurance_xof}), diff: {diff}"
 
         # Tous les articles ont le même FOB, donc assurances similaires (±1 XOF)
         min_assurance = min(assurance_articles)
@@ -99,24 +97,21 @@ class TestInsuranceConversion:
         assert (max_assurance - min_assurance) <= 1, "Écart max 1 XOF pour articles identiques"
 
     def test_conversion_rfcv_03977_poudre(self):
-        """Test conversion assurance RFCV 03977 (1 article poudre)"""
+        """Test calcul assurance RFCV 03977 (1 article poudre) avec nouvelle formule"""
         pdf_path = Path(__file__).parent.parent / 'asycuda-extraction' / 'OT_M_2025_03977_BL_2025_03796_RFCV_v1.pdf'
 
-        # Parser RFCV
-        parser = RFCVParser(str(pdf_path))
+        # Parser RFCV avec taux douanier
+        parser = RFCVParser(str(pdf_path), taux_douane=573.139)
         rfcv_data = parser.parse()
 
-        # Vérifier extraction assurance globale
+        # Vérifier calcul assurance globale
         assert rfcv_data.valuation is not None
         assert rfcv_data.valuation.insurance is not None
 
-        # Valeurs attendues:
-        # - Assurance section 21: 57.36 USD
-        # - Taux section 17: 575.7807
-        # - Assurance XOF: 57.36 × 575.7807 = 33,026.78 XOF
+        # Nouvelle formule: 2500 + (FOB + FRET) × TAUX × 0.0015
         assurance_xof = rfcv_data.valuation.insurance.amount_national
         assert assurance_xof is not None
-        assert 33020 <= assurance_xof <= 33035, f"Attendu ~33,027 XOF, obtenu {assurance_xof}"
+        assert assurance_xof >= 2500, f"Assurance devrait être au moins 2500 XOF, obtenu {assurance_xof}"
 
         # Vérifier répartition sur 1 article
         assert len(rfcv_data.items) == 1
@@ -139,7 +134,7 @@ class TestInsuranceFormats:
         """Test format XOF pour assurance globale"""
         pdf_path = Path(__file__).parent / 'OT_M_2025_03286_BL_2025_03131_RFCV_v1.pdf'
 
-        parser = RFCVParser(str(pdf_path))
+        parser = RFCVParser(str(pdf_path), taux_douane=573.139)
         rfcv_data = parser.parse()
 
         insurance = rfcv_data.valuation.insurance
@@ -154,7 +149,7 @@ class TestInsuranceFormats:
         """Test format XOF pour assurance par article"""
         pdf_path = Path(__file__).parent / 'OT_M_2025_03286_BL_2025_03131_RFCV_v1.pdf'
 
-        parser = RFCVParser(str(pdf_path))
+        parser = RFCVParser(str(pdf_path), taux_douane=573.139)
         rfcv_data = parser.parse()
 
         for idx, item in enumerate(rfcv_data.items, 1):

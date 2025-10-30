@@ -17,7 +17,7 @@ from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
 
 
-def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = False) -> bool:
+def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = False, taux_douane: float = None) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
 
@@ -25,6 +25,7 @@ def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = F
         pdf_path: Chemin vers le fichier PDF RFCV
         output_path: Chemin de sortie pour le XML (optionnel)
         verbose: Afficher les détails de la conversion
+        taux_douane: Taux de change douanier pour calcul assurance (format: 573.1390)
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -52,8 +53,10 @@ def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = F
         # Étape 1: Parser le PDF RFCV
         if verbose:
             print("Étape 1/2: Extraction et parsing du PDF...")
+            if taux_douane:
+                print(f"  - Taux douanier: {taux_douane:.4f}")
 
-        parser = RFCVParser(pdf_path)
+        parser = RFCVParser(pdf_path, taux_douane=taux_douane)
         rfcv_data = parser.parse()
 
         if verbose:
@@ -175,6 +178,13 @@ Exemples d'utilisation:
         help='Désactiver la barre de progression'
     )
 
+    parser.add_argument(
+        '--taux-douane',
+        type=float,
+        default=None,
+        help='Taux de change douanier pour calcul assurance (format: 573.1390, avec 4 décimales)'
+    )
+
     args = parser.parse_args()
 
     # Déterminer le mode d'opération
@@ -244,8 +254,19 @@ Exemples d'utilisation:
             parser.print_help()
             sys.exit(1)
 
+        # Vérifier que le taux douanier est fourni
+        if args.taux_douane is None:
+            print("Erreur: Le taux douanier est obligatoire (--taux-douane).", file=sys.stderr)
+            print("Exemple: --taux-douane 573.1390", file=sys.stderr)
+            sys.exit(1)
+
         pdf_file = args.pdf_files[0]
-        success = convert_pdf_to_xml(pdf_file, args.output if args.output != 'output' else None, args.verbose)
+        success = convert_pdf_to_xml(
+            pdf_file,
+            args.output if args.output != 'output' else None,
+            args.verbose,
+            taux_douane=args.taux_douane
+        )
         sys.exit(0 if success else 1)
 
 
