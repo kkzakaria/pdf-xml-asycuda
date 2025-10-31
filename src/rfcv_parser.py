@@ -389,19 +389,8 @@ class RFCVParser:
         if voyage:
             transport.voyage_number = voyage
 
-        # P1.6 + P4.2: Lieu de chargement (code et nom)
-        # Code UN/LOCODE (5 caractères) - déjà extrait en P1
-        loading = self._extract_field(r'Lieu\s*de\s*chargement:\s*([A-Z]{5})')
-        if loading:
-            transport.loading_place_code = loading
-            transport.loading_location = loading  # P1.6: Code UN/LOCODE
-
-        # P4.2: Nom du lieu de chargement
-        # Structure: "CFR\n<NOM_LIEU> 16. Code Devise"
-        # Le nom du lieu est entre INCOTERM et "16. Code Devise"
-        loading_match = re.search(r'\b(CFR|FOB|CIF|EXW|FCA|CPT|CIP|DAP|DPU|DDP)\b\s*\n([A-Z][A-Z\s]+?)\s+16\.', self.text)
-        if loading_match:
-            transport.loading_place_name = loading_match.group(2).strip()
+        # P1.6 + P4.2: Lieu de chargement - non utilisé (mis à null dans XML)
+        # Note: loading_place_code et loading_place_name ne sont plus extraits
 
         # P1.6: Lieu de déchargement
         unloading = self._extract_field(r'Lieu\s*de\s*déchargement:\s*([A-Z]{5})')

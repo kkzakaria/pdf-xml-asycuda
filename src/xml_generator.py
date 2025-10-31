@@ -329,10 +329,9 @@ class XMLGenerator:
         self._add_simple_element(border_office, 'Name', trans.border_office_name if trans else 'ABIDJAN-PORT')
 
         loading = ET.SubElement(transport_elem, 'Place_of_loading')
-        # P1.6: Utiliser loading_location si disponible
-        loading_code = trans.loading_location if trans and trans.loading_location else (trans.loading_place_code if trans and trans.loading_place_code else '')
-        self._add_simple_element(loading, 'Code', loading_code)
-        self._add_simple_element(loading, 'Name', trans.loading_place_name if trans and trans.loading_place_name else '')
+        # Mis à null - non utilisé en Côte d'Ivoire
+        self._add_element(loading, 'Code', None)
+        self._add_element(loading, 'Name', None)
         self._add_element(loading, 'Country')
 
         # P1.6: Utiliser discharge_location si disponible
