@@ -16,6 +16,7 @@ from models import (
 )
 from hs_code_rules import HSCodeAnalyzer
 from proportional_calculator import ProportionalCalculator
+from item_grouper import group_items_by_hs_code
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,13 @@ class RFCVParser:
         rfcv_data.items = self._parse_items()
         rfcv_data.value_details = self._extract_value_details()
 
+        # Regrouper les articles sans châssis par code HS
+        # Seul le premier article du premier groupe aura quantité = total_packages
+        # Tous les autres articles auront quantité = 0
+        if rfcv_data.items and rfcv_data.property:
+            total_packages = rfcv_data.property.total_packages
+            rfcv_data.items = group_items_by_hs_code(rfcv_data.items, total_packages)
+
         # Enrichir les items avec les documents attachés
         self._add_attached_documents(rfcv_data)
 
@@ -106,20 +114,9 @@ class RFCVParser:
         calculator = ProportionalCalculator()
         rfcv_data = calculator.apply_to_rfcv(rfcv_data)
 
-        # Répartir le nombre total de colis (Section 24) sur les articles
-        if rfcv_data.property and rfcv_data.property.total_packages and rfcv_data.items:
-            total_packages = int(rfcv_data.property.total_packages)
-            nb_articles = len(rfcv_data.items)
-
-            # Distribution proportionnelle simple (répartition égale)
-            base_packages = total_packages // nb_articles
-            remainder = total_packages % nb_articles
-
-            # Assigner aux articles
-            for i, item in enumerate(rfcv_data.items):
-                if item.packages:
-                    # Les 'remainder' premiers articles reçoivent +1 colis
-                    item.packages.number_of_packages = float(base_packages + (1 if i < remainder else 0))
+        # NOTE: La répartition du nombre de colis est maintenant gérée par le regroupement d'articles
+        # Le nombre de colis (section 24) est stocké comme quantité du premier article du premier groupe
+        # Tous les autres articles ont une quantité de 0
 
         return rfcv_data
 
