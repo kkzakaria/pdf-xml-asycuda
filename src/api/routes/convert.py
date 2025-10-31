@@ -1,6 +1,7 @@
 """
 Routes de conversion
 """
+from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, BackgroundTasks, Depends, Request
 from fastapi.responses import FileResponse
 from pathlib import Path

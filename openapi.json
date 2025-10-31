@@ -1,0 +1,1407 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "API Convertisseur PDF RFCV → XML ASYCUDA",
+    "description": "API REST pour convertir les documents RFCV PDF en XML ASYCUDA",
+    "version": "1.1.0"
+  },
+  "paths": {
+    "/api/v1/convert": {
+      "post": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Conversion synchrone PDF → XML ASYCUDA",
+        "description": "Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
+        "operationId": "convert_pdf_api_v1_convert_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_convert_pdf_api_v1_convert_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/convert/async": {
+      "post": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Conversion asynchrone PDF → XML ASYCUDA",
+        "description": "Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
+        "operationId": "convert_pdf_async_api_v1_convert_async_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_convert_pdf_async_api_v1_convert_async_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertAsyncResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/convert/{job_id}": {
+      "get": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Status d'un job",
+        "description": "Récupère le status et la progression d'un job de conversion",
+        "operationId": "get_job_status_api_v1_convert__job_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/convert/{job_id}/result": {
+      "get": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Résultat d'un job",
+        "description": "Récupère le résultat complet d'un job de conversion avec métriques",
+        "operationId": "get_job_result_api_v1_convert__job_id__result_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/convert/{job_id}/download": {
+      "get": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Télécharger le XML",
+        "description": "Télécharge le fichier XML généré pour un job",
+        "operationId": "download_xml_api_v1_convert__job_id__download_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/batch": {
+      "post": {
+        "tags": [
+          "Batch"
+        ],
+        "summary": "Conversion batch de PDFs RFCV",
+        "description": "Upload plusieurs PDFs RFCV et les convertit en parallèle. **Liste de taux douaniers obligatoire** (un par fichier) pour le calcul de l'assurance.",
+        "operationId": "batch_convert_api_v1_batch_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_batch_convert_api_v1_batch_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/batch/{batch_id}/status": {
+      "get": {
+        "tags": [
+          "Batch"
+        ],
+        "summary": "Status d'un batch",
+        "description": "Récupère le status et la progression d'un traitement batch",
+        "operationId": "get_batch_status_api_v1_batch__batch_id__status_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/batch/{batch_id}/results": {
+      "get": {
+        "tags": [
+          "Batch"
+        ],
+        "summary": "Résultats d'un batch",
+        "description": "Récupère les résultats détaillés de tous les fichiers d'un batch",
+        "operationId": "get_batch_results_api_v1_batch__batch_id__results_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResultsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/batch/{batch_id}/report": {
+      "get": {
+        "tags": [
+          "Batch"
+        ],
+        "summary": "Rapport batch",
+        "description": "Génère et retourne un rapport détaillé du batch (JSON)",
+        "operationId": "get_batch_report_api_v1_batch__batch_id__report_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/xml": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Télécharger XML",
+        "description": "Télécharge un fichier XML généré par son ID",
+        "operationId": "download_xml_file_api_v1_files__file_id__xml_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{file_id}/metadata": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Métadonnées fichier",
+        "description": "Récupère les métadonnées d'un fichier XML",
+        "operationId": "get_file_metadata_api_v1_files__file_id__metadata_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileMetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "Vérifie l'état de santé de l'API",
+        "operationId": "health_check_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "Vérifie l'état de santé de l'API",
+        "operationId": "health_check_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Métriques système",
+        "description": "Récupère les métriques globales de conversion",
+        "operationId": "get_system_metrics_api_v1_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/metrics/{job_id}": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Métriques d'un job",
+        "description": "Récupère les métriques détaillées d'un job spécifique",
+        "operationId": "get_job_metrics_api_v1_metrics__job_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Root"
+        ],
+        "summary": "Root",
+        "description": "Endpoint racine\n\nRetourne les informations de base sur l'API",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BatchFileResult": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "output_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output File"
+          },
+          "processing_time": {
+            "type": "number",
+            "title": "Processing Time"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversionMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "success",
+          "processing_time"
+        ],
+        "title": "BatchFileResult",
+        "description": "Résultat d'un fichier dans un batch"
+      },
+      "BatchJobResponse": {
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "title": "Batch Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "total_files": {
+            "type": "integer",
+            "title": "Total Files"
+          },
+          "processed": {
+            "type": "integer",
+            "title": "Processed"
+          },
+          "successful": {
+            "type": "integer",
+            "title": "Successful"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_id",
+          "status",
+          "total_files",
+          "processed",
+          "successful",
+          "failed",
+          "created_at",
+          "message"
+        ],
+        "title": "BatchJobResponse",
+        "description": "Réponse de job batch",
+        "example": {
+          "batch_id": "batch_xyz789abc",
+          "created_at": "2025-01-15T10:30:00Z",
+          "failed": 0,
+          "message": "Traitement en cours: 4/7 fichiers",
+          "processed": 4,
+          "status": "processing",
+          "successful": 4,
+          "total_files": 7
+        }
+      },
+      "BatchResultsResponse": {
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "title": "Batch Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "total_files": {
+            "type": "integer",
+            "title": "Total Files"
+          },
+          "successful": {
+            "type": "integer",
+            "title": "Successful"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "total_time": {
+            "type": "number",
+            "title": "Total Time"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BatchFileResult"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_id",
+          "status",
+          "total_files",
+          "successful",
+          "failed",
+          "total_time",
+          "results"
+        ],
+        "title": "BatchResultsResponse",
+        "description": "Résultats détaillés d'un batch",
+        "example": {
+          "batch_id": "batch_xyz789abc",
+          "failed": 0,
+          "results": [
+            {
+              "filename": "DOSSIER_18236.pdf",
+              "metrics": {},
+              "output_file": "DOSSIER_18236.xml",
+              "processing_time": 0.64,
+              "success": true
+            }
+          ],
+          "status": "completed",
+          "successful": 7,
+          "total_files": 7,
+          "total_time": 3.64
+        }
+      },
+      "Body_batch_convert_api_v1_batch_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Fichiers PDF à convertir"
+          },
+          "taux_douanes": {
+            "type": "string",
+            "title": "Taux Douanes",
+            "description": "Liste JSON de taux douaniers (ex: [573.1390, 580.2500])"
+          },
+          "workers": {
+            "type": "integer",
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Workers",
+            "description": "Nombre de workers parallèles",
+            "default": 4
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "taux_douanes"
+        ],
+        "title": "Body_batch_convert_api_v1_batch_post"
+      },
+      "Body_convert_pdf_api_v1_convert_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Fichier PDF RFCV à convertir"
+          },
+          "taux_douane": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Taux Douane",
+            "description": "Taux de change douanier (ex: 573.1390)"
+          },
+          "rapport_paiement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rapport Paiement",
+            "description": "Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "taux_douane"
+        ],
+        "title": "Body_convert_pdf_api_v1_convert_post"
+      },
+      "Body_convert_pdf_async_api_v1_convert_async_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Fichier PDF RFCV à convertir"
+          },
+          "taux_douane": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Taux Douane",
+            "description": "Taux de change douanier (ex: 573.1390)"
+          },
+          "rapport_paiement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rapport Paiement",
+            "description": "Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "taux_douane"
+        ],
+        "title": "Body_convert_pdf_async_api_v1_convert_async_post"
+      },
+      "ConversionMetrics": {
+        "properties": {
+          "items_count": {
+            "type": "integer",
+            "title": "Items Count"
+          },
+          "containers_count": {
+            "type": "integer",
+            "title": "Containers Count"
+          },
+          "fill_rate": {
+            "type": "number",
+            "title": "Fill Rate"
+          },
+          "warnings_count": {
+            "type": "integer",
+            "title": "Warnings Count"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "xml_valid": {
+            "type": "boolean",
+            "title": "Xml Valid"
+          },
+          "has_exporter": {
+            "type": "boolean",
+            "title": "Has Exporter"
+          },
+          "has_consignee": {
+            "type": "boolean",
+            "title": "Has Consignee"
+          },
+          "processing_time": {
+            "type": "number",
+            "title": "Processing Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items_count",
+          "containers_count",
+          "fill_rate",
+          "warnings_count",
+          "warnings",
+          "xml_valid",
+          "has_exporter",
+          "has_consignee",
+          "processing_time"
+        ],
+        "title": "ConversionMetrics",
+        "description": "Métriques d'une conversion",
+        "example": {
+          "containers_count": 2,
+          "fill_rate": 68.5,
+          "has_consignee": true,
+          "has_exporter": true,
+          "items_count": 12,
+          "processing_time": 0.64,
+          "warnings": [],
+          "warnings_count": 0,
+          "xml_valid": true
+        }
+      },
+      "ConvertAsyncResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "message",
+          "created_at"
+        ],
+        "title": "ConvertAsyncResponse",
+        "description": "Réponse de conversion asynchrone",
+        "example": {
+          "created_at": "2025-01-15T10:30:00Z",
+          "job_id": "conv_abc123xyz",
+          "message": "Conversion en cours",
+          "status": "pending"
+        }
+      },
+      "ConvertResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "output_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output File"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversionMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processing_time": {
+            "type": "number",
+            "title": "Processing Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "job_id",
+          "filename",
+          "message",
+          "processing_time"
+        ],
+        "title": "ConvertResponse",
+        "description": "Réponse de conversion synchrone",
+        "example": {
+          "filename": "DOSSIER_18236.pdf",
+          "job_id": "conv_abc123xyz",
+          "message": "Conversion réussie",
+          "metrics": {
+            "containers_count": 2,
+            "fill_rate": 68.5,
+            "has_consignee": true,
+            "has_exporter": true,
+            "items_count": 12,
+            "processing_time": 0.64,
+            "warnings": [],
+            "warnings_count": 0,
+            "xml_valid": true
+          },
+          "output_file": "DOSSIER_18236.xml",
+          "processing_time": 0.64,
+          "success": true
+        }
+      },
+      "FileMetadataResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "is_available": {
+            "type": "boolean",
+            "title": "Is Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "size_bytes",
+          "created_at",
+          "mime_type",
+          "is_available"
+        ],
+        "title": "FileMetadataResponse",
+        "description": "Métadonnées d'un fichier",
+        "example": {
+          "created_at": "2025-01-15T10:30:45Z",
+          "file_id": "file_abc123",
+          "filename": "DOSSIER_18236.xml",
+          "is_available": true,
+          "mime_type": "application/xml",
+          "size_bytes": 15360
+        }
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "title": "Uptime Seconds"
+          },
+          "total_jobs": {
+            "type": "integer",
+            "title": "Total Jobs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "uptime_seconds",
+          "total_jobs"
+        ],
+        "title": "HealthResponse",
+        "description": "Réponse health check",
+        "example": {
+          "status": "healthy",
+          "total_jobs": 42,
+          "uptime_seconds": 3600.5,
+          "version": "1.0.0"
+        }
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "processing",
+          "completed",
+          "failed"
+        ],
+        "title": "JobStatus",
+        "description": "Status d'un job de conversion"
+      },
+      "JobStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "filename",
+          "created_at",
+          "message"
+        ],
+        "title": "JobStatusResponse",
+        "description": "Réponse de status de job",
+        "example": {
+          "completed_at": "2025-01-15T10:30:45Z",
+          "created_at": "2025-01-15T10:30:00Z",
+          "filename": "DOSSIER_18236.pdf",
+          "job_id": "conv_abc123xyz",
+          "message": "Conversion terminée",
+          "progress": 100,
+          "status": "completed"
+        }
+      },
+      "MetricsResponse": {
+        "properties": {
+          "total_conversions": {
+            "type": "integer",
+            "title": "Total Conversions"
+          },
+          "successful": {
+            "type": "integer",
+            "title": "Successful"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "success_rate": {
+            "type": "number",
+            "title": "Success Rate"
+          },
+          "avg_processing_time": {
+            "type": "number",
+            "title": "Avg Processing Time"
+          },
+          "avg_fill_rate": {
+            "type": "number",
+            "title": "Avg Fill Rate"
+          },
+          "total_items": {
+            "type": "integer",
+            "title": "Total Items"
+          },
+          "total_containers": {
+            "type": "integer",
+            "title": "Total Containers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_conversions",
+          "successful",
+          "failed",
+          "success_rate",
+          "avg_processing_time",
+          "avg_fill_rate",
+          "total_items",
+          "total_containers"
+        ],
+        "title": "MetricsResponse",
+        "description": "Métriques système",
+        "example": {
+          "avg_fill_rate": 68.5,
+          "avg_processing_time": 0.65,
+          "failed": 2,
+          "success_rate": 95.2,
+          "successful": 40,
+          "total_containers": 84,
+          "total_conversions": 42,
+          "total_items": 504
+        }
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Clé API pour l'authentification. Pour obtenir une clé API, veuillez contacter l'administrateur du service. Consultez la documentation pour plus d'informations sur l'utilisation de l'API."
+      }
+    }
+  }
+}
