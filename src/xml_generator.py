@@ -195,7 +195,7 @@ class XMLGenerator:
         self._add_simple_element(type_elem, 'Declaration_gen_procedure_code', ident.declaration_procedure_code if ident else '4')
         self._add_element(type_elem, 'Type_of_transit_document')
 
-        self._add_simple_element(ident_elem, 'Manifest_reference_number', ident.manifest_reference if ident else '')
+        self._add_element(ident_elem, 'Manifest_reference_number', None)  # Null - non utilisé en Côte d'Ivoire
 
         # P3.5: Ajouter les nouveaux champs PRIORITÉ 3
         # Date RFCV (section 5)

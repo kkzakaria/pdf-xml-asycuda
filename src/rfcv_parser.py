@@ -174,9 +174,7 @@ class RFCVParser:
         # Structure PDF: "1. ... Code : XXX 4. No. RFCV 5. Date RFCV 6. Livraison\n<nom> <RCS_NUMBER> <date> <TOT/PART>"
         # Le numéro RFCV est le code RCS (ex: RCS25119416)
         # Pattern: cherche "RCS" suivi de chiffres sur la ligne après "4. No. RFCV"
-        rfcv_number = self._extract_field(r'4\.\s*No\.\s*RFCV.*?\n.*?(RCS\d+)')
-
-        ident.manifest_reference = rfcv_number
+        # Note: manifest_reference n'est plus utilisé (mis à null dans XML)
 
         # P3.3: Date RFCV - Section 5
         # Structure: "4. No. RFCV 5. Date RFCV 6. Livraison\n<nom> <RCS> <date_rfcv> <TOT/PART>"
