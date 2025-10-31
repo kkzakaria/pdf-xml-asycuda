@@ -24,16 +24,18 @@ logger = logging.getLogger(__name__)
 class RFCVParser:
     """Parser pour documents RFCV"""
 
-    def __init__(self, pdf_path: str, taux_douane: Optional[float] = None):
+    def __init__(self, pdf_path: str, taux_douane: Optional[float] = None, rapport_paiement: Optional[str] = None):
         """
         Initialise le parser
 
         Args:
             pdf_path: Chemin vers le PDF RFCV
             taux_douane: Taux de change douanier pour calcul assurance (format: 566.6700)
+            rapport_paiement: Numéro de rapport de paiement/quittance Trésor (format: 25P2003J)
         """
         self.pdf_path = pdf_path
         self.taux_douane = taux_douane
+        self.rapport_paiement = rapport_paiement
         self.text = ""
         self.tables = []
 
@@ -424,6 +426,11 @@ class RFCVParser:
         payment_mode = self._extract_field(r'10\.\s*Mode de Paiement[:\s]+(.*?)(?:\n|$)')
         if payment_mode:
             financial.mode_of_payment = payment_mode
+
+        # Rapport de paiement (Deffered_payment_reference)
+        # Fourni en paramètre si disponible (numéro de quittance du Trésor)
+        if hasattr(self, 'rapport_paiement') and self.rapport_paiement:
+            financial.deferred_payment_ref = self.rapport_paiement
 
         # Banque (à extraire si présent dans le document)
         financial.transaction_code1 = '0'

@@ -406,6 +406,140 @@ When null:
 <Gs_Invoice_insurance_national><null/></Gs_Invoice_insurance_national>
 ```
 
+## Payment Report (Rapport de Paiement)
+
+The system supports an optional payment report number (Treasury receipt number) that can be provided when converting RFCV to XML ASYCUDA.
+
+### What is the Payment Report?
+
+**Payment Report** (`Deffered_payment_reference` in ASYCUDA) is the Treasury receipt number (numéro de quittance du Trésor Public) generated AFTER payment of customs duties and taxes.
+
+**Format**: `[Year][Type][Sequence][Letter]`
+
+**Example**: `25P2003J`
+- `25`: Year 2025
+- `P`: Type (P = Payment)
+- `2003`: Sequential number
+- `J`: Control letter
+
+### Customs Clearance Workflow
+
+1. **RFCV issued** → Inspection document (BEFORE clearance)
+2. **RFCV → XML conversion** → Our system (payment report optional)
+3. **Taxes calculation** → ASYCUDA system
+4. **Payment to Treasury** → Receipt number generated (e.g., 25P2003J)
+5. **Entry in ASYCUDA** → Fill `Deffered_payment_reference`
+6. **Clearance granted** → Goods can leave port
+
+### Optional Parameter: `rapport_paiement`
+
+The `rapport_paiement` parameter is **OPTIONAL** because:
+- Payment report is generated AFTER tax payment
+- RFCV is issued BEFORE customs clearance
+- Number can be added manually in ASYCUDA after payment
+
+**When to Provide**:
+- ✅ If you already have the Treasury receipt number
+- ✅ When converting post-payment RFCV for archival purposes
+- ❌ Not available during initial RFCV conversion (most common case)
+
+**CLI Usage**:
+```bash
+# With payment report (if already available)
+python converter.py "DOSSIER 18236.pdf" \
+  --taux-douane 573.139 \
+  --rapport-paiement 25P2003J \
+  -v
+
+# Without payment report (most common - filled later in ASYCUDA)
+python converter.py "DOSSIER 18236.pdf" \
+  --taux-douane 573.139 \
+  -v
+
+# Batch processing with payment report
+python converter.py -d tests/ \
+  --batch \
+  --taux-douane 573.139 \
+  --rapport-paiement 25P2003J \
+  --workers 4
+```
+
+**API Usage**:
+```bash
+# Synchronous conversion with payment report
+curl -X POST "http://localhost:8000/api/v1/convert" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.139" \
+  -F "rapport_paiement=25P2003J"
+
+# Synchronous conversion without payment report
+curl -X POST "http://localhost:8000/api/v1/convert" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.139"
+
+# Asynchronous conversion with payment report
+curl -X POST "http://localhost:8000/api/v1/convert/async" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.139" \
+  -F "rapport_paiement=25P2003J"
+```
+
+### Empty vs Provided Behavior
+
+**Without parameter** (default):
+```xml
+<Financial>
+  <Deffered_payment_reference/>
+  <Mode_of_payment>COMPTE DE PAIEMENT</Mode_of_payment>
+</Financial>
+```
+
+**With parameter** (`--rapport-paiement 25P2003J`):
+```xml
+<Financial>
+  <Deffered_payment_reference>25P2003J</Deffered_payment_reference>
+  <Mode_of_payment>COMPTE DE PAIEMENT</Mode_of_payment>
+</Financial>
+```
+
+### Implementation
+
+**Core Files**:
+- `src/rfcv_parser.py`: Accepts optional `rapport_paiement` parameter (lines 27-38, 428-431)
+- `converter.py`: CLI argument `--rapport-paiement` (line 188-193)
+- `src/api/routes/convert.py`: Form parameter `rapport_paiement` (sync and async)
+- `src/api/services/conversion_service.py`: Service layer parameter passing
+
+**Parser Logic** (rfcv_parser.py:428-431):
+```python
+# Rapport de paiement (Deffered_payment_reference)
+# Fourni en paramètre si disponible (numéro de quittance du Trésor)
+if hasattr(self, 'rapport_paiement') and self.rapport_paiement:
+    financial.deferred_payment_ref = self.rapport_paiement
+```
+
+### Distinction: RFCV Payment Mode ≠ Customs Payment Report
+
+**RFCV Section 10 "Mode de Paiement"**:
+- Commercial payment between importer and exporter
+- Examples: "Bank transfer", "Documentary credit", "Wire transfer"
+- **NOT related** to customs duties payment
+
+**Customs Payment Report** (ASYCUDA `Deffered_payment_reference`):
+- Payment of duties and taxes to Treasury
+- Values: Treasury receipt numbers like "25P2003J"
+- **Different** from commercial RFCV payment mode
+
+### Validation Rules
+
+**No strict validation is applied**:
+- Format responsibility: User must provide valid Treasury receipt number
+- Length: Typically 8 characters (e.g., "25P2003J")
+- Characters: Alphanumeric
+- Case: Usually uppercase
+
+The system accepts any string value without format validation, allowing for variations in Treasury receipt formats.
+
 ## Architecture
 
 ### Core Processing Pipeline

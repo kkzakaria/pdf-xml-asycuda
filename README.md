@@ -473,6 +473,141 @@ L'assurance totale arrondie (15124 XOF) est ensuite répartie proportionnellemen
 2. **Méthode du plus grand reste** : Les restes décimaux sont distribués aux articles ayant les plus grands restes jusqu'à épuisement
 3. **Garantie de somme exacte** : `Σ assurance_articles = 15124 XOF` (pas de différence d'arrondi)
 
+## 📄 Rapport de Paiement (Optionnel)
+
+Le système supporte la fourniture optionnelle du numéro de rapport de paiement (quittance du Trésor Public) lors de la conversion.
+
+### Qu'est-ce que le Rapport de Paiement ?
+
+Le **rapport de paiement** (`Deffered_payment_reference` dans ASYCUDA) est le numéro de quittance du Trésor Public généré **APRÈS** le paiement des droits et taxes douanières.
+
+**Format** : `[Année][Type][Séquence][Lettre]`
+
+**Exemple** : `25P2003J`
+- `25` : Année 2025
+- `P` : Type (P = Paiement)
+- `2003` : Numéro séquentiel
+- `J` : Lettre de contrôle
+
+### Workflow de Dédouanement
+
+1. **RFCV émis** → Document d'inspection (AVANT dédouanement)
+2. **Conversion RFCV → XML** → Notre système (rapport optionnel)
+3. **Calcul des taxes** → Système ASYCUDA
+4. **Paiement au Trésor** → Génération du numéro de quittance
+5. **Saisie dans ASYCUDA** → Remplissage de `Deffered_payment_reference`
+6. **Mainlevée** → Marchandise peut sortir du port
+
+### Paramètre Optionnel `rapport_paiement`
+
+Le paramètre `--rapport-paiement` (CLI) ou `rapport_paiement` (API) est **OPTIONNEL** car :
+- Le rapport de paiement est généré APRÈS le paiement des taxes
+- Le RFCV est émis AVANT le dédouanement
+- Le numéro peut être ajouté manuellement dans ASYCUDA après paiement
+
+**Quand le fournir :**
+- ✅ Si vous avez déjà le numéro de quittance du Trésor
+- ✅ Lors de conversion post-paiement pour archivage
+- ❌ Pas disponible lors de la conversion initiale (cas le plus courant)
+
+### Utilisation CLI
+
+```bash
+# AVEC rapport de paiement (si déjà disponible)
+python converter.py "DOSSIER 18236.pdf" \
+  --taux-douane 573.139 \
+  --rapport-paiement 25P2003J \
+  -v
+
+# SANS rapport (cas le plus courant - rempli plus tard dans ASYCUDA)
+python converter.py "DOSSIER 18236.pdf" \
+  --taux-douane 573.139 \
+  -v
+
+# Batch avec rapport de paiement
+python converter.py -d tests/ \
+  --batch \
+  --taux-douane 573.139 \
+  --rapport-paiement 25P2003J \
+  --workers 4
+```
+
+### Utilisation API
+
+```bash
+# Conversion synchrone AVEC rapport de paiement
+curl -X POST "http://localhost:8000/api/v1/convert" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.139" \
+  -F "rapport_paiement=25P2003J"
+
+# Conversion synchrone SANS rapport (défaut)
+curl -X POST "http://localhost:8000/api/v1/convert" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.139"
+
+# Conversion asynchrone avec rapport
+curl -X POST "http://localhost:8000/api/v1/convert/async" \
+  -F "file=@DOSSIER.pdf" \
+  -F "taux_douane=573.139" \
+  -F "rapport_paiement=25P2003J"
+```
+
+### Exemple Python
+
+```python
+import requests
+
+# AVEC rapport de paiement
+with open('DOSSIER.pdf', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8000/api/v1/convert',
+        files={'file': f},
+        data={
+            'taux_douane': 573.139,
+            'rapport_paiement': '25P2003J'  # Optionnel
+        }
+    )
+
+# SANS rapport de paiement (défaut)
+with open('DOSSIER.pdf', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8000/api/v1/convert',
+        files={'file': f},
+        data={'taux_douane': 573.139}  # rapport_paiement omis
+    )
+```
+
+### Résultat dans le XML
+
+**Sans rapport** (défaut) :
+```xml
+<Financial>
+  <Deffered_payment_reference/>
+  <Mode_of_payment>COMPTE DE PAIEMENT</Mode_of_payment>
+</Financial>
+```
+
+**Avec rapport** (`25P2003J`) :
+```xml
+<Financial>
+  <Deffered_payment_reference>25P2003J</Deffered_payment_reference>
+  <Mode_of_payment>COMPTE DE PAIEMENT</Mode_of_payment>
+</Financial>
+```
+
+### Distinction Importante
+
+**Section 10 RFCV "Mode de Paiement"** ≠ **Rapport de Paiement Douanier**
+
+- **Section 10 RFCV** : Mode de paiement **commercial** (importateur ↔ exportateur)
+  - Exemples : "Virement bancaire", "Crédit documentaire"
+  - **NON lié** au paiement des taxes douanières
+
+- **Rapport de Paiement** : Paiement des **droits et taxes** (importateur → Trésor)
+  - Format : Numéro de quittance (ex: "25P2003J")
+  - **Différent** du paiement commercial
+
 ## 🛠️ Technologies
 
 ### Extraction et Parsing
