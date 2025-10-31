@@ -71,6 +71,9 @@ python -m pytest tests/test_chassis_detection.py -v
 
 # Test on real RFCV with vehicles
 python converter.py "tests/DOSSIER 18237.pdf" -o output/test_chassis.xml -v
+
+# Run article grouping tests
+python -m pytest tests/test_item_grouping.py -v
 ```
 
 ## Chassis Detection Feature
@@ -159,6 +162,119 @@ Le système log automatiquement:
 INFO: Article 1: Châssis détecté (Véhicules transport marchandises) - LLCLHJL03SP420331
 WARNING: Article 5: Code HS 8704 nécessite un châssis mais aucun détecté dans description
 ```
+
+## Article Grouping by HS Code (Regroupement d'articles)
+
+The system automatically groups articles without chassis numbers that share the same HS code (Code SH Attesté) to simplify customs declarations.
+
+### Grouping Rules
+
+- **Articles with chassis**: NEVER grouped (each vehicle must be declared individually)
+- **Articles without chassis**: Grouped ONLY if multiple articles share the same HS code
+- **No grouping if all HS codes are different**: Quantities remain unchanged
+- **Quantity handling** (when grouping occurs):
+  - First article of first group receives the total package count (section 24)
+  - Other articles receive quantity = 0
+- **Package count preserved**: The total from section "24. Colisage, nombre et désignation des marchandises" remains unchanged
+
+### Grouping Process
+
+1. **Separation**: Articles are split into two categories:
+   - Articles WITH chassis (preserved individually)
+   - Articles WITHOUT chassis (candidates for grouping)
+
+2. **Grouping**: Articles without chassis are grouped by full HS code:
+   ```
+   Example Input (35 articles without chassis):
+   - 10 articles HS 8703.23.19.00
+   - 15 articles HS 8704.21.10.00
+   - 10 articles HS 8711.20.90.00
+
+   Output: 3 representative articles
+   ```
+
+3. **Quantity Assignment**:
+   - First article of first group: `quantity = total_packages` (from section 24)
+   - All other articles: `quantity = 0`
+   - If `total_packages` is None: quantities remain unchanged
+
+4. **Recombination**: Final list = articles with chassis + grouped articles
+
+### Example Scenarios
+
+#### Scenario 1: With Grouping (Same HS Codes)
+
+**RFCV Input**:
+- Section 24: "35 CARTONS"
+- Section 26 Articles:
+  - 2 MOTORCYCLE with chassis VIN123... (HS 8711.20.90.00)
+  - 10 TRICYCLE without chassis (HS 8704.21.10.00)
+  - 15 MOTO without chassis (HS 8711.20.90.00)
+  - 8 SCOOTER without chassis (HS 8711.20.90.00)
+
+**XML Output**:
+- 4 total articles in declaration:
+  1. MOTORCYCLE #1 (with chassis VIN123..., quantity = original)
+  2. MOTORCYCLE #2 (with chassis VIN456..., quantity = original)
+  3. TRICYCLE representative (HS 8704, **quantity = 35** ← total_packages)
+  4. MOTO representative (HS 8711, quantity = 0)
+
+#### Scenario 2: No Grouping (All Different HS Codes)
+
+**RFCV Input**:
+- Section 24: "1611 CARTONS"
+- Section 26 Articles:
+  - Article 1: PARTS FOR ENGINES (HS 84099900, quantity 816)
+  - Article 2: AIR COMPRESSOR (HS 84148090, quantity 795)
+
+**XML Output**:
+- 2 total articles in declaration (unchanged):
+  1. PARTS FOR ENGINES (HS 84099900, **quantity = 816** ← inchangée)
+  2. AIR COMPRESSOR (HS 84148090, **quantity = 795** ← inchangée)
+- **No grouping** because HS codes are different
+
+### Implementation Files
+
+- `src/item_grouper.py`: Grouping logic and quantity management
+- `src/rfcv_parser.py`: Integration into conversion pipeline (line 67-72)
+- `tests/test_item_grouping.py`: 9 unit tests (100% pass)
+
+### HS Code Extraction
+
+The HS code used for grouping is extracted from:
+- **Section**: "26. Articles"
+- **Column**: "Code SH Attesté"
+- **Format**: `XXXX.XX.XX.XX` → cleaned to `XXXXXXXX` (8 digits)
+- **Storage**: `item.tarification.hscode.commodity_code`
+
+### Logging
+
+The system provides detailed grouping information:
+
+**With Grouping (Same HS Codes)**:
+```
+INFO: Regroupement d'articles : 2 avec châssis, 33 sans châssis
+INFO: Regroupement en 2 groupes par code HS
+INFO: Regroupement effectif détecté → application des règles de quantité
+INFO:   Groupe HS 87042110 (PREMIER): 10 articles → 1 article (quantité = 35)
+INFO:   Groupe HS 87112090: 23 articles → 1 article (quantité = 0)
+INFO: Résultat regroupement : 35 articles → 4 articles finaux
+```
+
+**No Grouping (Different HS Codes)**:
+```
+INFO: Regroupement d'articles : 0 avec châssis, 2 sans châssis
+INFO: Regroupement en 2 groupes par code HS
+INFO: Tous les codes HS sont différents → aucun regroupement nécessaire
+INFO: Résultat : 2 articles → 2 articles (inchangé)
+```
+
+### Benefits
+
+- **Simplified declarations**: Fewer articles to process in ASYCUDA
+- **Compliance**: Vehicles with chassis remain individually tracked
+- **Accuracy**: Total package count preserved from official RFCV section 24
+- **Transparency**: Full logging of grouping decisions
 
 ## Insurance Calculation (Assurance)
 
