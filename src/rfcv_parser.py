@@ -760,13 +760,7 @@ class RFCVParser:
                 ),
                 extended_procedure='4000',
                 national_procedure='000',
-                supplementary_units=[
-                    SupplementaryUnit(
-                        code='QA',
-                        name='Unité d\'apurement',
-                        quantity=quantity
-                    )
-                ],
+                supplementary_units=[],  # Null - ASYCUDA déterminera automatiquement selon code HS
                 item_price=self._parse_number(match.group(8))
             )
 
