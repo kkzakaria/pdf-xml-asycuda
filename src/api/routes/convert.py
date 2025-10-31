@@ -26,20 +26,28 @@ router = APIRouter(prefix="/api/v1/convert", tags=["Conversion"])
     "",
     response_model=ConvertResponse,
     summary="Conversion synchrone PDF → XML ASYCUDA",
-    description="Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement. **Taux douanier obligatoire** pour le calcul de l'assurance.",
+    description="Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
 async def convert_pdf(
     request: Request,
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
-    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0)
+    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
+    rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes.")
 ):
     """
     Conversion synchrone PDF → XML
 
     - **file**: Fichier PDF à convertir (max 50MB)
     - **taux_douane**: Taux de change douanier pour calcul assurance (format: 573.1390)
+      - **Obligatoire** : Communiqué par la douane avant chaque conversion
+      - **Format** : Point (`.`) comme séparateur décimal (ex: 573.1390)
+    - **rapport_paiement**: Numéro de rapport de paiement/quittance Trésor Public (optionnel)
+      - **Format** : 8 caractères alphanumériques (ex: 25P2003J)
+      - **Quand fournir** : Si vous avez déjà le numéro de quittance du Trésor
+      - **Workflow** : Généré APRÈS paiement des taxes, donc rarement disponible lors de la conversion initiale
+      - **Champ XML** : Remplit `Deffered_payment_reference` dans la section `<Financial>`
 
     Retourne le résultat immédiatement avec les métriques
     """
@@ -61,7 +69,8 @@ async def convert_pdf(
             pdf_path=pdf_path,
             output_path=output_path,
             verbose=False,
-            taux_douane=taux_douane
+            taux_douane=taux_douane,
+            rapport_paiement=rapport_paiement
         )
 
         if not result['success']:
@@ -105,7 +114,7 @@ async def convert_pdf(
         )
 
 
-async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float):
+async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float, rapport_paiement: Optional[str] = None):
     """Tâche de conversion asynchrone (background)"""
 
     # Mettre à jour le status à PROCESSING
@@ -121,7 +130,8 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
         pdf_path=pdf_path,
         output_path=output_path,
         verbose=False,
-        taux_douane=taux_douane
+        taux_douane=taux_douane,
+        rapport_paiement=rapport_paiement
     )
 
     # Mettre à jour le job avec le résultat
@@ -147,7 +157,7 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
     "/async",
     response_model=ConvertAsyncResponse,
     summary="Conversion asynchrone PDF → XML ASYCUDA",
-    description="Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard. **Taux douanier obligatoire** pour le calcul de l'assurance.",
+    description="Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.UPLOAD_ASYNC)
@@ -155,13 +165,21 @@ async def convert_pdf_async(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
-    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0)
+    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
+    rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes.")
 ):
     """
     Conversion asynchrone PDF → XML
 
     - **file**: Fichier PDF à convertir
     - **taux_douane**: Taux de change douanier pour calcul assurance (format: 573.1390)
+      - **Obligatoire** : Communiqué par la douane avant chaque conversion
+      - **Format** : Point (`.`) comme séparateur décimal (ex: 573.1390)
+    - **rapport_paiement**: Numéro de rapport de paiement/quittance Trésor Public (optionnel)
+      - **Format** : 8 caractères alphanumériques (ex: 25P2003J)
+      - **Quand fournir** : Si vous avez déjà le numéro de quittance du Trésor
+      - **Workflow** : Généré APRÈS paiement des taxes, donc rarement disponible lors de la conversion initiale
+      - **Champ XML** : Remplit `Deffered_payment_reference` dans la section `<Financial>`
 
     Retourne un job_id pour suivre la progression avec GET /convert/{job_id}
     """
@@ -192,7 +210,8 @@ async def convert_pdf_async(
             job_id=job_id,
             pdf_path=pdf_path,
             output_path=output_path,
-            taux_douane=taux_douane
+            taux_douane=taux_douane,
+            rapport_paiement=rapport_paiement
         )
 
         return ConvertAsyncResponse(

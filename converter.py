@@ -17,7 +17,7 @@ from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
 
 
-def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = False, taux_douane: float = None) -> bool:
+def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = False, taux_douane: float = None, rapport_paiement: str = None) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
 
@@ -26,6 +26,7 @@ def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = F
         output_path: Chemin de sortie pour le XML (optionnel)
         verbose: Afficher les détails de la conversion
         taux_douane: Taux de change douanier pour calcul assurance (format: 573.1390)
+        rapport_paiement: Numéro de rapport de paiement/quittance Trésor (format: 25P2003J, optionnel)
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -55,8 +56,10 @@ def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = F
             print("Étape 1/2: Extraction et parsing du PDF...")
             if taux_douane:
                 print(f"  - Taux douanier: {taux_douane:.4f}")
+            if rapport_paiement:
+                print(f"  - Rapport de paiement: {rapport_paiement}")
 
-        parser = RFCVParser(pdf_path, taux_douane=taux_douane)
+        parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement)
         rfcv_data = parser.parse()
 
         if verbose:
@@ -185,6 +188,13 @@ Exemples d'utilisation:
         help='Taux de change douanier pour calcul assurance (format: 573.1390, avec 4 décimales)'
     )
 
+    parser.add_argument(
+        '--rapport-paiement',
+        type=str,
+        default=None,
+        help='Numéro de rapport de paiement/quittance Trésor Public (format: 25P2003J, optionnel)'
+    )
+
     args = parser.parse_args()
 
     # Déterminer le mode d'opération
@@ -265,7 +275,8 @@ Exemples d'utilisation:
             pdf_file,
             args.output if args.output != 'output' else None,
             args.verbose,
-            taux_douane=args.taux_douane
+            taux_douane=args.taux_douane,
+            rapport_paiement=args.rapport_paiement
         )
         sys.exit(0 if success else 1)
 

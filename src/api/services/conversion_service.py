@@ -24,7 +24,8 @@ class ConversionService:
         pdf_path: str,
         output_path: str,
         verbose: bool = False,
-        taux_douane: float = None
+        taux_douane: float = None,
+        rapport_paiement: str = None
     ) -> Dict[str, Any]:
         """
         Convertit un PDF RFCV en XML ASYCUDA
@@ -34,6 +35,7 @@ class ConversionService:
             output_path: Chemin de sortie XML
             verbose: Mode verbeux
             taux_douane: Taux de change douanier pour calcul assurance (optionnel)
+            rapport_paiement: Numéro de rapport de paiement/quittance Trésor (optionnel)
 
         Returns:
             Dictionnaire avec résultats et métriques
@@ -59,8 +61,10 @@ class ConversionService:
                 print(f"Parsing PDF: {pdf_path}")
                 if taux_douane:
                     print(f"  Taux douanier: {taux_douane:.4f}")
+                if rapport_paiement:
+                    print(f"  Rapport de paiement: {rapport_paiement}")
 
-            parser = RFCVParser(pdf_path, taux_douane=taux_douane)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement)
             rfcv_data = parser.parse()
 
             # Générer le XML
