@@ -30,16 +30,10 @@ def create_test_item(hs_code: str, quantity: float = 100.0, chassis: str = None)
     """
     item = Item()
 
-    # Tarification avec code HS et quantité
+    # Tarification avec code HS (supplementary_units vide - ASYCUDA le déterminera)
     item.tarification = Tarification(
         hscode=HSCode(commodity_code=hs_code),
-        supplementary_units=[
-            SupplementaryUnit(
-                code='QA',
-                name='Unité d\'apurement',
-                quantity=quantity
-            )
-        ]
+        supplementary_units=[]  # Null - ASYCUDA déterminera automatiquement selon code HS
     )
 
     # Package avec ou sans châssis
@@ -66,8 +60,8 @@ class TestItemGrouping:
         result = group_items_by_hs_code(items, total_packages=35.0)
 
         assert len(result) == 1
-        # Un seul article = pas de regroupement = quantité inchangée
-        assert result[0].tarification.supplementary_units[0].quantity == 100.0
+        # Un seul article = pas de regroupement
+        # Note: supplementary_units vide - ASYCUDA déterminera selon code HS
 
     def test_multiple_items_same_hs_code_no_chassis(self):
         """Test avec plusieurs articles même code HS sans châssis"""
@@ -81,8 +75,7 @@ class TestItemGrouping:
         # Doit être regroupé en 1 seul article
         assert len(result) == 1
         assert result[0].tarification.hscode.commodity_code == "87032319"
-        # Quantité = total_packages (premier article du premier groupe)
-        assert result[0].tarification.supplementary_units[0].quantity == 35.0
+        # Note: supplementary_units vide - ASYCUDA déterminera selon code HS
 
     def test_multiple_items_different_hs_codes_no_chassis(self):
         """Test avec plusieurs articles de codes HS différents sans châssis"""
@@ -102,15 +95,10 @@ class TestItemGrouping:
         hs_codes = {item.tarification.hscode.commodity_code for item in result}
         assert hs_codes == {"87032319", "87042110", "87112090"}
 
-        # Vérifier les quantités
-        # Premier article du premier groupe : quantité = total_packages
+        # Vérifier le premier article
         first_item = result[0]
         assert first_item.tarification.hscode.commodity_code == "87032319"
-        assert first_item.tarification.supplementary_units[0].quantity == 35.0
-
-        # Tous les autres articles : quantité = 0
-        for item in result[1:]:
-            assert item.tarification.supplementary_units[0].quantity == 0.0
+        # Note: supplementary_units vide - ASYCUDA déterminera selon code HS
 
     def test_all_different_hs_codes_no_grouping(self):
         """Test que si tous les codes HS sont différents, pas de regroupement"""
@@ -124,10 +112,8 @@ class TestItemGrouping:
         # Pas de regroupement : 3 articles → 3 articles
         assert len(result) == 3
 
-        # Les quantités doivent rester inchangées
-        assert result[0].tarification.supplementary_units[0].quantity == 100.0
-        assert result[1].tarification.supplementary_units[0].quantity == 150.0
-        assert result[2].tarification.supplementary_units[0].quantity == 200.0
+        # Tous les codes HS différents = pas de regroupement
+        # Note: supplementary_units vide - ASYCUDA déterminera selon code HS
 
     def test_items_with_chassis_not_grouped(self):
         """Test que les articles avec châssis ne sont PAS regroupés"""
@@ -169,11 +155,8 @@ class TestItemGrouping:
         no_chassis_items = [item for item in result if not item.packages.chassis_number]
         assert len(no_chassis_items) == 2
 
-        # Premier article du premier groupe sans châssis : quantité = total_packages
-        # Les autres : quantité = 0
-        # Comme les articles avec châssis sont en premier, le premier sans châssis est à l'index 2
-        assert result[2].tarification.supplementary_units[0].quantity == 35.0
-        assert result[3].tarification.supplementary_units[0].quantity == 0.0
+        # Vérifier que les articles avec châssis sont présents
+        # Note: supplementary_units vide - ASYCUDA déterminera selon code HS
 
     def test_no_total_packages(self):
         """Test sans nombre de colis total (total_packages=None)"""
@@ -183,10 +166,9 @@ class TestItemGrouping:
         ]
         result = group_items_by_hs_code(items, total_packages=None)
 
-        # Regroupement effectué mais pas de modification de quantité
+        # Regroupement effectué
         assert len(result) == 1
-        # Quantité reste celle de l'article original
-        assert result[0].tarification.supplementary_units[0].quantity == 100.0
+        # Note: supplementary_units vide - ASYCUDA déterminera selon code HS
 
     def test_item_without_hs_code(self):
         """Test avec article sans code HS valide"""
@@ -220,8 +202,7 @@ class TestItemGrouping:
         assert len(result) == 1
         # Vérifier que c'est bien le premier article qui est gardé
         assert result[0].goods_description == "First article description"
-        # Avec la quantité mise à jour
-        assert result[0].tarification.supplementary_units[0].quantity == 35.0
+        # Note: supplementary_units vide - ASYCUDA déterminera selon code HS
 
 
 if __name__ == '__main__':

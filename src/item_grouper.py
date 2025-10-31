@@ -213,15 +213,5 @@ def _set_item_quantity(item: Item, quantity: float) -> None:
     if not item.tarification:
         return
 
-    if not item.tarification.supplementary_units:
-        # Créer un SupplementaryUnit si inexistant
-        item.tarification.supplementary_units = [
-            SupplementaryUnit(
-                code='QA',
-                name='Unité d\'apurement',
-                quantity=quantity
-            )
-        ]
-    else:
-        # Modifier la quantité du premier SupplementaryUnit
-        item.tarification.supplementary_units[0].quantity = quantity
+    # Supplementary_units mis à null - ASYCUDA déterminera automatiquement selon code HS
+    # La quantité est gérée au niveau des packages, pas des unités supplémentaires
