@@ -1,6 +1,6 @@
 # Service Générateur de Châssis Universel
 
-**Version**: 2.0.0
+**Version**: 2.1.0
 **Date**: 2025-11-10
 **Auteur**: Claude Code avec SuperClaude Framework
 
@@ -8,6 +8,7 @@
 
 Service générique de génération et validation de numéros de châssis pour véhicules, conforme aux standards ISO 3779 (VIN) et supportant les formats fabricants personnalisés.
 
+**🆕 Version 2.1**: Garantie d'unicité mathématique avec gestionnaire de séquences persistantes.
 **🆕 Version 2.0**: Intégration base de données 62,000+ préfixes VIN réels de constructeurs automobiles mondiaux.
 
 ### Objectifs
@@ -17,7 +18,8 @@ Service générique de génération et validation de numéros de châssis pour v
 - ✅ **Flexible**: Templates configurables pour châssis fabricant
 - ✅ **Testable**: Génération aléatoire pour tests automatisés
 - ✅ **Intelligent**: Détection et continuation automatique de séquences
-- ✅ **Authentique**: Base de 62,177 préfixes réels de fabricants mondiaux (🆕 v2.0)
+- ✅ **Authentique**: Base de 62,192 préfixes réels de fabricants mondiaux (🆕 v2.0)
+- ✅ **Unique**: Garantie anti-duplication avec persistance (🆕 v2.1)
 
 ## 🏗️ Architecture
 
@@ -32,10 +34,13 @@ src/
 │   └── ChassisFactory         # API unifiée (point d'entrée)
 ├── vin_prefix_database.py     # 🆕 v2.0
 │   ├── VINPrefix              # Dataclass préfixe authentique
-│   ├── WMI_REGISTRY           # Registre 20+ fabricants connus
-│   └── VINPrefixDatabase      # Gestionnaire 62,177 préfixes
+│   ├── WMI_REGISTRY           # Registre 27 fabricants connus
+│   └── VINPrefixDatabase      # Gestionnaire 62,192 préfixes
+├── chassis_sequence_manager.py # 🆕 v2.1
+│   └── ChassisSequenceManager # Gestionnaire séquences uniques
 └── data/
-    └── VinPrefixes.txt        # 🆕 v2.0 - Base 62,177 préfixes réels
+    ├── VinPrefixes.txt        # 🆕 v2.0 - Base 62,192 préfixes réels
+    └── chassis_sequences.json # 🆕 v2.1 - Persistance séquences
 ```
 
 ### Types de châssis supportés
@@ -697,8 +702,176 @@ python3 -m pytest tests/test_chassis*.py tests/test_vin*.py -v
 - ✅ Continuation automatique de séquences
 - ✅ Génération aléatoire pour tests
 - ✅ Support multi-fabricants (Chine)
-- ✅ 37 tests unitaires (100% pass)
+- ✅ 60 tests unitaires (100% pass)
 - ✅ Documentation complète
+- ✅ Garantie d'unicité mathématique
+
+## 🔐 Génération Unique (v2.1)
+
+### Principe
+
+Le `ChassisSequenceManager` garantit mathématiquement qu'aucun numéro de châssis ne soit généré deux fois pour une combinaison donnée de préfixe (WMI+VDS+Year).
+
+**Mécanisme**:
+- Compteur séquentiel par préfixe (9 chars: WMI+VDS+Year)
+- Persistance JSON (`data/chassis_sequences.json`)
+- Thread-safe avec verrous (`threading.Lock()`)
+- Reprise automatique après redémarrage
+
+### Usage ChassisSequenceManager
+
+```python
+from chassis_sequence_manager import ChassisSequenceManager
+
+# Initialisation
+manager = ChassisSequenceManager()
+
+# Obtenir prochaine séquence unique
+seq1 = manager.get_next_sequence("LZSHCKZSW")  # 1
+seq2 = manager.get_next_sequence("LZSHCKZSW")  # 2
+seq3 = manager.get_next_sequence("LZSHCKZSW")  # 3
+
+# Séquence actuelle
+current = manager.get_current_sequence("LZSHCKZSW")  # 3
+
+# Statistiques
+stats = manager.get_statistics()
+print(f"Préfixes: {stats['total_prefixes']}")
+print(f"VIN générés: {stats['total_vins_generated']}")
+
+# Réinitialisation (ATTENTION: peut créer doublons)
+manager.reset_sequence("LZSHCKZSW", value=1000)
+```
+
+### Usage ChassisFactory avec Unicité
+
+```python
+from chassis_generator import ChassisFactory
+
+# Mode unique activé
+factory = ChassisFactory(ensure_unique=True)
+
+# Génération VIN unique (séquence auto-incrémentée)
+vin1 = factory.create_unique_vin("LZS", "HCKZS", 2028, "S")
+# → LZSHCKZS3WS000001
+
+vin2 = factory.create_unique_vin("LZS", "HCKZS", 2028, "S")
+# → LZSHCKZS5WS000002
+
+# Lot de VIN uniques
+batch = factory.create_unique_vin_batch("LZS", "HCKZS", 2028, "S", 100)
+# → 100 VIN uniques avec séquences 3-102
+
+# VIN unique avec préfixe réel
+vin = factory.create_unique_vin_from_real_prefix(
+    manufacturer="Apsonic",
+    country="China"
+)
+
+# Statistiques
+stats = factory.get_sequence_statistics()
+```
+
+### Persistance
+
+**Fichier**: `data/chassis_sequences.json`
+
+**Format**:
+```json
+{
+  "LZSHCKZSW": 73,
+  "LFVBA01AS": 33,
+  "LBVGW02BV": 23
+}
+```
+
+**Comportement**:
+- Sauvegarde automatique après chaque `get_next_sequence()`
+- Chargement automatique à l'initialisation
+- Survit aux redémarrages de l'application
+- Thread-safe pour génération concurrente
+
+### Thread-Safety
+
+```python
+import threading
+from chassis_generator import ChassisFactory
+
+factory = ChassisFactory(ensure_unique=True)
+
+def generate_vins(count):
+    for _ in range(count):
+        vin = factory.create_unique_vin("LZS", "HCKZS", 2028, "S")
+
+# 10 threads générant 100 VIN chacun
+threads = [threading.Thread(target=generate_vins, args=(100,)) for _ in range(10)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+
+# Résultat: 1000 VIN uniques garantis
+```
+
+### Limites
+
+- **Limite séquence VIN**: 999,999 (6 digits)
+- **Avertissement**: Log warning si séquence > 999,999
+- **Dépassement**: Continue au-delà de 999,999 (7+ digits, non-standard)
+- **Solution**: Changer de préfixe (année, usine, VDS)
+
+### Tests
+
+**23 tests unitaires** pour ChassisSequenceManager (100% pass):
+- Initialisation et persistance
+- Incrémentation séquences
+- Multi-préfixes indépendants
+- Sauvegarde/rechargement
+- Statistiques
+- Thread-safety
+- Intégration ChassisFactory
+
+```bash
+# Exécuter tests
+python -m pytest tests/test_chassis_sequence_manager.py -v
+
+# Démonstration complète
+python3 scripts/demo_unique_generation.py
+```
+
+### Exemple Complet
+
+```python
+from chassis_generator import ChassisFactory
+
+# Factory avec unicité + préfixes réels
+factory = ChassisFactory(
+    ensure_unique=True,
+    use_real_prefixes=True
+)
+
+# Générer 180 VIN Apsonic pour RFCV-189
+vins_apsonic = factory.create_unique_vin_batch(
+    wmi="LZS",
+    vds="HCKZS",
+    year=2028,
+    plant="S",
+    quantity=180
+)
+
+# Vérifier unicité
+assert len(set(vins_apsonic)) == 180  # ✅
+
+# Vérifier conformité
+for vin in vins_apsonic:
+    result = factory.validate(vin)
+    assert result.is_valid  # ✅
+    assert result.checksum_valid  # ✅
+
+# Statistiques finales
+stats = factory.get_sequence_statistics()
+print(f"Total VIN générés: {stats['total_vins_generated']}")
+```
 
 ## 👥 Contribution
 

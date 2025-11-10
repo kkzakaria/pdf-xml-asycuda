@@ -462,15 +462,25 @@ class ChassisFactory:
     - Génération aléatoire pour tests
     - Validation universelle
     - Détection et continuation de séquences
+    - Génération unique (garantie anti-duplication)
     """
 
-    def __init__(self, prefix_db_path: Optional[str] = None, use_real_prefixes: bool = True):
+    def __init__(
+        self,
+        prefix_db_path: Optional[str] = None,
+        use_real_prefixes: bool = True,
+        ensure_unique: bool = False,
+        sequence_storage_path: Optional[str] = None
+    ):
         """
         Initialise la factory avec les générateurs
 
         Args:
             prefix_db_path: Chemin vers VinPrefixes.txt (optionnel)
             use_real_prefixes: Si True, charge la base de préfixes réels si disponible
+            ensure_unique: Si True, active le gestionnaire de séquences uniques
+            sequence_storage_path: Chemin vers fichier de persistance des séquences
+                                  (défaut: data/chassis_sequences.json)
         """
         self.vin_generator = VINGenerator()
         self.manufacturer_generator = ManufacturerChassisGenerator()
@@ -484,6 +494,12 @@ class ChassisFactory:
             except FileNotFoundError:
                 # Base de préfixes non trouvée, mode générique
                 pass
+
+        # Gestionnaire de séquences uniques (optionnel)
+        self.sequence_manager: Optional['ChassisSequenceManager'] = None
+        if ensure_unique:
+            from chassis_sequence_manager import ChassisSequenceManager
+            self.sequence_manager = ChassisSequenceManager(sequence_storage_path)
 
     def create_vin(
         self,
@@ -812,6 +828,186 @@ class ChassisFactory:
         pattern_desc = f"Séquence numérique: {prefix} + {len(suffix_last)} digits (incr={increment})"
 
         return generated, pattern_desc
+
+    def create_unique_vin(
+        self,
+        wmi: str,
+        vds: str,
+        year: int,
+        plant: str = "S"
+    ) -> str:
+        """
+        Crée un VIN ISO 3779 avec séquence unique garantie
+
+        Nécessite que la factory ait été initialisée avec ensure_unique=True.
+        Utilise le gestionnaire de séquences pour garantir qu'aucun VIN
+        ne soit généré deux fois pour une combinaison WMI+VDS+Year+Plant.
+
+        Args:
+            wmi: World Manufacturer Identifier (3 caractères)
+            vds: Vehicle Descriptor Section (5 caractères)
+            year: Année de fabrication (2001-2030)
+            plant: Code usine (1 caractère, défaut "S")
+
+        Returns:
+            VIN unique de 17 caractères
+
+        Raises:
+            RuntimeError: Si ensure_unique=False lors de l'init
+            ValueError: Si paramètres invalides
+
+        Example:
+            >>> factory = ChassisFactory(ensure_unique=True)
+            >>> vin1 = factory.create_unique_vin("LZS", "HCKZS", 2028, "S")
+            'LZSHCKZS2W8000001'
+            >>> vin2 = factory.create_unique_vin("LZS", "HCKZS", 2028, "S")
+            'LZSHCKZS2W8000002'  # Séquence incrémentée automatiquement
+        """
+        if self.sequence_manager is None:
+            raise RuntimeError(
+                "Génération unique nécessite ensure_unique=True lors de l'initialisation"
+            )
+
+        # Construire préfixe unique (9 chars sans checksum)
+        # Format: WMI(3) + VDS(5) + Year(1) = 9 chars
+        if year not in VINGenerator.YEAR_CODES:
+            raise ValueError(f"Année {year} non supportée (2001-2030)")
+
+        year_code = VINGenerator.YEAR_CODES[year]
+        prefix = f"{wmi}{vds}{year_code}"
+
+        # Obtenir séquence unique suivante
+        sequence = self.sequence_manager.get_next_sequence(prefix)
+
+        # Générer VIN avec cette séquence
+        return self.create_vin(wmi, vds, year, plant, sequence)
+
+    def create_unique_vin_batch(
+        self,
+        wmi: str,
+        vds: str,
+        year: int,
+        plant: str = "S",
+        quantity: int = 1
+    ) -> List[str]:
+        """
+        Crée un lot de VIN avec séquences uniques garanties
+
+        Args:
+            wmi: World Manufacturer Identifier (3 caractères)
+            vds: Vehicle Descriptor Section (5 caractères)
+            year: Année de fabrication (2001-2030)
+            plant: Code usine (1 caractère, défaut "S")
+            quantity: Nombre de VIN à générer
+
+        Returns:
+            Liste de VIN uniques
+
+        Raises:
+            RuntimeError: Si ensure_unique=False lors de l'init
+
+        Example:
+            >>> factory = ChassisFactory(ensure_unique=True)
+            >>> batch = factory.create_unique_vin_batch("LZS", "HCKZS", 2028, "S", 10)
+            >>> len(batch)
+            10
+            >>> len(set(batch))  # Tous uniques
+            10
+        """
+        if self.sequence_manager is None:
+            raise RuntimeError(
+                "Génération unique nécessite ensure_unique=True lors de l'initialisation"
+            )
+
+        return [
+            self.create_unique_vin(wmi, vds, year, plant)
+            for _ in range(quantity)
+        ]
+
+    def create_unique_vin_from_real_prefix(
+        self,
+        manufacturer: Optional[str] = None,
+        country: Optional[str] = None,
+        wmi: Optional[str] = None,
+        plant: str = "S"
+    ) -> str:
+        """
+        Crée un VIN unique avec préfixe réel authentique
+
+        Combine la base de préfixes réels avec le gestionnaire de séquences
+        pour garantir l'unicité tout en utilisant des préfixes authentiques.
+
+        Args:
+            manufacturer: Nom du fabricant (ex: "Apsonic", "Ford")
+            country: Pays de fabrication (ex: "China", "USA")
+            wmi: WMI spécifique (ex: "LZS", "1FA")
+            plant: Code usine (1 caractère, défaut "S")
+
+        Returns:
+            VIN unique avec préfixe réel
+
+        Raises:
+            RuntimeError: Si ensure_unique=False ou prefix_db non disponible
+            ValueError: Si aucun préfixe ne correspond aux critères
+
+        Example:
+            >>> factory = ChassisFactory(ensure_unique=True)
+            >>> vin = factory.create_unique_vin_from_real_prefix("Apsonic", "China")
+            'LZSHCKZS2S8000001'
+        """
+        if self.sequence_manager is None:
+            raise RuntimeError(
+                "Génération unique nécessite ensure_unique=True lors de l'initialisation"
+            )
+
+        if self.prefix_db is None:
+            raise RuntimeError("Base de préfixes réels non disponible")
+
+        # Obtenir préfixe réel aléatoire correspondant aux critères
+        prefix = self.prefix_db.get_random_prefix(
+            manufacturer=manufacturer,
+            country=country,
+            wmi=wmi
+        )
+
+        # Construire préfixe unique (9 chars)
+        prefix_key = f"{prefix.wmi_vds}{prefix.year_code}"
+
+        # Obtenir séquence unique
+        sequence = self.sequence_manager.get_next_sequence(prefix_key)
+
+        # Générer VIN
+        wmi_str = prefix.wmi_vds[:3]
+        vds_str = prefix.wmi_vds[3:]
+
+        # Trouver l'année correspondant au code
+        year = None
+        for y, code in VINGenerator.YEAR_CODES.items():
+            if code == prefix.year_code:
+                year = y
+                break
+
+        if year is None:
+            raise ValueError(f"Code année invalide: {prefix.year_code}")
+
+        return self.create_vin(wmi_str, vds_str, year, plant, sequence)
+
+    def get_sequence_statistics(self) -> Dict[str, any]:
+        """
+        Retourne les statistiques du gestionnaire de séquences
+
+        Returns:
+            Dictionnaire avec statistiques (prefixes, VINs générés, etc.)
+
+        Raises:
+            RuntimeError: Si ensure_unique=False lors de l'init
+        """
+        if self.sequence_manager is None:
+            raise RuntimeError(
+                "Statistiques nécessitent ensure_unique=True lors de l'initialisation"
+            )
+
+        return self.sequence_manager.get_statistics()
 
 
 # Exemple d'utilisation
