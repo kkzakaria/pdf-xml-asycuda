@@ -20,11 +20,9 @@ services:
       - key: API_TITLE
         value: API Convertisseur PDF RFCV → XML ASYCUDA
 
-      # API_VERSION est maintenant injectée automatiquement dans l'image Docker
-      # via ARG VERSION au moment du build (depuis les tags Git)
-      # ⚠️ IMPORTANT: Ne PAS définir API_VERSION ici ou dans le Dashboard Render !
-      # Les variables d'environnement Render écrasent celles de l'image Docker.
-      # La version est gérée automatiquement par le workflow Docker (tags Git → VERSION build-arg → API_VERSION env)
+      # API_VERSION n'est plus nécessaire !
+      # La version est maintenant lue depuis src/__init__.py (single source of truth)
+      # Plus de dépendance aux variables d'environnement pour la version de l'API
 
       - key: API_DEBUG
         value: false

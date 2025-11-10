@@ -6,13 +6,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
 from typing import List
 
+# Import version from package __init__.py (single source of truth)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from src import __version__ as package_version
+
 
 class Settings(BaseSettings):
     """Configuration de l'application API"""
 
     # API Configuration
     api_title: str = "API Convertisseur PDF RFCV → XML ASYCUDA"
-    version: str = "2.1.0"  # Lit depuis API_VERSION avec env_prefix
+    version: str = package_version  # Version depuis src/__init__.py (single source of truth)
     api_description: str = """
 API REST pour convertir les documents PDF RFCV (Rapport Final de Contrôle et de Vérification)
 en fichiers XML compatibles ASYCUDA (Automated System for Customs Data) pour les douanes ivoiriennes.
