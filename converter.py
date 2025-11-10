@@ -17,7 +17,14 @@ from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
 
 
-def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = False, taux_douane: float = None, rapport_paiement: str = None) -> bool:
+def convert_pdf_to_xml(
+    pdf_path: str,
+    output_path: str = None,
+    verbose: bool = False,
+    taux_douane: float = None,
+    rapport_paiement: str = None,
+    chassis_config: dict = None
+) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
 
@@ -27,6 +34,10 @@ def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = F
         verbose: Afficher les détails de la conversion
         taux_douane: Taux de change douanier pour calcul assurance (format: 573.1390)
         rapport_paiement: Numéro de rapport de paiement/quittance Trésor (format: 25P2003J, optionnel)
+        chassis_config: Configuration pour génération automatique châssis VIN (optionnel)
+                       Format: {'generate_chassis': True, 'quantity': 180, 'wmi': 'LZS',
+                               'vds': 'HCKZS', 'year': 2025, 'plant_code': 'S',
+                               'ensure_unique': True}
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -59,7 +70,12 @@ def convert_pdf_to_xml(pdf_path: str, output_path: str = None, verbose: bool = F
             if rapport_paiement:
                 print(f"  - Rapport de paiement: {rapport_paiement}")
 
-        parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement)
+        parser = RFCVParser(
+            pdf_path,
+            taux_douane=taux_douane,
+            rapport_paiement=rapport_paiement,
+            chassis_config=chassis_config
+        )
         rfcv_data = parser.parse()
 
         if verbose:
@@ -195,10 +211,101 @@ Exemples d'utilisation:
         help='Numéro de rapport de paiement/quittance Trésor Public (format: 25P2003J, optionnel)'
     )
 
+    # Groupe: Génération automatique de châssis VIN
+    chassis_group = parser.add_argument_group(
+        'Génération automatique de châssis VIN',
+        'Options pour générer des numéros VIN ISO 3779 lors de la conversion'
+    )
+
+    chassis_group.add_argument(
+        '--generate-chassis',
+        action='store_true',
+        help='Activer la génération automatique de numéros VIN ISO 3779 pour les articles (véhicules)'
+    )
+
+    chassis_group.add_argument(
+        '--chassis-quantity',
+        type=int,
+        default=None,
+        metavar='N',
+        help='[REQUIS avec --generate-chassis] Nombre de châssis VIN à générer'
+    )
+
+    chassis_group.add_argument(
+        '--chassis-wmi',
+        type=str,
+        default=None,
+        metavar='WMI',
+        help='[REQUIS avec --generate-chassis] WMI - World Manufacturer Identifier (3 caractères, ex: LZS pour Apsonic)'
+    )
+
+    chassis_group.add_argument(
+        '--chassis-year',
+        type=int,
+        default=None,
+        metavar='YEAR',
+        help='[REQUIS avec --generate-chassis] Année de fabrication pour VIN (ex: 2025)'
+    )
+
+    chassis_group.add_argument(
+        '--chassis-vds',
+        type=str,
+        default='HCKZS',
+        metavar='VDS',
+        help='VDS - Vehicle Descriptor Section (5 caractères, défaut: HCKZS)'
+    )
+
+    chassis_group.add_argument(
+        '--chassis-plant-code',
+        type=str,
+        default='S',
+        metavar='CODE',
+        help='Code usine pour VIN (1 caractère, défaut: S pour plant standard)'
+    )
+
     args = parser.parse_args()
 
     # Déterminer le mode d'opération
     is_batch_mode = args.batch or args.directory or len(args.pdf_files) > 1 or args.workers > 1
+
+    # Valider et construire la configuration chassis
+    chassis_config = None
+    if args.generate_chassis:
+        # Validation des paramètres requis
+        errors = []
+        if not args.chassis_quantity:
+            errors.append("--chassis-quantity est requis avec --generate-chassis")
+        if not args.chassis_wmi:
+            errors.append("--chassis-wmi est requis avec --generate-chassis")
+        elif len(args.chassis_wmi) != 3:
+            errors.append("--chassis-wmi doit avoir exactement 3 caractères")
+        if not args.chassis_year:
+            errors.append("--chassis-year est requis avec --generate-chassis")
+
+        if errors:
+            for error in errors:
+                print(f"❌ Erreur: {error}", file=sys.stderr)
+            sys.exit(1)
+
+        # Construire la configuration
+        chassis_config = {
+            'generate_chassis': True,
+            'quantity': args.chassis_quantity,
+            'wmi': args.chassis_wmi.upper(),
+            'vds': args.chassis_vds.upper(),
+            'year': args.chassis_year,
+            'plant_code': args.chassis_plant_code.upper(),
+            'ensure_unique': True
+        }
+
+        if args.verbose:
+            print(f"\n🔧 Génération de châssis activée:")
+            print(f"  - Quantité: {chassis_config['quantity']} VIN")
+            print(f"  - WMI: {chassis_config['wmi']}")
+            print(f"  - VDS: {chassis_config['vds']}")
+            print(f"  - Année: {chassis_config['year']}")
+            print(f"  - Code usine: {chassis_config['plant_code']}")
+            print()
 
     if is_batch_mode:
         # MODE BATCH
@@ -217,6 +324,14 @@ Exemples d'utilisation:
             print("Utilisez -d pour un dossier ou spécifiez des fichiers PDF.", file=sys.stderr)
             sys.exit(1)
 
+        # Préparer liste de configs chassis (une config pour tous les fichiers)
+        # Note: En mode batch, on applique la même config chassis à tous les fichiers
+        chassis_configs_list = []
+        if chassis_config:
+            # On va créer une liste avec la même config répétée
+            # Le nombre sera ajusté automatiquement par BatchProcessor
+            chassis_configs_list = [chassis_config]  # Un seul élément, sera répliqué si nécessaire
+
         # Créer la configuration batch
         config = BatchConfig(
             input_paths=input_paths,
@@ -226,7 +341,8 @@ Exemples d'utilisation:
             workers=args.workers,
             continue_on_error=True,
             verbose=args.verbose,
-            progress_bar=not args.no_progress
+            progress_bar=not args.no_progress,
+            chassis_configs=chassis_configs_list
         )
 
         # Exécuter le traitement batch
@@ -276,7 +392,8 @@ Exemples d'utilisation:
             args.output if args.output != 'output' else None,
             args.verbose,
             taux_douane=args.taux_douane,
-            rapport_paiement=args.rapport_paiement
+            rapport_paiement=args.rapport_paiement,
+            chassis_config=chassis_config
         )
         sys.exit(0 if success else 1)
 

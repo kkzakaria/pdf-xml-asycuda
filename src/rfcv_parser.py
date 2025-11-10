@@ -24,7 +24,13 @@ logger = logging.getLogger(__name__)
 class RFCVParser:
     """Parser pour documents RFCV"""
 
-    def __init__(self, pdf_path: str, taux_douane: Optional[float] = None, rapport_paiement: Optional[str] = None):
+    def __init__(
+        self,
+        pdf_path: str,
+        taux_douane: Optional[float] = None,
+        rapport_paiement: Optional[str] = None,
+        chassis_config: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialise le parser
 
@@ -32,12 +38,35 @@ class RFCVParser:
             pdf_path: Chemin vers le PDF RFCV
             taux_douane: Taux de change douanier pour calcul assurance (format: 566.6700)
             rapport_paiement: Numéro de rapport de paiement/quittance Trésor (format: 25P2003J)
+            chassis_config: Configuration pour génération automatique de châssis VIN
+                           Format: {'generate_chassis': True, 'quantity': 180, 'wmi': 'LZS',
+                                   'vds': 'HCKZS', 'year': 2025, 'plant_code': 'S',
+                                   'ensure_unique': True}
         """
         self.pdf_path = pdf_path
         self.taux_douane = taux_douane
         self.rapport_paiement = rapport_paiement
+        self.chassis_config = chassis_config
         self.text = ""
         self.tables = []
+
+        # Initialiser factory de génération de châssis si activée
+        self.chassis_factory = None
+        self._chassis_counter = 0
+
+        if chassis_config and chassis_config.get('generate_chassis'):
+            try:
+                from chassis_generator import ChassisFactory
+                self.chassis_factory = ChassisFactory(
+                    ensure_unique=chassis_config.get('ensure_unique', True)
+                )
+                logger.info(
+                    f"Génération de châssis activée: {chassis_config.get('quantity')} VIN "
+                    f"(WMI: {chassis_config.get('wmi')}, Année: {chassis_config.get('year')})"
+                )
+            except ImportError as e:
+                logger.error(f"Impossible d'importer ChassisFactory: {e}")
+                self.chassis_factory = None
 
     def parse(self) -> RFCVData:
         """
@@ -657,6 +686,74 @@ class RFCVParser:
 
         return containers
 
+    def _generate_chassis_for_article(
+        self,
+        article_number: int,
+        hs_code: str
+    ) -> Optional[str]:
+        """
+        Génère un VIN ISO 3779 pour un article
+
+        Cette méthode génère un numéro VIN unique pour chaque article,
+        en utilisant le ChassisFactory initialisé avec la configuration fournie.
+
+        Args:
+            article_number: Numéro séquentiel de l'article (utilisé pour la séquence VIN)
+            hs_code: Code HS de l'article (ex: 87042110) pour contexte logging
+
+        Returns:
+            VIN ISO 3779 généré (17 caractères) ou None si erreur
+
+        Raises:
+            None (erreurs loggées, retourne None en cas d'échec)
+
+        Example:
+            >>> chassis = self._generate_chassis_for_article(1, "87042110")
+            >>> print(chassis)
+            'LZSHCKZS3SS000001'  # VIN ISO 3779 avec checksum valide
+        """
+        if not self.chassis_factory:
+            logger.error(f"Article {article_number}: ChassisFactory non initialisé")
+            return None
+
+        if not self.chassis_config:
+            logger.error(f"Article {article_number}: Configuration chassis manquante")
+            return None
+
+        config = self.chassis_config
+
+        try:
+            # Générer VIN ISO 3779 unique avec séquence auto-incrémentée
+            vin = self.chassis_factory.create_unique_vin(
+                wmi=config['wmi'],
+                vds=config.get('vds', 'HCKZS'),
+                year=config['year'],
+                plant=config.get('plant_code', 'S')
+            )
+
+            logger.debug(
+                f"Article {article_number} (HS {hs_code[:4]}): "
+                f"VIN généré - {vin}"
+            )
+
+            return vin
+
+        except KeyError as e:
+            logger.error(
+                f"Article {article_number}: Paramètre manquant dans config: {e}"
+            )
+            return None
+        except ValueError as e:
+            logger.error(
+                f"Article {article_number}: Valeur invalide pour génération VIN: {e}"
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                f"Article {article_number}: Erreur inattendue génération VIN: {e}"
+            )
+            return None
+
     def _parse_items(self) -> List[Item]:
         """Parse la liste des articles"""
         items = []
@@ -722,28 +819,67 @@ class RFCVParser:
             marks2_value = None
 
             if chassis_info['required']:
-                # Tenter d'extraire le châssis
-                chassis_number = self._extract_chassis_number(raw_description)
+                # Mode génération de châssis activé
+                if self.chassis_config and self.chassis_config.get('generate_chassis'):
+                    # Incrémenter compteur et générer VIN
+                    self._chassis_counter += 1
 
-                if chassis_number:
-                    # Châssis trouvé: nettoyer la description
-                    goods_description_clean = raw_description.replace(chassis_number, '').strip()
-                    goods_description_clean = re.sub(r'\s+', ' ', goods_description_clean)
+                    # Limiter la génération au nombre spécifié
+                    if self._chassis_counter <= self.chassis_config.get('quantity', 0):
+                        chassis_number = self._generate_chassis_for_article(
+                            article_number=self._chassis_counter,
+                            hs_code=hs_code_clean
+                        )
 
-                    # Format ASYCUDA: "CH: XXXXX"
-                    marks2_value = f"CH: {chassis_number}"
+                        if chassis_number:
+                            # Châssis VIN généré avec succès
+                            # Note: On garde la description COMPLÈTE, on ne nettoie pas
+                            goods_description_clean = raw_description
+                            marks2_value = f"CH: {chassis_number}"
 
-                    logger.info(
-                        f"Article {match.group(1)}: Châssis détecté ({chassis_info['category']}) "
-                        f"- {chassis_number}"
-                    )
+                            logger.info(
+                                f"Article {match.group(1)}: Châssis VIN généré #{self._chassis_counter} "
+                                f"({chassis_info['category']}) - {chassis_number}"
+                            )
+                        else:
+                            # Échec génération
+                            logger.error(
+                                f"Article {match.group(1)}: Échec génération châssis VIN #{self._chassis_counter}"
+                            )
+                            chassis_number = None
+                            marks2_value = None
+                    else:
+                        # Nombre maximal de châssis atteint
+                        logger.warning(
+                            f"Article {match.group(1)}: Nombre maximal de châssis atteint "
+                            f"({self.chassis_config.get('quantity')}), article sans châssis"
+                        )
+                        chassis_number = None
+                        marks2_value = None
+
                 else:
-                    # ⚠️ Châssis attendu mais non trouvé
-                    logger.warning(
-                        f"Article {match.group(1)}: Code HS {hs_code_clean[:4]} nécessite un châssis "
-                        f"({chassis_info['category']}, confiance: {chassis_info['confidence']:.0%}) "
-                        f"mais aucun numéro détecté dans: {raw_description[:60]}..."
-                    )
+                    # Mode normal: extraction depuis PDF (comportement actuel)
+                    chassis_number = self._extract_chassis_number(raw_description)
+
+                    if chassis_number:
+                        # Châssis trouvé: nettoyer la description
+                        goods_description_clean = raw_description.replace(chassis_number, '').strip()
+                        goods_description_clean = re.sub(r'\s+', ' ', goods_description_clean)
+
+                        # Format ASYCUDA: "CH: XXXXX"
+                        marks2_value = f"CH: {chassis_number}"
+
+                        logger.info(
+                            f"Article {match.group(1)}: Châssis détecté ({chassis_info['category']}) "
+                            f"- {chassis_number}"
+                        )
+                    else:
+                        # ⚠️ Châssis attendu mais non trouvé
+                        logger.warning(
+                            f"Article {match.group(1)}: Code HS {hs_code_clean[:4]} nécessite un châssis "
+                            f"({chassis_info['category']}, confiance: {chassis_info['confidence']:.0%}) "
+                            f"mais aucun numéro détecté dans: {raw_description[:60]}..."
+                        )
 
             # Description finale
             item.goods_description = goods_description_clean

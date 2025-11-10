@@ -13,7 +13,7 @@ services:
     environment:
       # API Configuration
       - API_TITLE=${API_TITLE:-API Convertisseur PDF RFCV → XML ASYCUDA}
-      - API_VERSION=${API_VERSION:-1.0.0}
+      - API_VERSION=${API_VERSION:-2.1.0}
       - API_DEBUG=${API_DEBUG:-False}
 
       # Server Configuration
@@ -58,7 +58,7 @@ services:
 
     labels:
       - "com.pdf-xml-asycuda.service=api"
-      - "com.pdf-xml-asycuda.version=${API_VERSION:-1.0.0}"
+      - "com.pdf-xml-asycuda.version=${API_VERSION:-2.1.0}"
 
     logging:
       driver: "json-file"

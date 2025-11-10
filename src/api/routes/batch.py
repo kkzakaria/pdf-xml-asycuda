@@ -21,7 +21,7 @@ from ..core.rate_limit import limiter, RateLimits
 router = APIRouter(prefix="/api/v1/batch", tags=["Batch"])
 
 
-async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: List[float], output_dir: str, workers: int):
+async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: List[float], output_dir: str, workers: int, chassis_configs: List[dict] = None):
     """Tâche de traitement batch asynchrone"""
 
     # Mettre à jour le status à PROCESSING
@@ -35,6 +35,7 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: L
     results = batch_service.process_files(
         pdf_files=pdf_paths,
         taux_douanes=taux_douanes,
+        chassis_configs=chassis_configs or [],
         output_dir=output_dir,
         workers=workers,
         verbose=False
@@ -56,7 +57,46 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: L
     "",
     response_model=BatchJobResponse,
     summary="Conversion batch de PDFs RFCV",
-    description="Upload plusieurs PDFs RFCV et les convertit en parallèle. **Liste de taux douaniers obligatoire** (un par fichier) pour le calcul de l'assurance.",
+    description="""
+Upload plusieurs PDFs RFCV et les convertit en parallèle avec configuration individuelle par fichier.
+
+### Paramètres requis
+- **files**: Liste de fichiers PDF RFCV (max 50MB chacun)
+- **taux_douanes**: Liste JSON de taux douaniers (un par fichier)
+
+### Paramètres optionnels
+- **chassis_configs**: Liste JSON de configurations chassis (un par fichier ou null)
+- **workers**: Nombre de workers parallèles (1-8, défaut: 4)
+
+### 🚗 Exemple batch avec génération de châssis
+
+**Scénario** : 3 fichiers, dont 2 avec génération de châssis différente
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/batch" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "files=@DOSSIER1.pdf" \\
+  -F "files=@DOSSIER2.pdf" \\
+  -F "files=@DOSSIER3.pdf" \\
+  -F 'taux_douanes=[573.139, 573.139, 580.25]' \\
+  -F 'chassis_configs=[
+    {"generate_chassis":true,"quantity":180,"wmi":"LZS","year":2025},
+    {"generate_chassis":true,"quantity":50,"wmi":"LFV","year":2024},
+    null
+  ]' \\
+  -F "workers=4"
+```
+
+**Résultat** :
+- Fichier 1 : 180 VIN générés (LZS/2025)
+- Fichier 2 : 50 VIN générés (LFV/2024)
+- Fichier 3 : Détection automatique des châssis existants
+
+### Workflow batch
+1. **Upload** → Reçoit `batch_id` immédiatement
+2. **Status** → GET `/batch/{batch_id}/status` pour progression
+3. **Results** → GET `/batch/{batch_id}/results` quand terminé
+    """,
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.BATCH)
@@ -65,6 +105,7 @@ async def batch_convert(
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(..., description="Fichiers PDF à convertir"),
     taux_douanes: str = Form(..., description="Liste JSON de taux douaniers (ex: [573.1390, 580.2500])"),
+    chassis_configs: str = Form(None, description="Liste JSON de configurations chassis (ex: [{\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"year\": 2025}, null]). Optionnel - un par fichier ou null."),
     workers: int = Body(default=4, ge=1, le=8, description="Nombre de workers parallèles")
 ):
     """
@@ -72,6 +113,7 @@ async def batch_convert(
 
     - **files**: Liste de fichiers PDF à convertir
     - **taux_douanes**: Liste de taux douaniers (un par fichier, format JSON)
+    - **chassis_configs**: Liste de configurations chassis (optionnel, un par fichier ou null)
     - **workers**: Nombre de workers pour traitement parallèle (1-8)
 
     Retourne un batch_id pour suivre la progression
@@ -109,6 +151,38 @@ async def batch_convert(
                 detail=f"Taux invalide pour le fichier {i+1}: {taux} (doit être > 0)"
             )
 
+    # Parser les configurations chassis (optionnel)
+    chassis_configs_list = []
+    if chassis_configs:
+        try:
+            import json
+            chassis_configs_list = json.loads(chassis_configs)
+            if not isinstance(chassis_configs_list, list):
+                raise ValueError("chassis_configs doit être une liste JSON")
+
+            # Valider que le nombre de configs correspond ou est vide
+            if len(chassis_configs_list) > 0 and len(chassis_configs_list) != len(files):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Le nombre de configs chassis ({len(chassis_configs_list)}) doit correspondre au nombre de fichiers ({len(files)}) ou être vide"
+                )
+
+            # Valider chaque config non-null
+            for i, config in enumerate(chassis_configs_list):
+                if config is not None and config.get('generate_chassis'):
+                    required_fields = ['quantity', 'wmi', 'year']
+                    missing = [f for f in required_fields if f not in config]
+                    if missing:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Config chassis {i+1}: champs requis manquants: {', '.join(missing)}"
+                        )
+        except (json.JSONDecodeError, ValueError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Format chassis_configs invalide: {str(e)}"
+            )
+
     # Générer un batch ID
     batch_id = storage_service.generate_batch_id()
 
@@ -130,7 +204,8 @@ async def batch_convert(
             pdf_paths=pdf_paths,
             taux_douanes=taux_list,
             output_dir=f"output/{batch_id}",
-            workers=workers
+            workers=workers,
+            chassis_configs=chassis_configs_list
         )
 
         return BatchJobResponse(

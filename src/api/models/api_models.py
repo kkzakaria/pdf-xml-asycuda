@@ -24,11 +24,68 @@ class ReportFormat(str, Enum):
 
 # ============= Request Models =============
 
+class ChassisConfig(BaseModel):
+    """Configuration pour génération automatique de châssis VIN"""
+    generate_chassis: bool = Field(
+        ...,
+        description="Activer la génération automatique de châssis VIN ISO 3779"
+    )
+    quantity: int = Field(
+        ...,
+        gt=0,
+        description="Nombre de châssis VIN à générer (obligatoire si generate_chassis=true)"
+    )
+    wmi: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="World Manufacturer Identifier - Code fabricant 3 caractères (ex: LZS, LFV)"
+    )
+    year: int = Field(
+        ...,
+        ge=1980,
+        le=2055,
+        description="Année de fabrication pour code année ISO 3779 (ex: 2025)"
+    )
+    vds: str = Field(
+        default="HCKZS",
+        min_length=5,
+        max_length=5,
+        description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)"
+    )
+    plant_code: str = Field(
+        default="S",
+        min_length=1,
+        max_length=1,
+        description="Code usine de fabrication - 1 caractère (défaut: S)"
+    )
+    ensure_unique: bool = Field(
+        default=True,
+        description="Garantir l'unicité des VIN via persistance (recommandé: true)"
+    )
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "generate_chassis": True,
+            "quantity": 180,
+            "wmi": "LZS",
+            "year": 2025,
+            "vds": "HCKZS",
+            "plant_code": "S",
+            "ensure_unique": True
+        }
+    })
+
+
 class ConvertRequest(BaseModel):
     """Requête de conversion (pour async avec metadata)"""
     filename: str
     taux_douane: float = Field(..., gt=0, description="Taux de change douanier pour calcul assurance (format: 573.1390)")
     verbose: bool = False
+    chassis_config: Optional[ChassisConfig] = Field(
+        None,
+        description="Configuration optionnelle pour génération automatique de châssis VIN"
+    )
 
 
 class BatchConvertRequest(BaseModel):
