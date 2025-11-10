@@ -1,6 +1,7 @@
 """
 Routes de conversion
 """
+import json
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, BackgroundTasks, Depends, Request
 from fastapi.responses import FileResponse
@@ -35,7 +36,8 @@ async def convert_pdf(
     request: Request,
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
     taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
-    rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes.")
+    rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."),
+    chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel.")
 ):
     """
     Conversion synchrone PDF → XML
@@ -65,13 +67,34 @@ async def convert_pdf(
         # Générer le chemin de sortie
         output_path = storage_service.get_output_path(pdf_path)
 
+        # Parser la configuration chassis si fournie
+        chassis_config_dict = None
+        if chassis_config:
+            try:
+                chassis_config_dict = json.loads(chassis_config)
+                # Valider les champs requis si generate_chassis est activé
+                if chassis_config_dict.get('generate_chassis'):
+                    required_fields = ['quantity', 'wmi', 'year']
+                    missing = [f for f in required_fields if f not in chassis_config_dict]
+                    if missing:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Champs requis manquants dans chassis_config: {', '.join(missing)}"
+                        )
+            except json.JSONDecodeError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Format JSON invalide pour chassis_config: {str(e)}"
+                )
+
         # Convertir
         result = conversion_service.convert_pdf_to_xml(
             pdf_path=pdf_path,
             output_path=output_path,
             verbose=False,
             taux_douane=taux_douane,
-            rapport_paiement=rapport_paiement
+            rapport_paiement=rapport_paiement,
+            chassis_config=chassis_config_dict
         )
 
         if not result['success']:
@@ -115,7 +138,7 @@ async def convert_pdf(
         )
 
 
-async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float, rapport_paiement: Optional[str] = None):
+async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float, rapport_paiement: Optional[str] = None, chassis_config: Optional[dict] = None):
     """Tâche de conversion asynchrone (background)"""
 
     # Mettre à jour le status à PROCESSING
@@ -132,7 +155,8 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
         output_path=output_path,
         verbose=False,
         taux_douane=taux_douane,
-        rapport_paiement=rapport_paiement
+        rapport_paiement=rapport_paiement,
+        chassis_config=chassis_config
     )
 
     # Mettre à jour le job avec le résultat
@@ -167,7 +191,8 @@ async def convert_pdf_async(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
     taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
-    rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes.")
+    rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."),
+    chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel.")
 ):
     """
     Conversion asynchrone PDF → XML
@@ -197,6 +222,26 @@ async def convert_pdf_async(
         # Générer le chemin de sortie
         output_path = storage_service.get_output_path(pdf_path)
 
+        # Parser la configuration chassis si fournie
+        chassis_config_dict = None
+        if chassis_config:
+            try:
+                chassis_config_dict = json.loads(chassis_config)
+                # Valider les champs requis si generate_chassis est activé
+                if chassis_config_dict.get('generate_chassis'):
+                    required_fields = ['quantity', 'wmi', 'year']
+                    missing = [f for f in required_fields if f not in chassis_config_dict]
+                    if missing:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Champs requis manquants dans chassis_config: {', '.join(missing)}"
+                        )
+            except json.JSONDecodeError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Format JSON invalide pour chassis_config: {str(e)}"
+                )
+
         # Créer le job
         job = job_service.create_job(
             job_id=job_id,
@@ -212,7 +257,8 @@ async def convert_pdf_async(
             pdf_path=pdf_path,
             output_path=output_path,
             taux_douane=taux_douane,
-            rapport_paiement=rapport_paiement
+            rapport_paiement=rapport_paiement,
+            chassis_config=chassis_config_dict
         )
 
         return ConvertAsyncResponse(

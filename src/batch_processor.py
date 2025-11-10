@@ -45,6 +45,7 @@ class BatchConfig:
     verbose: bool = False
     progress_bar: bool = True
     taux_douanes: List[float] = field(default_factory=list)  # Taux douaniers par fichier
+    chassis_configs: List[Optional[Dict[str, Any]]] = field(default_factory=list)  # Configs chassis par fichier
 
     def __post_init__(self):
         """Validation de la configuration"""
@@ -105,7 +106,7 @@ class BatchProcessor:
         return pdf_files
 
     @staticmethod
-    def _process_single_file(pdf_path: Path, output_dir: str, verbose: bool = False, taux_douane: Optional[float] = None) -> BatchResult:
+    def _process_single_file(pdf_path: Path, output_dir: str, verbose: bool = False, taux_douane: Optional[float] = None, chassis_config: Optional[Dict[str, Any]] = None) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -114,6 +115,7 @@ class BatchProcessor:
             output_dir: Dossier de sortie
             verbose: Mode verbeux
             taux_douane: Taux de change douanier pour calcul assurance (optionnel)
+            chassis_config: Configuration pour génération automatique châssis VIN (optionnel)
 
         Returns:
             Résultat du traitement
@@ -131,7 +133,7 @@ class BatchProcessor:
             output_file.parent.mkdir(parents=True, exist_ok=True)
 
             # Parser le PDF
-            parser = RFCVParser(str(pdf_path), taux_douane=taux_douane)
+            parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config)
             rfcv_data = parser.parse()
 
             # Générer le XML
@@ -184,12 +186,15 @@ class BatchProcessor:
         for i, pdf_file in enumerate(iterator):
             # Récupérer le taux douanier pour ce fichier (si disponible)
             taux_douane = self.config.taux_douanes[i] if i < len(self.config.taux_douanes) else None
+            # Récupérer la config chassis pour ce fichier (si disponible)
+            chassis_config = self.config.chassis_configs[i] if i < len(self.config.chassis_configs) else None
 
             result = self._process_single_file(
                 pdf_file,
                 self.config.output_dir,
                 self.config.verbose,
-                taux_douane=taux_douane
+                taux_douane=taux_douane,
+                chassis_config=chassis_config
             )
             results.append(result)
 
@@ -213,14 +218,15 @@ class BatchProcessor:
         results = []
 
         with ProcessPoolExecutor(max_workers=self.config.workers) as executor:
-            # Soumettre tous les jobs avec les taux douaniers
+            # Soumettre tous les jobs avec les taux douaniers et configs chassis
             future_to_pdf = {
                 executor.submit(
                     self._process_single_file,
                     pdf_file,
                     self.config.output_dir,
                     self.config.verbose,
-                    taux_douane=self.config.taux_douanes[i] if i < len(self.config.taux_douanes) else None
+                    taux_douane=self.config.taux_douanes[i] if i < len(self.config.taux_douanes) else None,
+                    chassis_config=self.config.chassis_configs[i] if i < len(self.config.chassis_configs) else None
                 ): pdf_file
                 for i, pdf_file in enumerate(pdf_files)
             }

@@ -60,7 +60,8 @@ class BatchService:
     def process_files(
         pdf_files: List[str],
         taux_douanes: List[float],
-        output_dir: str,
+        chassis_configs: List[Dict[str, Any]] = None,
+        output_dir: str = "output",
         workers: int = 4,
         verbose: bool = False
     ) -> Dict[str, Any]:
@@ -70,6 +71,7 @@ class BatchService:
         Args:
             pdf_files: Liste des fichiers PDF à traiter
             taux_douanes: Liste des taux douaniers (un par fichier)
+            chassis_configs: Liste des configs chassis (un par fichier, optionnel)
             output_dir: Dossier de sortie
             workers: Nombre de workers
             verbose: Mode verbeux
@@ -77,7 +79,7 @@ class BatchService:
         Returns:
             Résultats du batch
         """
-        # Créer la configuration avec les taux douaniers
+        # Créer la configuration avec les taux douaniers et configs chassis
         config = BatchConfig(
             input_paths=pdf_files,
             output_dir=output_dir,
@@ -87,7 +89,8 @@ class BatchService:
             continue_on_error=True,
             verbose=verbose,
             progress_bar=False,  # Désactivé pour l'API
-            taux_douanes=taux_douanes  # Ajouter les taux
+            taux_douanes=taux_douanes,  # Ajouter les taux
+            chassis_configs=chassis_configs or []  # Ajouter les configs chassis
         )
 
         # Exécuter le batch
