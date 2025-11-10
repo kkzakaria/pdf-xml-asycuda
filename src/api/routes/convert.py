@@ -28,7 +28,43 @@ router = APIRouter(prefix="/api/v1/convert", tags=["Conversion"])
     "",
     response_model=ConvertResponse,
     summary="Conversion synchrone PDF → XML ASYCUDA",
-    description="Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
+    description="""
+Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement.
+
+### Paramètres requis
+- **file**: Fichier PDF RFCV (max 50MB)
+- **taux_douane**: Taux de change douanier (format: 573.1390)
+
+### Paramètres optionnels
+- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)
+- **chassis_config**: Configuration JSON pour génération automatique de châssis VIN
+
+### 🚗 Exemple de génération de châssis
+
+**Configuration JSON** :
+```json
+{
+  "generate_chassis": true,
+  "quantity": 180,
+  "wmi": "LZS",
+  "year": 2025,
+  "vds": "HCKZS",
+  "plant_code": "S",
+  "ensure_unique": true
+}
+```
+
+**Exemple curl avec génération de 180 châssis** :
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "file=@DOSSIER.pdf" \\
+  -F "taux_douane=573.139" \\
+  -F 'chassis_config={"generate_chassis":true,"quantity":180,"wmi":"LZS","year":2025}'
+```
+
+**Résultat** : VIN générés (LZSHCKZS0SS000001, LZSHCKZS2SS000002...) dans documents code 6122.
+    """,
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
@@ -182,7 +218,33 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
     "/async",
     response_model=ConvertAsyncResponse,
     summary="Conversion asynchrone PDF → XML ASYCUDA",
-    description="Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
+    description="""
+Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard.
+
+### Paramètres requis
+- **file**: Fichier PDF RFCV (max 50MB)
+- **taux_douane**: Taux de change douanier (format: 573.1390)
+
+### Paramètres optionnels
+- **rapport_paiement**: Numéro de quittance du Trésor Public
+- **chassis_config**: Configuration JSON pour génération automatique de châssis VIN
+
+### Workflow asynchrone
+1. **Upload** → Reçoit `job_id` immédiatement
+2. **Status** → GET `/convert/{job_id}` pour vérifier progression
+3. **Download** → GET `/convert/{job_id}/download` quand terminé
+
+### 🚗 Génération de châssis en mode asynchrone
+
+Même format de configuration que le mode synchrone :
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert/async" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "file=@DOSSIER.pdf" \\
+  -F "taux_douane=573.139" \\
+  -F 'chassis_config={"generate_chassis":true,"quantity":50,"wmi":"LFV","year":2024}'
+```
+    """,
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.UPLOAD_ASYNC)

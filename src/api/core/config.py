@@ -12,8 +12,44 @@ class Settings(BaseSettings):
 
     # API Configuration
     api_title: str = "API Convertisseur PDF RFCV → XML ASYCUDA"
-    version: str = "1.1.0"  # Lit depuis API_VERSION avec env_prefix
-    api_description: str = "API REST pour convertir les documents RFCV PDF en XML ASYCUDA"
+    version: str = "2.1.0"  # Lit depuis API_VERSION avec env_prefix
+    api_description: str = """
+API REST pour convertir les documents PDF RFCV (Rapport Final de Contrôle et de Vérification)
+en fichiers XML compatibles ASYCUDA (Automated System for Customs Data) pour les douanes ivoiriennes.
+
+## Fonctionnalités principales
+
+### 🚗 Génération automatique de châssis VIN (v2.1)
+- **VIN ISO 3779**: Génération de numéros de châssis conformes (17 caractères avec checksum)
+- **Unicité garantie**: Persistance des séquences pour éviter les doublons
+- **Personnalisation**: WMI, VDS, année de fabrication, code d'usine configurables
+- **Limitation**: Contrôle du nombre de VIN générés par conversion
+
+### 📄 Conversion de documents
+- **Extraction PDF**: Analyse automatique des sections RFCV (24 sections)
+- **Validation**: Vérification de la conformité des données extraites
+- **XML ASYCUDA**: Génération XML compatible avec le système douanier
+
+### 🔍 Détection de châssis
+- **Codes HS**: Identification automatique des véhicules (8701-8716, 8427, 8429)
+- **Patterns**: Extraction des VIN et numéros de châssis existants
+- **Validation**: Vérification format ISO 3779 (17 caractères, pas de I/O/Q)
+
+### ⚖️ Calculs douaniers
+- **Assurance**: Formule douanière avec taux de change variable
+- **Répartition proportionnelle**: Distribution des montants globaux par article
+- **Regroupement**: Consolidation des articles par code HS
+
+### 🔄 Traitement batch
+- **Parallélisation**: Traitement concurrent avec workers configurables
+- **Configuration par fichier**: Taux douaniers et configs châssis individuels
+- **Rapports**: Génération de rapports JSON/CSV/Markdown
+
+## Authentification
+
+Tous les endpoints nécessitent une clé API dans le header `X-API-Key`.
+Pour obtenir une clé, contactez l'administrateur du service.
+"""
 
     # Server Configuration
     host: str = "0.0.0.0"

@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "API Convertisseur PDF RFCV → XML ASYCUDA",
-    "description": "API REST pour convertir les documents RFCV PDF en XML ASYCUDA",
-    "version": "1.1.0"
+    "description": "\nAPI REST pour convertir les documents PDF RFCV (Rapport Final de Contrôle et de Vérification)\nen fichiers XML compatibles ASYCUDA (Automated System for Customs Data) pour les douanes ivoiriennes.\n\n## Fonctionnalités principales\n\n### 🚗 Génération automatique de châssis VIN (v2.1)\n- **VIN ISO 3779**: Génération de numéros de châssis conformes (17 caractères avec checksum)\n- **Unicité garantie**: Persistance des séquences pour éviter les doublons\n- **Personnalisation**: WMI, VDS, année de fabrication, code d'usine configurables\n- **Limitation**: Contrôle du nombre de VIN générés par conversion\n\n### 📄 Conversion de documents\n- **Extraction PDF**: Analyse automatique des sections RFCV (24 sections)\n- **Validation**: Vérification de la conformité des données extraites\n- **XML ASYCUDA**: Génération XML compatible avec le système douanier\n\n### 🔍 Détection de châssis\n- **Codes HS**: Identification automatique des véhicules (8701-8716, 8427, 8429)\n- **Patterns**: Extraction des VIN et numéros de châssis existants\n- **Validation**: Vérification format ISO 3779 (17 caractères, pas de I/O/Q)\n\n### ⚖️ Calculs douaniers\n- **Assurance**: Formule douanière avec taux de change variable\n- **Répartition proportionnelle**: Distribution des montants globaux par article\n- **Regroupement**: Consolidation des articles par code HS\n\n### 🔄 Traitement batch\n- **Parallélisation**: Traitement concurrent avec workers configurables\n- **Configuration par fichier**: Taux douaniers et configs châssis individuels\n- **Rapports**: Génération de rapports JSON/CSV/Markdown\n\n## Authentification\n\nTous les endpoints nécessitent une clé API dans le header `X-API-Key`.\nPour obtenir une clé, contactez l'administrateur du service.\n",
+    "version": "2.1.0"
   },
   "paths": {
     "/api/v1/convert": {
@@ -12,7 +12,7 @@
           "Conversion"
         ],
         "summary": "Conversion synchrone PDF → XML ASYCUDA",
-        "description": "Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
+        "description": "Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement.\n\n### Paramètres requis\n- **file**: Fichier PDF RFCV (max 50MB)\n- **taux_douane**: Taux de change douanier (format: 573.1390)\n\n### Paramètres optionnels\n- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)\n- **chassis_config**: Configuration JSON pour génération automatique de châssis VIN\n\n### 🚗 Exemple de génération de châssis\n\n**Configuration JSON** :\n```json\n{\n  \"generate_chassis\": true,\n  \"quantity\": 180,\n  \"wmi\": \"LZS\",\n  \"year\": 2025,\n  \"vds\": \"HCKZS\",\n  \"plant_code\": \"S\",\n  \"ensure_unique\": true\n}\n```\n\n**Exemple curl avec génération de 180 châssis** :\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F 'chassis_config={\"generate_chassis\":true,\"quantity\":180,\"wmi\":\"LZS\",\"year\":2025}'\n```\n\n**Résultat** : VIN générés (LZSHCKZS0SS000001, LZSHCKZS2SS000002...) dans documents code 6122.",
         "operationId": "convert_pdf_api_v1_convert_post",
         "requestBody": {
           "content": {
@@ -59,7 +59,7 @@
           "Conversion"
         ],
         "summary": "Conversion asynchrone PDF → XML ASYCUDA",
-        "description": "Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard. **Taux douanier obligatoire** pour le calcul de l'assurance. Rapport de paiement optionnel.",
+        "description": "Upload un PDF RFCV et retourne un job_id pour récupérer le résultat plus tard.\n\n### Paramètres requis\n- **file**: Fichier PDF RFCV (max 50MB)\n- **taux_douane**: Taux de change douanier (format: 573.1390)\n\n### Paramètres optionnels\n- **rapport_paiement**: Numéro de quittance du Trésor Public\n- **chassis_config**: Configuration JSON pour génération automatique de châssis VIN\n\n### Workflow asynchrone\n1. **Upload** → Reçoit `job_id` immédiatement\n2. **Status** → GET `/convert/{job_id}` pour vérifier progression\n3. **Download** → GET `/convert/{job_id}/download` quand terminé\n\n### 🚗 Génération de châssis en mode asynchrone\n\nMême format de configuration que le mode synchrone :\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert/async\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F 'chassis_config={\"generate_chassis\":true,\"quantity\":50,\"wmi\":\"LFV\",\"year\":2024}'\n```",
         "operationId": "convert_pdf_async_api_v1_convert_async_post",
         "requestBody": {
           "content": {
@@ -241,7 +241,7 @@
           "Batch"
         ],
         "summary": "Conversion batch de PDFs RFCV",
-        "description": "Upload plusieurs PDFs RFCV et les convertit en parallèle. **Liste de taux douaniers obligatoire** (un par fichier) pour le calcul de l'assurance.",
+        "description": "Upload plusieurs PDFs RFCV et les convertit en parallèle avec configuration individuelle par fichier.\n\n### Paramètres requis\n- **files**: Liste de fichiers PDF RFCV (max 50MB chacun)\n- **taux_douanes**: Liste JSON de taux douaniers (un par fichier)\n\n### Paramètres optionnels\n- **chassis_configs**: Liste JSON de configurations chassis (un par fichier ou null)\n- **workers**: Nombre de workers parallèles (1-8, défaut: 4)\n\n### 🚗 Exemple batch avec génération de châssis\n\n**Scénario** : 3 fichiers, dont 2 avec génération de châssis différente\n\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/batch\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"files=@DOSSIER1.pdf\" \\\n  -F \"files=@DOSSIER2.pdf\" \\\n  -F \"files=@DOSSIER3.pdf\" \\\n  -F 'taux_douanes=[573.139, 573.139, 580.25]' \\\n  -F 'chassis_configs=[\n    {\"generate_chassis\":true,\"quantity\":180,\"wmi\":\"LZS\",\"year\":2025},\n    {\"generate_chassis\":true,\"quantity\":50,\"wmi\":\"LFV\",\"year\":2024},\n    null\n  ]' \\\n  -F \"workers=4\"\n```\n\n**Résultat** :\n- Fichier 1 : 180 VIN générés (LZS/2025)\n- Fichier 2 : 50 VIN générés (LFV/2024)\n- Fichier 3 : Détection automatique des châssis existants\n\n### Workflow batch\n1. **Upload** → Reçoit `batch_id` immédiatement\n2. **Status** → GET `/batch/{batch_id}/status` pour progression\n3. **Results** → GET `/batch/{batch_id}/results` quand terminé",
         "operationId": "batch_convert_api_v1_batch_post",
         "requestBody": {
           "content": {
@@ -857,6 +857,11 @@
             "title": "Taux Douanes",
             "description": "Liste JSON de taux douaniers (ex: [573.1390, 580.2500])"
           },
+          "chassis_configs": {
+            "type": "string",
+            "title": "Chassis Configs",
+            "description": "Liste JSON de configurations chassis (ex: [{\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"year\": 2025}, null]). Optionnel - un par fichier ou null."
+          },
           "workers": {
             "type": "integer",
             "maximum": 8.0,
@@ -898,6 +903,18 @@
             ],
             "title": "Rapport Paiement",
             "description": "Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."
+          },
+          "chassis_config": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chassis Config",
+            "description": "Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."
           }
         },
         "type": "object",
@@ -932,6 +949,18 @@
             ],
             "title": "Rapport Paiement",
             "description": "Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."
+          },
+          "chassis_config": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chassis Config",
+            "description": "Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."
           }
         },
         "type": "object",

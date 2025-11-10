@@ -540,6 +540,267 @@ if hasattr(self, 'rapport_paiement') and self.rapport_paiement:
 
 The system accepts any string value without format validation, allowing for variations in Treasury receipt formats.
 
+## Automatic VIN Chassis Generation (v2.1)
+
+The system supports automatic generation of VIN ISO 3779 chassis numbers (17 characters with checksum) during RFCV to XML conversion.
+
+### What is VIN Chassis Generation?
+
+**VIN ISO 3779 Generation** allows creating unique Vehicle Identification Numbers compliant with ISO 3779 standard:
+- **Format**: 17 characters (no I, O, Q)
+- **Structure**: WMI (3) + VDS (5) + Year (1) + Plant (1) + Checksum (1) + Sequence (6)
+- **Uniqueness**: Persistent sequences guarantee no duplicates across conversions
+- **Thread-safe**: Concurrent generation supported
+
+**Example VIN**: `LZSHCKZS0SS000001`
+- `LZS`: World Manufacturer Identifier (WMI)
+- `HCKZS`: Vehicle Descriptor Section (VDS)
+- `0`: Checksum digit
+- `S`: Year 2025 (ISO 3779 code)
+- `S`: Plant code
+- `000001`: Sequential number
+
+### Required Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `--generate-chassis` | flag | ✅ Yes | - | Activate automatic generation |
+| `--chassis-quantity` | integer | ✅ Yes | - | Number of VIN to generate |
+| `--chassis-wmi` | string(3) | ✅ Yes | - | World Manufacturer Identifier (ex: LZS, LFV) |
+| `--chassis-year` | integer | ✅ Yes | - | Manufacturing year (1980-2055) |
+| `--chassis-vds` | string(5) | ❌ No | HCKZS | Vehicle Descriptor Section |
+| `--chassis-plant-code` | string(1) | ❌ No | S | Plant manufacturing code |
+
+### CLI Usage
+
+**Basic generation** (180 chassis with LZS/2025):
+```bash
+python converter.py "DOSSIER_18236.pdf" \
+  --taux-douane 573.139 \
+  --generate-chassis \
+  --chassis-quantity 180 \
+  --chassis-wmi LZS \
+  --chassis-year 2025 \
+  -v
+```
+
+**Complete generation** (50 chassis with LFV/2024):
+```bash
+python converter.py "DOSSIER_18237.pdf" \
+  --taux-douane 573.139 \
+  --generate-chassis \
+  --chassis-quantity 50 \
+  --chassis-wmi LFV \
+  --chassis-year 2024 \
+  --chassis-vds BA01A \
+  --chassis-plant-code S \
+  -v
+```
+
+**Batch processing** (first file gets config in CLI mode):
+```bash
+python converter.py RFCV-CHASSIS/FCVR-191.pdf RFCV-CHASSIS/FCVR-193.pdf \
+  --batch \
+  --taux-douane 573.139 \
+  --generate-chassis \
+  --chassis-quantity 75 \
+  --chassis-wmi LFV \
+  --chassis-year 2024 \
+  --workers 2 \
+  -o output/batch_test \
+  -v
+```
+
+**Note**: In CLI batch mode, only the first file receives the chassis configuration. For individual configuration per file, use the API batch endpoint.
+
+### API Usage
+
+**Synchronous conversion with chassis generation**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert" \
+  -H "X-API-Key: votre_cle_api" \
+  -F "file=@DOSSIER_18236.pdf" \
+  -F "taux_douane=573.139" \
+  -F 'chassis_config={"generate_chassis":true,"quantity":180,"wmi":"LZS","year":2025}'
+```
+
+**Asynchronous conversion with chassis generation**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert/async" \
+  -H "X-API-Key: votre_cle_api" \
+  -F "file=@DOSSIER_18237.pdf" \
+  -F "taux_douane=573.139" \
+  -F 'chassis_config={"generate_chassis":true,"quantity":50,"wmi":"LFV","year":2024,"vds":"BA01A"}'
+```
+
+**Batch conversion with individual configs**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/batch" \
+  -H "X-API-Key: votre_cle_api" \
+  -F "files=@DOSSIER1.pdf" \
+  -F "files=@DOSSIER2.pdf" \
+  -F "files=@DOSSIER3.pdf" \
+  -F 'taux_douanes=[573.139, 573.139, 580.25]' \
+  -F 'chassis_configs=[
+    {"generate_chassis":true,"quantity":180,"wmi":"LZS","year":2025},
+    {"generate_chassis":true,"quantity":50,"wmi":"LFV","year":2024},
+    null
+  ]' \
+  -F "workers=4"
+```
+
+**Result**:
+- File 1: 180 VIN generated (LZS/2025)
+- File 2: 50 VIN generated (LFV/2024)
+- File 3: Automatic detection (no generation)
+
+### JSON Configuration Format
+
+**Minimal configuration**:
+```json
+{
+  "generate_chassis": true,
+  "quantity": 180,
+  "wmi": "LZS",
+  "year": 2025
+}
+```
+
+**Complete configuration**:
+```json
+{
+  "generate_chassis": true,
+  "quantity": 180,
+  "wmi": "LZS",
+  "year": 2025,
+  "vds": "HCKZS",
+  "plant_code": "S",
+  "ensure_unique": true
+}
+```
+
+### XML Output Format
+
+For each vehicle with generated VIN, the XML contains:
+
+```xml
+<Item>
+  <!-- Chassis document (code 6122) -->
+  <Attached_documents>
+    <Attached_document_code>6122</Attached_document_code>
+    <Attached_document_name>CHASSIS MOTOS</Attached_document_name>
+    <Attached_document_reference>LZSHCKZS0SS000001</Attached_document_reference>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
+
+  <!-- Chassis in Marks2 with CH: prefix -->
+  <Packages>
+    <Marks1_of_packages>TRICYCLE AP150ZK LZSHCKZS2S8054073</Marks1_of_packages>
+    <Marks2_of_packages>CH: LZSHCKZS0SS000001</Marks2_of_packages>
+  </Packages>
+
+  <!-- Preserved description (original data intact) -->
+  <Goods_description>
+    <Country_of_origin_code>CN</Country_of_origin_code>
+    <Description_of_goods>TRICYCLE AP150ZK LZSHCKZS2S8054073</Description_of_goods>
+  </Goods_description>
+</Item>
+```
+
+**Key points**:
+- ✅ All original RFCV section 26 data preserved
+- ✅ Old chassis remains in description and Marks1
+- ✅ New VIN added separately in document 6122 and Marks2
+- ✅ Double traceability: old + new chassis
+
+### Sequence Persistence
+
+VIN sequences are persisted in `data/chassis_sequences.json`:
+
+```json
+{
+  "LZSHCKZSS": 240,
+  "LFVHCKZSR": 75
+}
+```
+
+**Key**: `WMI + VDS + Year + Plant` (e.g., "LZSHCKZSS" = LZS + HCKZS + S for 2025)
+**Value**: Last sequence number used
+
+**Thread-safety**: Uses `threading.Lock()` for concurrent access
+
+### Implementation Files
+
+**Core Integration**:
+- `src/rfcv_parser.py`: Constructor accepts `chassis_config`, generation logic (lines 27-69, 689-882)
+- `converter.py`: CLI arguments and validation (lines 214-308, 327-388)
+- `src/batch_processor.py`: BatchConfig with `chassis_configs` list (line 48, 109-136)
+
+**API Layer**:
+- `src/api/routes/convert.py`: Sync/async endpoints with JSON parsing (lines 39-97, 217-246)
+- `src/api/routes/batch.py`: Batch endpoint with configs list (lines 56-99)
+- `src/api/services/conversion_service.py`: Service layer parameter passing
+- `src/api/services/batch_service.py`: Batch service with chassis_configs support
+
+**Data Models**:
+- `src/api/models/api_models.py`: ChassisConfig Pydantic model with validation
+
+### Testing
+
+**Manual CLI Tests**: See `claudedocs/chassis_generation_tests.md`
+- Test 1: FCVR-189.pdf (180 chassis generated)
+- Test 2: FCVR-190.pdf (50 chassis with limitation)
+- Test 3: FCVR-194.pdf (10 chassis with sequence continuity)
+- Test 4: Batch mode (2 files, 2 workers, different WMI/year)
+
+**Automated Tests**: 198/198 tests passed (0 regression)
+
+**API Documentation**: See `claudedocs/api_chassis_generation.md`
+- Complete API reference with examples
+- Error handling and troubleshooting
+- Code examples (Python, JavaScript)
+
+**Swagger UI**: http://localhost:8000/docs
+- Interactive documentation with chassis examples
+- Try-it-out functionality with pre-filled configs
+
+### Limitations and Behavior
+
+**Generation Limitation**:
+- System generates exactly `quantity` VIN numbers
+- Articles beyond the limit receive no chassis
+- Warning logged when limit reached
+
+**CLI Batch Mode**:
+- Only the first file receives chassis configuration
+- Other files use automatic detection (existing behavior)
+- **Workaround**: Use API batch endpoint for individual configs per file
+
+**Data Preservation**:
+- All RFCV section 26 data preserved (HS code, origin, FOB, description)
+- Old chassis numbers remain in description
+- New VIN added separately (non-destructive)
+
+### Year Codes (ISO 3779)
+
+| Year | Code | Year | Code | Year | Code |
+|------|------|------|------|------|------|
+| 2024 | R | 2025 | S | 2026 | T |
+| 2027 | V | 2028 | W | 2029 | X |
+| 2030 | Y | 2031 | 1 | 2032 | 2 |
+
+### Performance
+
+**Overhead**: Negligible (<50ms for 180 VIN)
+- VIN calculation: ~0.2ms per chassis
+- Checksum computation: Optimized algorithm
+- JSON persistence: Lightweight file operations
+
+**Conversion Times** (tested):
+- 180 chassis: ~1.2 seconds total
+- 50 chassis: ~0.6 seconds total
+- Batch 2 files (2 workers): ~1.22 seconds total
+
 ## Architecture
 
 ### Core Processing Pipeline

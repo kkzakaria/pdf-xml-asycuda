@@ -57,7 +57,46 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: L
     "",
     response_model=BatchJobResponse,
     summary="Conversion batch de PDFs RFCV",
-    description="Upload plusieurs PDFs RFCV et les convertit en parallèle. **Liste de taux douaniers obligatoire** (un par fichier) pour le calcul de l'assurance.",
+    description="""
+Upload plusieurs PDFs RFCV et les convertit en parallèle avec configuration individuelle par fichier.
+
+### Paramètres requis
+- **files**: Liste de fichiers PDF RFCV (max 50MB chacun)
+- **taux_douanes**: Liste JSON de taux douaniers (un par fichier)
+
+### Paramètres optionnels
+- **chassis_configs**: Liste JSON de configurations chassis (un par fichier ou null)
+- **workers**: Nombre de workers parallèles (1-8, défaut: 4)
+
+### 🚗 Exemple batch avec génération de châssis
+
+**Scénario** : 3 fichiers, dont 2 avec génération de châssis différente
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/batch" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "files=@DOSSIER1.pdf" \\
+  -F "files=@DOSSIER2.pdf" \\
+  -F "files=@DOSSIER3.pdf" \\
+  -F 'taux_douanes=[573.139, 573.139, 580.25]' \\
+  -F 'chassis_configs=[
+    {"generate_chassis":true,"quantity":180,"wmi":"LZS","year":2025},
+    {"generate_chassis":true,"quantity":50,"wmi":"LFV","year":2024},
+    null
+  ]' \\
+  -F "workers=4"
+```
+
+**Résultat** :
+- Fichier 1 : 180 VIN générés (LZS/2025)
+- Fichier 2 : 50 VIN générés (LFV/2024)
+- Fichier 3 : Détection automatique des châssis existants
+
+### Workflow batch
+1. **Upload** → Reçoit `batch_id` immédiatement
+2. **Status** → GET `/batch/{batch_id}/status` pour progression
+3. **Results** → GET `/batch/{batch_id}/results` quand terminé
+    """,
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.BATCH)
