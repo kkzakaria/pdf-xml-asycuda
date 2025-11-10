@@ -22,7 +22,9 @@ services:
 
       # API_VERSION est maintenant injectée automatiquement dans l'image Docker
       # via ARG VERSION au moment du build (depuis les tags Git)
-      # Plus besoin de la définir ici!
+      # ⚠️ IMPORTANT: Ne PAS définir API_VERSION ici ou dans le Dashboard Render !
+      # Les variables d'environnement Render écrasent celles de l'image Docker.
+      # La version est gérée automatiquement par le workflow Docker (tags Git → VERSION build-arg → API_VERSION env)
 
       - key: API_DEBUG
         value: false
