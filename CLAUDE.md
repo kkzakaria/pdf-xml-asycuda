@@ -699,19 +699,19 @@ For each vehicle with generated VIN, the XML contains:
     <Marks2_of_packages>CH: LZSHCKZS0SS000001</Marks2_of_packages>
   </Packages>
 
-  <!-- Preserved description (original data intact) -->
+  <!-- Cleaned description (old chassis removed) -->
   <Goods_description>
     <Country_of_origin_code>CN</Country_of_origin_code>
-    <Description_of_goods>TRICYCLE AP150ZK LZSHCKZS2S8054073</Description_of_goods>
+    <Description_of_goods>TRICYCLE AP150ZK</Description_of_goods>
   </Goods_description>
 </Item>
 ```
 
 **Key points**:
-- ✅ All original RFCV section 26 data preserved
-- ✅ Old chassis remains in description and Marks1
-- ✅ New VIN added separately in document 6122 and Marks2
-- ✅ Double traceability: old + new chassis
+- ✅ Old chassis automatically detected and removed from description
+- ✅ Old chassis preserved in Marks1 (original RFCV data)
+- ✅ New VIN added in document 6122 and Marks2
+- ✅ Clean description without chassis duplication
 
 ### Sequence Persistence
 
