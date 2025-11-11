@@ -833,8 +833,17 @@ class RFCVParser:
 
                         if chassis_number:
                             # Châssis VIN généré avec succès
-                            # Note: On garde la description COMPLÈTE, on ne nettoie pas
-                            goods_description_clean = raw_description
+                            # Détecter et retirer l'ancien châssis de la description
+                            old_chassis = self._extract_chassis_number(raw_description)
+                            if old_chassis:
+                                goods_description_clean = raw_description.replace(old_chassis, '').strip()
+                                goods_description_clean = re.sub(r'\s+', ' ', goods_description_clean)
+                                logger.debug(
+                                    f"Article {match.group(1)}: Ancien châssis retiré de description - {old_chassis}"
+                                )
+                            else:
+                                goods_description_clean = raw_description
+
                             marks2_value = f"CH: {chassis_number}"
 
                             logger.info(
