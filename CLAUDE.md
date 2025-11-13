@@ -112,14 +112,44 @@ Exemples:
 
 ### XML Output Format (ASYCUDA Standard)
 
-Pour chaque véhicule avec châssis détecté:
+Le système utilise deux codes de document distincts selon le type de véhicule:
+
+**Code Document 6022** : Motos uniquement (HS 8711)
+**Code Document 6122** : Tricycles et autres véhicules (HS 8701-8705, 8427, 8429, 8716)
+
+#### Exemple 1: Moto (Code 6022)
 
 ```xml
 <Item>
-  <!-- Document châssis (code 6122) -->
+  <!-- Document châssis motos (code 6022) -->
+  <Attached_documents>
+    <Attached_document_code>6022</Attached_document_code>
+    <Attached_document_name>CHASSIS MOTOS</Attached_document_name>
+    <Attached_document_reference>LRFPCJLDIS0F18969</Attached_document_reference>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
+
+  <!-- Châssis dans Marks2 avec préfixe CH: -->
+  <Packages>
+    <Marks1_of_packages>MOTORCYCLE YAMAHA</Marks1_of_packages>
+    <Marks2_of_packages>CH: LRFPCJLDIS0F18969</Marks2_of_packages>
+  </Packages>
+
+  <!-- Description nettoyée (châssis retiré) -->
+  <Goods_description>
+    <Description_of_goods>MOTORCYCLE YAMAHA</Description_of_goods>
+  </Goods_description>
+</Item>
+```
+
+#### Exemple 2: Tricycle (Code 6122)
+
+```xml
+<Item>
+  <!-- Document châssis véhicules (code 6122) -->
   <Attached_documents>
     <Attached_document_code>6122</Attached_document_code>
-    <Attached_document_name>CHASSIS MOTOS</Attached_document_name>
+    <Attached_document_name>CHASSIS VEHICULES</Attached_document_name>
     <Attached_document_reference>LLCLHJL03SP420331</Attached_document_reference>
     <Attached_document_from_rule>1</Attached_document_from_rule>
   </Attached_documents>
@@ -139,11 +169,23 @@ Pour chaque véhicule avec châssis détecté:
 
 ### Implementation Files
 
-- `src/hs_code_rules.py`: Liste officielle des codes HS nécessitant châssis
+- `src/hs_code_rules.py`: Liste officielle des codes HS nécessitant châssis + fonction `get_chassis_document_code()`
 - `src/rfcv_parser.py`: Détection et extraction des numéros de châssis
-- `src/xml_generator.py`: Génération document code 6122 + Marks2
+- `src/xml_generator.py`: Génération document code 6022/6122 + Marks2
 - `src/models.py`: Modèle `Package` avec champ `chassis_number`
-- `tests/test_chassis_detection.py`: 22 tests unitaires (100% pass)
+- `tests/test_chassis_detection.py`: Tests unitaires pour détection châssis
+
+### Document Code Logic
+
+La fonction `HSCodeAnalyzer.get_chassis_document_code()` détermine le code selon cette logique:
+
+**Méthode 1 (Priorité) - Code HS:**
+- HS 8711 → Code document **6022** (Motos)
+- HS 8701-8705, 8427, 8429, 8716 → Code document **6122** (Autres véhicules)
+
+**Méthode 2 (Fallback) - Mots-clés dans description:**
+- Si description contient: MOTORCYCLE, MOTO, SCOOTER, CYCLOMOTEUR → Code **6022**
+- Sinon → Code **6122** (par défaut pour véhicules)
 
 ### Fallback Detection
 
