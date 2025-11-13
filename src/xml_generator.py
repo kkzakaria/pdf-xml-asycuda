@@ -7,6 +7,7 @@ from xml.dom import minidom
 from typing import Optional, List
 from datetime import datetime
 from models import RFCVData, Item, Trader, CurrencyAmount
+from hs_code_rules import HSCodeAnalyzer
 
 
 class XMLGenerator:
@@ -543,11 +544,19 @@ class XMLGenerator:
             if doc.document_date:
                 self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
 
-        # Document châssis (code 6122) si présent
+        # Document châssis (code 6022 pour motos, 6122 pour autres véhicules) si présent
         if item.packages and item.packages.chassis_number:
+            # Déterminer le code document selon le type de véhicule
+            hs_code = item.tarification.hscode.commodity_code if item.tarification and item.tarification.hscode else None
+            description = item.goods_description if item.goods_description else ''
+            doc_code = HSCodeAnalyzer.get_chassis_document_code(hs_code, description)
+
+            # Nom du document selon le type
+            doc_name = 'CHASSIS MOTOS' if doc_code == '6022' else 'CHASSIS VEHICULES'
+
             chassis_doc_elem = ET.SubElement(item_elem, 'Attached_documents')
-            self._add_simple_element(chassis_doc_elem, 'Attached_document_code', '6122')
-            self._add_simple_element(chassis_doc_elem, 'Attached_document_name', 'CHASSIS MOTOS')
+            self._add_simple_element(chassis_doc_elem, 'Attached_document_code', doc_code)
+            self._add_simple_element(chassis_doc_elem, 'Attached_document_name', doc_name)
             self._add_simple_element(chassis_doc_elem, 'Attached_document_reference', item.packages.chassis_number)
             self._add_simple_element(chassis_doc_elem, 'Attached_document_from_rule', '1')
 
