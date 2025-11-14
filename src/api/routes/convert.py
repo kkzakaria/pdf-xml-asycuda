@@ -453,3 +453,397 @@ async def download_xml(request: Request, job_id: str):
         media_type="application/xml",
         filename=Path(output_path).name
     )
+
+
+# ============= Endpoints Spécifiques pour Paramètres Optionnels =============
+
+
+@router.post(
+    "/with-payment",
+    response_model=ConvertResponse,
+    summary="Conversion avec rapport de paiement",
+    description="""
+Conversion synchrone PDF → XML ASYCUDA avec numéro de rapport de paiement (quittance Trésor).
+
+### Paramètres requis
+- **file**: Fichier PDF RFCV (max 50MB)
+- **taux_douane**: Taux de change douanier (format: 573.1390)
+- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)
+
+### Cas d'usage
+Utilisez cet endpoint quand vous avez DÉJÀ le numéro de quittance du Trésor Public après paiement des taxes douanières.
+
+### Workflow typique
+1. **Conversion initiale** → Utiliser `/convert` (sans rapport)
+2. **Calcul des taxes** → ASYCUDA calcule les montants
+3. **Paiement au Trésor** → Obtention du numéro de quittance (ex: 25P2003J)
+4. **Re-conversion** → Utiliser `/convert/with-payment` pour inclure le numéro
+
+### Exemple
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert/with-payment" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "file=@DOSSIER.pdf" \\
+  -F "taux_douane=573.139" \\
+  -F "rapport_paiement=25P2003J"
+```
+
+### Résultat XML
+Le champ `<Deffered_payment_reference>` sera rempli avec le numéro de quittance.
+    """,
+    dependencies=[Depends(verify_api_key)]
+)
+@limiter.limit(RateLimits.UPLOAD_SINGLE)
+async def convert_with_payment(
+    request: Request,
+    file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
+    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
+    rapport_paiement: str = Form(..., description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J)", min_length=1)
+):
+    """
+    Conversion avec rapport de paiement (quittance Trésor)
+
+    - **file**: Fichier PDF à convertir
+    - **taux_douane**: Taux de change douanier (format: 573.1390)
+    - **rapport_paiement**: Numéro de quittance du Trésor Public (OBLIGATOIRE)
+
+    Retourne le XML avec le champ `Deffered_payment_reference` rempli
+    """
+    file = await validate_upload_file(file)
+    job_id = storage_service.generate_job_id()
+
+    try:
+        pdf_path = await storage_service.save_upload(file, job_id)
+        output_path = storage_service.get_output_path(pdf_path)
+
+        result = conversion_service.convert_pdf_to_xml(
+            pdf_path=pdf_path,
+            output_path=output_path,
+            verbose=False,
+            taux_douane=taux_douane,
+            rapport_paiement=rapport_paiement,
+            chassis_config=None
+        )
+
+        if not result['success']:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result['error_message'] or "Erreur de conversion"
+            )
+
+        metrics_obj = result['metrics']
+        metrics = None
+        if metrics_obj:
+            metrics = ConversionMetrics(
+                items_count=metrics_obj.items_count,
+                containers_count=metrics_obj.containers_count,
+                fill_rate=metrics_obj.fields_filled_rate,
+                warnings_count=len(metrics_obj.warnings),
+                warnings=metrics_obj.warnings,
+                xml_valid=metrics_obj.xml_valid,
+                has_exporter=metrics_obj.has_exporter,
+                has_consignee=metrics_obj.has_consignee,
+                processing_time=metrics_obj.total_time
+            )
+
+        return ConvertResponse(
+            success=True,
+            job_id=job_id,
+            filename=file.filename,
+            output_file=Path(output_path).name,
+            message="Conversion réussie avec rapport de paiement",
+            metrics=metrics,
+            processing_time=result['processing_time']
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la conversion: {str(e)}"
+        )
+
+
+@router.post(
+    "/with-chassis",
+    response_model=ConvertResponse,
+    summary="Conversion avec génération de châssis VIN",
+    description="""
+Conversion synchrone PDF → XML ASYCUDA avec génération automatique de numéros de châssis VIN ISO 3779.
+
+### Paramètres requis
+- **file**: Fichier PDF RFCV (max 50MB)
+- **taux_douane**: Taux de change douanier (format: 573.1390)
+- **quantity**: Nombre de châssis VIN à générer
+- **wmi**: World Manufacturer Identifier - Code fabricant 3 caractères (ex: LZS, LFV)
+- **year**: Année de fabrication (ex: 2025)
+
+### Paramètres optionnels
+- **vds**: Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)
+- **plant_code**: Code usine - 1 caractère (défaut: S)
+
+### Fonctionnalités
+- ✅ Génération VIN ISO 3779 avec checksum
+- ✅ Séquences persistantes (pas de doublons)
+- ✅ Thread-safe pour traitement parallèle
+- ✅ Nettoyage automatique des anciens châssis dans descriptions
+- ✅ Documents code 6022 (motos) et 6122 (autres véhicules)
+
+### Exemple - 180 châssis LZS/2025
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert/with-chassis" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "file=@DOSSIER.pdf" \\
+  -F "taux_douane=573.139" \\
+  -F "quantity=180" \\
+  -F "wmi=LZS" \\
+  -F "year=2025"
+```
+
+### Exemple - 50 châssis LFV/2024 avec VDS personnalisé
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert/with-chassis" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "file=@DOSSIER.pdf" \\
+  -F "taux_douane=573.139" \\
+  -F "quantity=50" \\
+  -F "wmi=LFV" \\
+  -F "year=2024" \\
+  -F "vds=BA01A" \\
+  -F "plant_code=P"
+```
+
+### Résultat
+VIN générés (ex: LZSHCKZS0SS000001) apparaissent dans :
+- Document code 6122 (`<Attached_document_reference>`)
+- Marks2 avec préfixe CH: (`<Marks2_of_packages>`)
+    """,
+    dependencies=[Depends(verify_api_key)]
+)
+@limiter.limit(RateLimits.UPLOAD_SINGLE)
+async def convert_with_chassis(
+    request: Request,
+    file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
+    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
+    quantity: int = Form(..., description="Nombre de châssis VIN à générer", gt=0),
+    wmi: str = Form(..., description="World Manufacturer Identifier - 3 caractères (ex: LZS, LFV)", min_length=3, max_length=3),
+    year: int = Form(..., description="Année de fabrication (ex: 2025)", ge=1980, le=2055),
+    vds: str = Form(default="HCKZS", description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)", min_length=5, max_length=5),
+    plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1)
+):
+    """
+    Conversion avec génération automatique de châssis VIN ISO 3779
+
+    - **file**: Fichier PDF à convertir
+    - **taux_douane**: Taux de change douanier (format: 573.1390)
+    - **quantity**: Nombre de VIN à générer (OBLIGATOIRE)
+    - **wmi**: Code fabricant 3 chars (OBLIGATOIRE)
+    - **year**: Année de fabrication (OBLIGATOIRE)
+    - **vds**: Descripteur véhicule 5 chars (optionnel)
+    - **plant_code**: Code usine 1 char (optionnel)
+
+    Retourne le XML avec VIN générés dans documents code 6122 et Marks2
+    """
+    file = await validate_upload_file(file)
+    job_id = storage_service.generate_job_id()
+
+    try:
+        pdf_path = await storage_service.save_upload(file, job_id)
+        output_path = storage_service.get_output_path(pdf_path)
+
+        # Construire la config chassis
+        chassis_config_dict = {
+            "generate_chassis": True,
+            "quantity": quantity,
+            "wmi": wmi.upper(),
+            "year": year,
+            "vds": vds.upper(),
+            "plant_code": plant_code.upper(),
+            "ensure_unique": True
+        }
+
+        result = conversion_service.convert_pdf_to_xml(
+            pdf_path=pdf_path,
+            output_path=output_path,
+            verbose=False,
+            taux_douane=taux_douane,
+            rapport_paiement=None,
+            chassis_config=chassis_config_dict
+        )
+
+        if not result['success']:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result['error_message'] or "Erreur de conversion"
+            )
+
+        metrics_obj = result['metrics']
+        metrics = None
+        if metrics_obj:
+            metrics = ConversionMetrics(
+                items_count=metrics_obj.items_count,
+                containers_count=metrics_obj.containers_count,
+                fill_rate=metrics_obj.fields_filled_rate,
+                warnings_count=len(metrics_obj.warnings),
+                warnings=metrics_obj.warnings,
+                xml_valid=metrics_obj.xml_valid,
+                has_exporter=metrics_obj.has_exporter,
+                has_consignee=metrics_obj.has_consignee,
+                processing_time=metrics_obj.total_time
+            )
+
+        return ConvertResponse(
+            success=True,
+            job_id=job_id,
+            filename=file.filename,
+            output_file=Path(output_path).name,
+            message=f"Conversion réussie avec génération de {quantity} châssis VIN",
+            metrics=metrics,
+            processing_time=result['processing_time']
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la conversion: {str(e)}"
+        )
+
+
+@router.post(
+    "/complete",
+    response_model=ConvertResponse,
+    summary="Conversion complète (rapport + châssis)",
+    description="""
+Conversion synchrone PDF → XML ASYCUDA avec rapport de paiement ET génération de châssis VIN.
+
+### Paramètres requis
+- **file**: Fichier PDF RFCV (max 50MB)
+- **taux_douane**: Taux de change douanier (format: 573.1390)
+- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)
+- **quantity**: Nombre de châssis VIN à générer
+- **wmi**: World Manufacturer Identifier - Code fabricant 3 caractères
+- **year**: Année de fabrication
+
+### Paramètres optionnels
+- **vds**: Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)
+- **plant_code**: Code usine - 1 caractère (défaut: S)
+
+### Cas d'usage
+Utilisez cet endpoint pour une conversion complète incluant :
+- ✅ Numéro de quittance du Trésor Public
+- ✅ Génération automatique de châssis VIN ISO 3779
+- ✅ Toutes les fonctionnalités combinées
+
+### Exemple
+```bash
+curl -X POST "http://localhost:8000/api/v1/convert/complete" \\
+  -H "X-API-Key: votre_cle_api" \\
+  -F "file=@DOSSIER.pdf" \\
+  -F "taux_douane=573.139" \\
+  -F "rapport_paiement=25P2003J" \\
+  -F "quantity=180" \\
+  -F "wmi=LZS" \\
+  -F "year=2025"
+```
+
+### Résultat
+Le XML généré contiendra :
+- `<Deffered_payment_reference>25P2003J</Deffered_payment_reference>`
+- VIN générés dans documents code 6122 et Marks2
+    """,
+    dependencies=[Depends(verify_api_key)]
+)
+@limiter.limit(RateLimits.UPLOAD_SINGLE)
+async def convert_complete(
+    request: Request,
+    file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
+    taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
+    rapport_paiement: str = Form(..., description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J)", min_length=1),
+    quantity: int = Form(..., description="Nombre de châssis VIN à générer", gt=0),
+    wmi: str = Form(..., description="World Manufacturer Identifier - 3 caractères (ex: LZS)", min_length=3, max_length=3),
+    year: int = Form(..., description="Année de fabrication (ex: 2025)", ge=1980, le=2055),
+    vds: str = Form(default="HCKZS", description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)", min_length=5, max_length=5),
+    plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1)
+):
+    """
+    Conversion complète avec rapport de paiement ET génération de châssis
+
+    - **file**: Fichier PDF à convertir
+    - **taux_douane**: Taux de change douanier (format: 573.1390)
+    - **rapport_paiement**: Numéro de quittance Trésor (OBLIGATOIRE)
+    - **quantity**: Nombre de VIN à générer (OBLIGATOIRE)
+    - **wmi**: Code fabricant 3 chars (OBLIGATOIRE)
+    - **year**: Année de fabrication (OBLIGATOIRE)
+    - **vds**: Descripteur véhicule 5 chars (optionnel)
+    - **plant_code**: Code usine 1 char (optionnel)
+
+    Retourne le XML avec rapport de paiement ET châssis VIN générés
+    """
+    file = await validate_upload_file(file)
+    job_id = storage_service.generate_job_id()
+
+    try:
+        pdf_path = await storage_service.save_upload(file, job_id)
+        output_path = storage_service.get_output_path(pdf_path)
+
+        # Construire la config chassis
+        chassis_config_dict = {
+            "generate_chassis": True,
+            "quantity": quantity,
+            "wmi": wmi.upper(),
+            "year": year,
+            "vds": vds.upper(),
+            "plant_code": plant_code.upper(),
+            "ensure_unique": True
+        }
+
+        result = conversion_service.convert_pdf_to_xml(
+            pdf_path=pdf_path,
+            output_path=output_path,
+            verbose=False,
+            taux_douane=taux_douane,
+            rapport_paiement=rapport_paiement,
+            chassis_config=chassis_config_dict
+        )
+
+        if not result['success']:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result['error_message'] or "Erreur de conversion"
+            )
+
+        metrics_obj = result['metrics']
+        metrics = None
+        if metrics_obj:
+            metrics = ConversionMetrics(
+                items_count=metrics_obj.items_count,
+                containers_count=metrics_obj.containers_count,
+                fill_rate=metrics_obj.fields_filled_rate,
+                warnings_count=len(metrics_obj.warnings),
+                warnings=metrics_obj.warnings,
+                xml_valid=metrics_obj.xml_valid,
+                has_exporter=metrics_obj.has_exporter,
+                has_consignee=metrics_obj.has_consignee,
+                processing_time=metrics_obj.total_time
+            )
+
+        return ConvertResponse(
+            success=True,
+            job_id=job_id,
+            filename=file.filename,
+            output_file=Path(output_path).name,
+            message=f"Conversion complète réussie: rapport {rapport_paiement} + {quantity} châssis VIN",
+            metrics=metrics,
+            processing_time=result['processing_time']
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors de la conversion: {str(e)}"
+        )
