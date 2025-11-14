@@ -316,7 +316,8 @@ class XMLGenerator:
         # Note: Bill of Lading n'est PAS dans Transport/Means_of_transport dans ASYCUDA
         # Il va dans Item/Previous_doc/Summary_declaration (voir _add_item_previous_doc)
 
-        self._add_simple_element(transport_elem, 'Container_flag', 'true' if trans and trans.container_flag else 'false')
+        # Container_flag toujours à false - ASYCUDA gère automatiquement les conteneurs
+        self._add_simple_element(transport_elem, 'Container_flag', 'false')
 
         delivery = ET.SubElement(transport_elem, 'Delivery_terms')
         # P1.3: Utiliser incoterm si disponible
@@ -335,9 +336,9 @@ class XMLGenerator:
         self._add_element(loading, 'Name', None)
         self._add_element(loading, 'Country')
 
-        # P1.6: Utiliser discharge_location si disponible
-        discharge = trans.discharge_location if trans and trans.discharge_location else (trans.location_of_goods if trans and trans.location_of_goods else 'AIRE')
-        self._add_simple_element(transport_elem, 'Location_of_goods', discharge)
+        # P1.6: Location_of_goods - mis à null pour laisser ASYCUDA déterminer la valeur
+        # Note: ASYCUDA remplace automatiquement par "D001" si une valeur est fournie
+        self._add_element(transport_elem, 'Location_of_goods', None)
 
     def _build_financial(self):
         """Construit la section Financial"""
@@ -491,18 +492,11 @@ class XMLGenerator:
             self._add_simple_element(elem, 'Currency_rate', exchange_rate)
 
     def _build_containers(self):
-        """Construit la section Container"""
-        for container in self.data.containers:
-            container_elem = ET.SubElement(self.root, 'Container')
-            self._add_simple_element(container_elem, 'Item_Number', str(container.item_number) if container.item_number else '1')
-            self._add_simple_element(container_elem, 'Container_identity', container.identity if container.identity else '')
-            self._add_simple_element(container_elem, 'Container_type', container.container_type if container.container_type else '40HC')
-            self._add_simple_element(container_elem, 'Empty_full_indicator', container.empty_full_indicator if container.empty_full_indicator else '1/1')
-            self._add_simple_element(container_elem, 'Gross_weight', str(container.gross_weight) if container.gross_weight else '')
-            self._add_element(container_elem, 'Goods_description')
-            self._add_element(container_elem, 'Packages_type')
-            self._add_simple_element(container_elem, 'Packages_number', str(container.packages_number) if container.packages_number else '')
-            self._add_simple_element(container_elem, 'Packages_weight', str(container.packages_weight) if container.packages_weight else '')
+        """Construit la section Container - Désactivée, ASYCUDA gère automatiquement"""
+        # Note: Les conteneurs ne sont plus générés dans le XML
+        # ASYCUDA détermine automatiquement les informations de conteneurs
+        # lors de l'importation de la déclaration
+        pass
 
     def _build_prev_decl(self):
         """Construit la section Prev_decl"""
@@ -632,9 +626,10 @@ class XMLGenerator:
 
         # Previous doc
         prev_doc = ET.SubElement(item_elem, 'Previous_doc')
-        self._add_simple_element(prev_doc, 'Summary_declaration', item.summary_declaration if item.summary_declaration else '')
+        # Summary_declaration à null - ASYCUDA gère automatiquement la déclaration sommaire
+        self._add_element(prev_doc, 'Summary_declaration', None)
         self._add_element(prev_doc, 'Summary_declaration_sl')
-        self._add_simple_element(prev_doc, 'Previous_document_reference', item.previous_document_reference if item.previous_document_reference else '')
+        self._add_element(prev_doc, 'Previous_document_reference', None)
         self._add_element(prev_doc, 'Previous_warehouse_code')
 
         self._add_simple_element(item_elem, 'Licence_number')

@@ -62,7 +62,7 @@ class TestInvoiceNumberPropagation:
             assert len(invoice_docs) == 0, f"L'article {i} ne doit PAS avoir de document FACTURE"
 
     def test_rfcv_and_fdi_on_all_items(self):
-        """Les documents RFCV (2501) et FDI (6610) doivent apparaître sur tous les articles"""
+        """Le document RFCV (2501) doit apparaître sur tous les articles, FDI (6610) sur le premier uniquement"""
         rfcv_data = RFCVData()
         rfcv_data.financial = Financial(
             invoice_number="2025/BC/SN18215"
@@ -83,16 +83,21 @@ class TestInvoiceNumberPropagation:
         parser = RFCVParser("dummy.pdf")
         parser._add_attached_documents(rfcv_data)
 
-        # Vérifier que tous les articles ont RFCV et FDI
+        # Vérifier que tous les articles ont le RFCV
         for i, item in enumerate(rfcv_data.items, start=1):
             rfcv_docs = [doc for doc in item.attached_documents if doc.code == '2501']
-            fdi_docs = [doc for doc in item.attached_documents if doc.code == '6610']
-
             assert len(rfcv_docs) == 1, f"Article {i} doit avoir 1 document RFCV"
             assert rfcv_docs[0].reference == "RCS25119416"
 
-            assert len(fdi_docs) == 1, f"Article {i} doit avoir 1 document FDI"
-            assert fdi_docs[0].reference == "FDI-123456"
+        # Vérifier que seul le premier article a la FDI
+        fdi_docs = [doc for doc in rfcv_data.items[0].attached_documents if doc.code == '6610']
+        assert len(fdi_docs) == 1, "Le premier article doit avoir 1 document FDI"
+        assert fdi_docs[0].reference == "FDI-123456"
+
+        # Vérifier que les autres articles n'ont PAS la FDI
+        for i, item in enumerate(rfcv_data.items[1:], start=2):
+            fdi_docs = [doc for doc in item.attached_documents if doc.code == '6610']
+            assert len(fdi_docs) == 0, f"L'article {i} ne doit PAS avoir de document FDI"
 
     def test_previous_document_reference_first_item_only(self):
         """Previous_document_reference doit apparaître uniquement sur le premier article"""
