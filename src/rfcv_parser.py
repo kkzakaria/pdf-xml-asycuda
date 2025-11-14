@@ -1073,7 +1073,7 @@ class RFCVParser:
         Documents standards ASYCUDA Côte d'Ivoire:
         - Code 0007: FACTURE (No. Facture + Date) - PREMIER ARTICLE UNIQUEMENT
         - Code 2501: A.V./R.F.C.V. - ATTESTATION DE VERIFICATION (No. RFCV) - TOUS LES ARTICLES
-        - Code 6610: NUMERO FDI (No. FDI/DAI + Date) - TOUS LES ARTICLES
+        - Code 6610: NUMERO FDI (No. FDI/DAI + Date) - PREMIER ARTICLE UNIQUEMENT
 
         Args:
             rfcv_data: Données RFCV complètes avec identification et financial
@@ -1095,25 +1095,25 @@ class RFCVParser:
                 document_date=invoice_date
             ))
 
-        # Ajouter les autres documents à tous les items
+        # Ajouter la FDI au premier article uniquement
+        if fdi_number and rfcv_data.items:
+            rfcv_data.items[0].attached_documents.append(AttachedDocument(
+                code='6610',
+                name='NUMERO  FDI',
+                reference=fdi_number,
+                from_rule=1,
+                document_date=fdi_date
+            ))
+
+        # Ajouter le RFCV à tous les items
         for item in rfcv_data.items:
-            # Document 2: RFCV (code 2501)
+            # Document RFCV (code 2501)
             if rfcv_number:
                 item.attached_documents.append(AttachedDocument(
                     code='2501',
                     name="A.V./R.F.C.V. - ATTESTATION DE VERIFICATION",
                     reference=rfcv_number,
                     from_rule=1
-                ))
-
-            # Document 3: FDI (code 6610)
-            if fdi_number:
-                item.attached_documents.append(AttachedDocument(
-                    code='6610',
-                    name='NUMERO  FDI',
-                    reference=fdi_number,
-                    from_rule=1,
-                    document_date=fdi_date
                 ))
 
 
