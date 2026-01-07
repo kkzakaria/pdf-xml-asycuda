@@ -29,7 +29,7 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 - ✅ **Gestion d'erreurs robuste** avec continuation automatique
 
 ### API REST
-- ✅ **13 endpoints REST** pour intégration complète
+- ✅ **16 endpoints REST** pour intégration complète
 - ✅ **Conversion synchrone et asynchrone** avec job tracking
 - ✅ **Batch processing API** avec suivi de progression
 - ✅ **Upload multipart** avec validation
@@ -159,6 +159,11 @@ L'API sera disponible sur `http://localhost:8000`
 - `GET /api/v1/metrics` - Métriques système globales
 - `GET /api/v1/metrics/{job_id}` - Métriques d'un job spécifique
 
+**Chassis/VIN** (Génération indépendante)
+- `POST /api/v1/chassis/generate` - Génère N VINs ISO 3779 (form-data)
+- `POST /api/v1/chassis/generate/json` - Génère N VINs ISO 3779 (JSON body)
+- `GET /api/v1/chassis/sequences` - État des séquences de génération
+
 #### Exemples d'utilisation de l'API
 
 **⚠️ Important**: Le paramètre `taux_douane` (taux de change douanier) est **obligatoire** pour toutes les conversions. Ce taux est communiqué par la douane avant chaque conversion.
@@ -204,6 +209,20 @@ curl "http://localhost:8000/api/v1/batch/{batch_id}/status"
 
 # Rapport détaillé
 curl "http://localhost:8000/api/v1/batch/{batch_id}/report"
+
+# Génération de VINs indépendante (sans PDF)
+curl -X POST "http://localhost:8000/api/v1/chassis/generate" \
+  -F "quantity=180" \
+  -F "wmi=LZS" \
+  -F "year=2025"
+
+# Génération VINs avec export CSV
+curl -X POST "http://localhost:8000/api/v1/chassis/generate" \
+  -F "quantity=100" \
+  -F "wmi=LFV" \
+  -F "year=2026" \
+  -F "output_format=csv" \
+  -o vins.csv
 ```
 
 **Exemple Python avec requests:**
