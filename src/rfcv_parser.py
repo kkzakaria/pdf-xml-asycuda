@@ -95,6 +95,9 @@ class RFCVParser:
         rfcv_data.items = self._parse_items()
         rfcv_data.value_details = self._extract_value_details()
 
+        # Générer des articles supplémentaires si plus de VINs sont demandés que d'articles véhicule
+        rfcv_data.items = self._add_additional_vin_items(rfcv_data.items)
+
         # Regrouper les articles sans châssis par code HS
         # Seul le premier article du premier groupe aura quantité = total_packages
         # Tous les autres articles auront quantité = 0
@@ -753,6 +756,132 @@ class RFCVParser:
                 f"Article {article_number}: Erreur inattendue génération VIN: {e}"
             )
             return None
+
+    def _add_additional_vin_items(self, items: List[Item]) -> List[Item]:
+        """
+        Génère des articles supplémentaires si plus de VINs sont demandés que d'articles véhicule
+
+        Si l'utilisateur demande N VINs mais le PDF contient moins d'articles véhicule,
+        cette méthode clone le dernier article véhicule et génère les VINs restants.
+
+        Args:
+            items: Liste des articles parsés depuis le PDF
+
+        Returns:
+            Liste des articles avec les articles VIN supplémentaires ajoutés
+        """
+        # Vérifier si génération de châssis activée
+        if not self.chassis_config or not self.chassis_config.get('generate_chassis'):
+            return items
+
+        quantity_requested = self.chassis_config.get('quantity', 0)
+        vins_generated = self._chassis_counter
+
+        # Si assez de VINs ont été générés, retourner les items tels quels
+        if vins_generated >= quantity_requested:
+            logger.debug(
+                f"Génération VIN: {vins_generated}/{quantity_requested} VINs générés, pas d'ajout nécessaire"
+            )
+            return items
+
+        # Trouver un template d'article véhicule (article avec châssis)
+        template_item = None
+        for item in items:
+            if item.packages and item.packages.chassis_number:
+                template_item = item
+                break
+
+        if not template_item:
+            logger.warning(
+                f"Génération VIN supplémentaire: Aucun article véhicule trouvé comme template. "
+                f"VINs demandés: {quantity_requested}, générés: {vins_generated}"
+            )
+            return items
+
+        # Obtenir le code HS du template pour logging
+        template_hs = "87XXXXXX"
+        if template_item.tarification and template_item.tarification.hscode:
+            template_hs = template_item.tarification.hscode.commodity_code or template_hs
+
+        # Nombre de VINs supplémentaires à générer
+        remaining = quantity_requested - vins_generated
+        logger.info(
+            f"Génération de {remaining} VINs supplémentaires "
+            f"(template: article HS {template_hs})"
+        )
+
+        # Extraire le type de colisage
+        kind_code = None
+        kind_name = None
+        if template_item.packages:
+            kind_code = template_item.packages.kind_code
+            kind_name = template_item.packages.kind_name
+
+        for i in range(remaining):
+            self._chassis_counter += 1
+
+            # Générer nouveau VIN
+            chassis_number = self._generate_chassis_for_article(
+                article_number=self._chassis_counter,
+                hs_code=template_hs
+            )
+
+            if not chassis_number:
+                logger.error(f"Échec génération VIN supplémentaire #{self._chassis_counter}")
+                continue
+
+            # Créer un nouvel article basé sur le template
+            new_item = Item()
+
+            # Copier les informations essentielles du template
+            new_item.goods_description = template_item.goods_description
+            new_item.commercial_description = template_item.commercial_description
+            new_item.country_of_origin_code = template_item.country_of_origin_code
+
+            # Package avec le nouveau VIN
+            new_item.packages = Package(
+                number_of_packages=None,
+                kind_code=kind_code,
+                kind_name=kind_name,
+                marks1=template_item.packages.marks1 if template_item.packages else None,
+                marks2=f"CH: {chassis_number}",
+                chassis_number=chassis_number
+            )
+
+            # Copier le tarification (code HS et procédures)
+            if template_item.tarification:
+                new_item.tarification = Tarification(
+                    hscode=HSCode(
+                        commodity_code=template_item.tarification.hscode.commodity_code if template_item.tarification.hscode else None,
+                        precision_1=template_item.tarification.hscode.precision_1 if template_item.tarification.hscode else None
+                    ) if template_item.tarification.hscode else None,
+                    extended_procedure=template_item.tarification.extended_procedure,
+                    national_procedure=template_item.tarification.national_procedure,
+                    supplementary_units=[],
+                    item_price=0.0  # Valeur 0 pour les articles supplémentaires
+                )
+
+            # Valuation vide (valeur 0)
+            new_item.valuation_item = ValuationItem(
+                total_cost=0.0,
+                total_cif=0.0
+            )
+
+            # Taxation vide
+            new_item.taxation = Taxation(
+                item_taxes_amount=0.0,
+                item_taxes_guaranteed=0.0,
+                taxation_lines=[]
+            )
+
+            items.append(new_item)
+            logger.info(f"Article VIN supplémentaire #{self._chassis_counter} créé: {chassis_number}")
+
+        logger.info(
+            f"Total VINs générés: {self._chassis_counter}/{quantity_requested}"
+        )
+
+        return items
 
     def _parse_items(self) -> List[Item]:
         """Parse la liste des articles"""
