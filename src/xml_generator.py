@@ -528,31 +528,37 @@ class XMLGenerator:
         """Construit une section Item complète"""
         item_elem = ET.SubElement(self.root, 'Item')
 
-        # Documents attachés
-        for doc in item.attached_documents:
-            doc_elem = ET.SubElement(item_elem, 'Attached_documents')
-            self._add_simple_element(doc_elem, 'Attached_document_code', doc.code if doc.code else '')
-            self._add_simple_element(doc_elem, 'Attached_document_name', doc.name if doc.name else '')
-            self._add_simple_element(doc_elem, 'Attached_document_reference', doc.reference if doc.reference else '')
-            self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '')
-            if doc.document_date:
-                self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
-
-        # Document châssis (code 6022 pour motos, 6122 pour autres véhicules) si présent
-        if item.packages and item.packages.chassis_number:
-            # Déterminer le code document selon le type de véhicule
-            hs_code = item.tarification.hscode.commodity_code if item.tarification and item.tarification.hscode else None
-            description = item.goods_description if item.goods_description else ''
-            doc_code = HSCodeAnalyzer.get_chassis_document_code(hs_code, description)
-
-            # Nom du document selon le type
-            doc_name = 'CHASSIS MOTOS' if doc_code == '6022' else 'CHASSIS VEHICULES'
-
-            chassis_doc_elem = ET.SubElement(item_elem, 'Attached_documents')
-            self._add_simple_element(chassis_doc_elem, 'Attached_document_code', doc_code)
-            self._add_simple_element(chassis_doc_elem, 'Attached_document_name', doc_name)
-            self._add_simple_element(chassis_doc_elem, 'Attached_document_reference', item.packages.chassis_number)
-            self._add_simple_element(chassis_doc_elem, 'Attached_document_from_rule', '1')
+        # Documents attachés - géré automatiquement par ASYCUDA (janvier 2025)
+        # Pour rollback: décommenter le bloc ci-dessous et commenter les lignes avec <null/>
+        #
+        # for doc in item.attached_documents:
+        #     doc_elem = ET.SubElement(item_elem, 'Attached_documents')
+        #     self._add_simple_element(doc_elem, 'Attached_document_code', doc.code if doc.code else '')
+        #     self._add_simple_element(doc_elem, 'Attached_document_name', doc.name if doc.name else '')
+        #     self._add_simple_element(doc_elem, 'Attached_document_reference', doc.reference if doc.reference else '')
+        #     self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '')
+        #     if doc.document_date:
+        #         self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
+        #
+        # # Document châssis (code 6022 pour motos, 6122 pour autres véhicules) si présent
+        # if item.packages and item.packages.chassis_number:
+        #     hs_code = item.tarification.hscode.commodity_code if item.tarification and item.tarification.hscode else None
+        #     description = item.goods_description if item.goods_description else ''
+        #     doc_code = HSCodeAnalyzer.get_chassis_document_code(hs_code, description)
+        #     doc_name = 'CHASSIS MOTOS' if doc_code == '6022' else 'CHASSIS VEHICULES'
+        #     chassis_doc_elem = ET.SubElement(item_elem, 'Attached_documents')
+        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_code', doc_code)
+        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_name', doc_name)
+        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_reference', item.packages.chassis_number)
+        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_from_rule', '1')
+        #
+        # Version actuelle: tous les champs à null
+        doc_elem = ET.SubElement(item_elem, 'Attached_documents')
+        self._add_element(doc_elem, 'Attached_document_code', None)
+        self._add_element(doc_elem, 'Attached_document_name', None)
+        self._add_element(doc_elem, 'Attached_document_reference', None)
+        self._add_element(doc_elem, 'Attached_document_from_rule', None)
+        self._add_element(doc_elem, 'Attached_document_date', None)
 
         # Packages
         if item.packages:
