@@ -16,7 +16,7 @@ from .core.dependencies import startup_tasks
 from .core.background import task_manager
 from .core.rate_limit import limiter, rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from .routes import convert, batch, files, health
+from .routes import convert, batch, files, health, chassis
 
 # Configuration du logging
 logging.basicConfig(
@@ -233,6 +233,7 @@ app.include_router(convert.router)
 app.include_router(batch.router)
 app.include_router(files.router)
 app.include_router(health.router)
+app.include_router(chassis.router)
 
 
 # Route racine
@@ -271,6 +272,11 @@ async def root():
                 "health": "GET /api/v1/health",
                 "metrics": "GET /api/v1/metrics",
                 "job_metrics": "GET /api/v1/metrics/{job_id}"
+            },
+            "chassis": {
+                "generate": "POST /api/v1/chassis/generate",
+                "generate_json": "POST /api/v1/chassis/generate/json",
+                "sequences": "GET /api/v1/chassis/sequences"
             }
         }
     }

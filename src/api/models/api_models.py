@@ -356,3 +356,136 @@ class ErrorResponse(BaseModel):
             "timestamp": "2025-01-15T10:30:45Z"
         }
     })
+
+
+# ============= VIN Generation Models =============
+
+class VINOutputFormat(str, Enum):
+    """Formats de sortie pour les VINs générés"""
+    JSON = "json"
+    CSV = "csv"
+    TEXT = "text"
+
+
+class VINGenerationRequest(BaseModel):
+    """Requête de génération de VINs ISO 3779 indépendante"""
+    quantity: int = Field(
+        ...,
+        ge=1,
+        le=10000,
+        description="Nombre de VINs à générer (1-10000)"
+    )
+    wmi: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="World Manufacturer Identifier - Code fabricant 3 caractères (ex: LZS, LFV)"
+    )
+    vds: str = Field(
+        default="HCKZS",
+        min_length=5,
+        max_length=5,
+        description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)"
+    )
+    year: int = Field(
+        ...,
+        ge=2001,
+        le=2030,
+        description="Année modèle pour code année ISO 3779 (2001-2030)"
+    )
+    plant_code: str = Field(
+        default="S",
+        min_length=1,
+        max_length=1,
+        description="Code usine de fabrication - 1 caractère (défaut: S)"
+    )
+    output_format: VINOutputFormat = Field(
+        default=VINOutputFormat.JSON,
+        description="Format de sortie: json, csv ou text"
+    )
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "quantity": 180,
+            "wmi": "LZS",
+            "vds": "HCKZS",
+            "year": 2025,
+            "plant_code": "S",
+            "output_format": "json"
+        }
+    })
+
+
+class VINGenerationMetadata(BaseModel):
+    """Métadonnées de génération VIN"""
+    quantity: int
+    wmi: str
+    vds: str
+    year: int
+    plant_code: str
+    prefix: str
+    start_sequence: int
+    end_sequence: int
+    generated_at: str
+
+
+class VINGenerationResponse(BaseModel):
+    """Réponse de génération de VINs"""
+    success: bool
+    vins: List[str]
+    metadata: VINGenerationMetadata
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "success": True,
+            "vins": [
+                "LZSHCKZS2S8000001",
+                "LZSHCKZS2S8000002",
+                "LZSHCKZS2S8000003"
+            ],
+            "metadata": {
+                "quantity": 3,
+                "wmi": "LZS",
+                "vds": "HCKZS",
+                "year": 2025,
+                "plant_code": "S",
+                "prefix": "LZSHCKZSS",
+                "start_sequence": 1,
+                "end_sequence": 3,
+                "generated_at": "2025-01-07T16:30:00Z"
+            }
+        }
+    })
+
+
+class SequenceInfo(BaseModel):
+    """Information sur une séquence VIN"""
+    prefix: str
+    current_sequence: int
+    total_generated: int
+
+
+class SequencesStatusResponse(BaseModel):
+    """État des séquences de VINs"""
+    total_prefixes: int
+    total_vins_generated: int
+    sequences: List[SequenceInfo]
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "total_prefixes": 2,
+            "total_vins_generated": 450,
+            "sequences": [
+                {
+                    "prefix": "LZSHCKZSS",
+                    "current_sequence": 270,
+                    "total_generated": 270
+                },
+                {
+                    "prefix": "LFVBA01AS",
+                    "current_sequence": 180,
+                    "total_generated": 180
+                }
+            ]
+        }
+    })
