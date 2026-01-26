@@ -632,9 +632,15 @@ class XMLGenerator:
 
         # Previous doc
         prev_doc = ET.SubElement(item_elem, 'Previous_doc')
-        # Summary_declaration à null - ASYCUDA gère automatiquement la déclaration sommaire
-        self._add_element(prev_doc, 'Summary_declaration', None)
-        self._add_element(prev_doc, 'Summary_declaration_sl')
+        # Pour les articles avec châssis: code d'appurement 40, unité 1
+        # Sinon: null (ASYCUDA gère automatiquement)
+        has_chassis = item.packages and item.packages.chassis_number
+        if has_chassis:
+            self._add_simple_element(prev_doc, 'Summary_declaration', '40')
+            self._add_simple_element(prev_doc, 'Summary_declaration_sl', '1')
+        else:
+            self._add_element(prev_doc, 'Summary_declaration', None)
+            self._add_element(prev_doc, 'Summary_declaration_sl')
         self._add_element(prev_doc, 'Previous_document_reference', None)
         self._add_element(prev_doc, 'Previous_warehouse_code')
 
