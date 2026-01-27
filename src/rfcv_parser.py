@@ -105,8 +105,8 @@ class RFCVParser:
             total_packages = rfcv_data.property.total_packages
             rfcv_data.items = group_items_by_hs_code(rfcv_data.items, total_packages)
 
-        # NOTE: Documents attachés désactivés - géré automatiquement par ASYCUDA (janvier 2025)
-        # self._add_attached_documents(rfcv_data)
+        # Ajouter les documents attachés à chaque article
+        self._add_attached_documents(rfcv_data)
 
         # Ajouter Summary_declaration (Bill of Lading) à tous les items
         if rfcv_data.transport and rfcv_data.transport.bill_of_lading:
@@ -928,6 +928,9 @@ class RFCVParser:
         for match in re.finditer(item_pattern, section_text):
             item = Item()
 
+            # Stocker le numéro de ligne RFCV (pour document 2500)
+            item.rfcv_line_number = int(match.group(1))
+
             # Extraire la quantité et l'unité de mesure de l'article
             quantity = self._parse_number(match.group(2))  # Ex: "36 000,00" -> 36000
             unit_measure = match.group(3)  # Ex: "KG"
@@ -1195,58 +1198,86 @@ class RFCVParser:
         logger.debug(f"Aucun châssis détecté dans: {description[:50]}...")
         return None
 
-    # NOTE: Méthode désactivée - Documents attachés gérés automatiquement par ASYCUDA (janvier 2025)
-    # Pour rollback: décommenter cette méthode et l'appel dans parse()
-    #
-    # def _add_attached_documents(self, rfcv_data: RFCVData) -> None:
-    #     """
-    #     Ajoute les documents attachés standards à chaque item
-    #
-    #     Documents standards ASYCUDA Côte d'Ivoire:
-    #     - Code 0007: FACTURE (No. Facture + Date) - PREMIER ARTICLE UNIQUEMENT
-    #     - Code 2501: A.V./R.F.C.V. - ATTESTATION DE VERIFICATION (No. RFCV) - TOUS LES ARTICLES
-    #     - Code 6610: NUMERO FDI (No. FDI/DAI + Date) - PREMIER ARTICLE UNIQUEMENT
-    #
-    #     Args:
-    #         rfcv_data: Données RFCV complètes avec identification et financial
-    #     """
-    #     # Récupérer les références depuis identification et financial
-    #     rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
-    #     fdi_number = rfcv_data.identification.fdi_number if rfcv_data.identification else None
-    #     fdi_date = rfcv_data.identification.fdi_date if rfcv_data.identification else None
-    #     invoice_number = rfcv_data.financial.invoice_number if rfcv_data.financial else None
-    #     invoice_date = rfcv_data.financial.invoice_date if rfcv_data.financial else None
-    #
-    #     # Ajouter la FACTURE au premier article uniquement
-    #     if invoice_number and rfcv_data.items:
-    #         rfcv_data.items[0].attached_documents.append(AttachedDocument(
-    #             code='0007',
-    #             name='FACTURE',
-    #             reference=invoice_number,
-    #             from_rule=1,
-    #             document_date=invoice_date
-    #         ))
-    #
-    #     # Ajouter la FDI au premier article uniquement
-    #     if fdi_number and rfcv_data.items:
-    #         rfcv_data.items[0].attached_documents.append(AttachedDocument(
-    #             code='6610',
-    #             name='NUMERO  FDI',
-    #             reference=fdi_number,
-    #             from_rule=1,
-    #             document_date=fdi_date
-    #         ))
-    #
-    #     # Ajouter le RFCV à tous les items
-    #     for item in rfcv_data.items:
-    #         # Document RFCV (code 2501)
-    #         if rfcv_number:
-    #             item.attached_documents.append(AttachedDocument(
-    #                 code='2501',
-    #                 name="A.V./R.F.C.V. - ATTESTATION DE VERIFICATION",
-    #                 reference=rfcv_number,
-    #                 from_rule=1
-    #             ))
+    def _add_attached_documents(self, rfcv_data: RFCVData) -> None:
+        """
+        Ajoute les documents attachés standards à chaque item
+
+        Documents standards ASYCUDA Côte d'Ivoire:
+        - Code 0007: FACTURE (No. Facture + Date) - TOUS LES ARTICLES
+        - Code 0014: JUSTIFICATION D'ASSURANCE - TOUS LES ARTICLES
+        - Code 2500: A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE - TOUS LES ARTICLES
+        - Code 2501: A.V./R.F.C.V. - ATTESTATION DE VERIFICATION (No. RFCV) - TOUS LES ARTICLES
+        - Code 6022: NUMERO DE CHASSIS (motos HS 8711) - ARTICLES AVEC CHASSIS
+        - Code 6122: NUMERO DE CHASSIS (autres véhicules) - ARTICLES AVEC CHASSIS
+        - Code 6603: NUMERO DU BORDEREAU DE SUIVI DE CARGAISON (BSC) - TOUS LES ARTICLES
+
+        Args:
+            rfcv_data: Données RFCV complètes avec identification et financial
+        """
+        # Récupérer les références depuis identification, financial et transport
+        rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
+        invoice_number = rfcv_data.financial.invoice_number if rfcv_data.financial else None
+        invoice_date = rfcv_data.financial.invoice_date if rfcv_data.financial else None
+        bsc_number = rfcv_data.transport.bill_of_lading if rfcv_data.transport else None
+
+        for item in rfcv_data.items:
+            # Code 0007: FACTURE - tous les articles
+            if invoice_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='0007',
+                    name='FACTURE',
+                    reference=invoice_number,
+                    from_rule=1,
+                    document_date=invoice_date
+                ))
+
+            # Code 0014: JUSTIFICATION D'ASSURANCE - tous les articles (pas de référence spécifique)
+            item.attached_documents.append(AttachedDocument(
+                code='0014',
+                name="JUSTIFICATION D'ASSURANCE AUPRES D'UNE COMPAGNIE AGREEE EN COTE D'IV.",
+                reference=None,
+                from_rule=1
+            ))
+
+            # Code 6603: BORDEREAU DE SUIVI DE CARGAISON (BSC) - tous les articles
+            if bsc_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='6603',
+                    name='NUMERO DU BORDEREAU DE SUIVI DE CARGAISON',
+                    reference=bsc_number,
+                    from_rule=1
+                ))
+
+            # Code 2500: NUMERO DE LIGNE ARTICLE - tous les articles
+            if item.rfcv_line_number is not None:
+                item.attached_documents.append(AttachedDocument(
+                    code='2500',
+                    name='A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE',
+                    reference=str(item.rfcv_line_number),
+                    from_rule=1
+                ))
+
+            # Code 2501: ATTESTATION DE VERIFICATION (RFCV) - tous les articles
+            if rfcv_number:
+                item.attached_documents.append(AttachedDocument(
+                    code='2501',
+                    name="A.V./R.F.C.V. - ATTESTATION DE VERIFICATION",
+                    reference=rfcv_number,
+                    from_rule=1
+                ))
+
+            # Code 6022/6122: NUMERO DE CHASSIS - articles avec châssis uniquement
+            if item.packages and item.packages.chassis_number:
+                hs_code = item.tarification.hscode.commodity_code if item.tarification and item.tarification.hscode else None
+                description = item.goods_description or ''
+                doc_code = HSCodeAnalyzer.get_chassis_document_code(hs_code, description)
+
+                item.attached_documents.append(AttachedDocument(
+                    code=doc_code,
+                    name='NUMERO DE CHASSIS',
+                    reference=item.packages.chassis_number,
+                    from_rule=1
+                ))
 
 
 def parse_rfcv(pdf_path: str, taux_douane: Optional[float] = None) -> RFCVData:
