@@ -5,6 +5,66 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.0] - 2025-01-27
+
+### ✨ Ajouté - Documents joints ASYCUDA
+
+Activation de la génération automatique des documents joints standards pour les déclarations douanières ASYCUDA Côte d'Ivoire.
+
+#### Documents générés automatiquement
+
+| Code | Document | Scope |
+|------|----------|-------|
+| `0007` | FACTURE | Tous les articles |
+| `0014` | JUSTIFICATION D'ASSURANCE | Tous les articles |
+| `6603` | BORDEREAU DE SUIVI DE CARGAISON (BSC) | Tous les articles |
+| `2500` | A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE | Tous les articles |
+| `2501` | A.V./R.F.C.V. - ATTESTATION DE VERIFICATION | Tous les articles |
+| `6022` | NUMERO DE CHASSIS (motos HS 8711) | Articles avec châssis |
+| `6122` | NUMERO DE CHASSIS (autres véhicules) | Articles avec châssis |
+
+#### Changements techniques
+
+- Ajout du champ `rfcv_line_number` dans le modèle `Item` pour stocker le numéro de ligne RFCV
+- Nouvelle méthode `_add_attached_documents()` dans `rfcv_parser.py`
+- Activation de la génération XML des documents joints (précédemment désactivé avec `<null/>`)
+- Génération du champ `Attached_doc_item` avec la liste des codes de documents
+
+#### Exemple de sortie XML
+
+```xml
+<Attached_doc_item>0007 0014 6603 2500 2501 6022 </Attached_doc_item>
+<Attached_documents>
+  <Attached_document_code>0007</Attached_document_code>
+  <Attached_document_name>FACTURE</Attached_document_name>
+  <Attached_document_reference>2025/BC/SN20915</Attached_document_reference>
+  <Attached_document_from_rule>1</Attached_document_from_rule>
+</Attached_documents>
+<!-- ... autres documents ... -->
+```
+
+---
+
+## [2.6.0] - 2025-01-26
+
+### Ajouté
+- Code d'appurement (QA) pour articles avec châssis
+- Génération de N VINs même si le PDF a moins d'articles véhicule
+
+---
+
+## [2.0.0 - 2.5.0] - 2025
+
+### Ajouté
+- Génération automatique de numéros de châssis VIN ISO 3779
+- Endpoints API spécialisés (`/convert/with-chassis`, `/convert/with-payment`, `/convert/complete`)
+- CLI standalone pour génération de VIN (`vin_generator_cli.py`)
+- Endpoint `/api/v1/chassis/generate` pour génération VIN sans PDF
+- Séquences persistantes pour garantir l'unicité des VIN
+- Support des codes document 6022 (motos) et 6122 (autres véhicules)
+
+---
+
 ## [1.1.0] - 2025-10-17
 
 ### 🔒 Sécurité - Version Sécurisée Production-Ready
@@ -242,5 +302,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.6.0...v2.7.0
+[2.6.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.5.0...v2.6.0
 [1.1.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/kkzakaria/pdf-xml-asycuda/releases/tag/v1.0.0

@@ -115,10 +115,41 @@ curl -X POST "http://localhost:8000/api/v1/convert/with-chassis" \
 
 ```xml
 <Item>
-  <!-- Document châssis (code 6122) -->
+  <!-- Documents joints générés automatiquement (v2.7.0+) -->
+  <Attached_doc_item>0007 0014 6603 2500 2501 6122 </Attached_doc_item>
+
+  <Attached_documents>
+    <Attached_document_code>0007</Attached_document_code>
+    <Attached_document_name>FACTURE</Attached_document_name>
+    <Attached_document_reference>2025/BC/SN20915</Attached_document_reference>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
+  <Attached_documents>
+    <Attached_document_code>0014</Attached_document_code>
+    <Attached_document_name>JUSTIFICATION D'ASSURANCE...</Attached_document_name>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
+  <Attached_documents>
+    <Attached_document_code>6603</Attached_document_code>
+    <Attached_document_name>NUMERO DU BORDEREAU DE SUIVI DE CARGAISON</Attached_document_name>
+    <Attached_document_reference>262317507</Attached_document_reference>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
+  <Attached_documents>
+    <Attached_document_code>2500</Attached_document_code>
+    <Attached_document_name>A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE</Attached_document_name>
+    <Attached_document_reference>1</Attached_document_reference>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
+  <Attached_documents>
+    <Attached_document_code>2501</Attached_document_code>
+    <Attached_document_name>A.V./R.F.C.V. - ATTESTATION DE VERIFICATION</Attached_document_name>
+    <Attached_document_reference>RCS26001542</Attached_document_reference>
+    <Attached_document_from_rule>1</Attached_document_from_rule>
+  </Attached_documents>
   <Attached_documents>
     <Attached_document_code>6122</Attached_document_code>
-    <Attached_document_name>CHASSIS VEHICULES</Attached_document_name>
+    <Attached_document_name>NUMERO DE CHASSIS</Attached_document_name>
     <Attached_document_reference>LZSHCKZS0SS000001</Attached_document_reference>
     <Attached_document_from_rule>1</Attached_document_from_rule>
   </Attached_documents>
@@ -135,6 +166,18 @@ curl -X POST "http://localhost:8000/api/v1/convert/with-chassis" \
   </Goods_description>
 </Item>
 ```
+
+### Documents joints générés (v2.7.0+)
+
+| Code | Document | Source |
+|------|----------|--------|
+| `0007` | FACTURE | `financial.invoice_number` |
+| `0014` | JUSTIFICATION D'ASSURANCE | - |
+| `6603` | BORDEREAU DE SUIVI DE CARGAISON | `transport.bill_of_lading` |
+| `2500` | NUMERO DE LIGNE ARTICLE | `item.rfcv_line_number` |
+| `2501` | ATTESTATION DE VERIFICATION | `identification.rfcv_number` |
+| `6022` | NUMERO DE CHASSIS (motos HS 8711) | `packages.chassis_number` |
+| `6122` | NUMERO DE CHASSIS (autres) | `packages.chassis_number` |
 
 ---
 

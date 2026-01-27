@@ -63,7 +63,18 @@ curl -X POST "http://localhost:8000/api/v1/convert" \\
   -F 'chassis_config={"generate_chassis":true,"quantity":180,"wmi":"LZS","year":2025}'
 ```
 
-**Résultat** : VIN générés (LZSHCKZS0SS000001, LZSHCKZS2SS000002...) dans documents code 6122.
+**Résultat** : VIN générés (LZSHCKZS0SS000001, LZSHCKZS2SS000002...) dans documents code 6022 (motos) ou 6122 (autres véhicules).
+
+### 📄 Documents joints générés automatiquement
+Chaque article inclut les documents ASYCUDA suivants :
+| Code | Document |
+|------|----------|
+| 0007 | FACTURE |
+| 0014 | JUSTIFICATION D'ASSURANCE |
+| 6603 | BORDEREAU DE SUIVI DE CARGAISON (BSC) |
+| 2500 | NUMERO DE LIGNE ARTICLE RFCV |
+| 2501 | ATTESTATION DE VERIFICATION RFCV |
+| 6022/6122 | NUMERO DE CHASSIS (si véhicule) |
     """,
     dependencies=[Depends(verify_api_key)]
 )
@@ -616,8 +627,17 @@ curl -X POST "http://localhost:8000/api/v1/convert/with-chassis" \\
 
 ### Résultat
 VIN générés (ex: LZSHCKZS0SS000001) apparaissent dans :
-- Document code 6122 (`<Attached_document_reference>`)
+- Document code 6022 (motos) ou 6122 (autres véhicules) (`<Attached_document_reference>`)
 - Marks2 avec préfixe CH: (`<Marks2_of_packages>`)
+
+### Documents joints générés automatiquement
+Chaque article inclut les documents suivants :
+- **0007**: FACTURE
+- **0014**: JUSTIFICATION D'ASSURANCE
+- **6603**: BORDEREAU DE SUIVI DE CARGAISON (BSC)
+- **2500**: NUMERO DE LIGNE ARTICLE RFCV
+- **2501**: ATTESTATION DE VERIFICATION RFCV
+- **6022/6122**: NUMERO DE CHASSIS (si véhicule)
     """,
     dependencies=[Depends(verify_api_key)]
 )

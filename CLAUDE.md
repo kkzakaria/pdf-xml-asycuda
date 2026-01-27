@@ -148,6 +148,22 @@ Result always in XOF. Null if FOB, FRET, or taux missing.
 - VIN format: 17 chars, no I/O/Q, ISO 3779 compliant
 - Chassis in `Attached_documents` + `Marks2_of_packages` with `CH:` prefix
 
+### Attached Documents (v2.7.0+)
+
+Each article includes the following ASYCUDA documents automatically:
+
+| Code | Document | Source |
+|------|----------|--------|
+| `0007` | FACTURE | `financial.invoice_number` |
+| `0014` | JUSTIFICATION D'ASSURANCE | - |
+| `6603` | BORDEREAU DE SUIVI DE CARGAISON | `transport.bill_of_lading` |
+| `2500` | NUMERO DE LIGNE ARTICLE | `item.rfcv_line_number` |
+| `2501` | ATTESTATION DE VERIFICATION | `identification.rfcv_number` |
+| `6022` | NUMERO DE CHASSIS (motos) | `packages.chassis_number` |
+| `6122` | NUMERO DE CHASSIS (vehicles) | `packages.chassis_number` |
+
+The `Attached_doc_item` field lists all document codes: `0007 0014 6603 2500 2501 6022`
+
 ### Article Grouping
 
 Articles without chassis grouped by HS code:
