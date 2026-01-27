@@ -9,7 +9,8 @@ from typing import List
 # Import version from package __init__.py (single source of truth)
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Go up 4 levels: config.py -> core -> api -> src -> project root (where 'src' package lives)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from src import __version__ as package_version
 
 

@@ -5,6 +5,17 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.2] - 2025-01-27
+
+### 🐛 Corrigé
+
+- **Correctif critique déploiement Docker**: Correction du chemin d'import de la version dans `config.py`
+  - Le chemin sys.path remontait de 3 niveaux au lieu de 4, causant une erreur `ModuleNotFoundError: No module named 'src'`
+  - Ceci empêchait le démarrage de l'application dans l'environnement Docker/Render
+  - Erreur Render: "Port scan timeout reached, no open ports detected"
+
+---
+
 ## [2.7.1] - 2025-01-27
 
 ### 📝 Documentation
@@ -312,6 +323,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.2]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.5.0...v2.6.0
