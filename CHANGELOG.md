@@ -5,6 +5,14 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.5] - 2025-01-27
+
+### ✨ Ajouté
+
+- **Valuation_method_code = 40 pour véhicules avec châssis**: Le code de méthode de valorisation est maintenant défini à "40" pour tous les articles avec numéro de châssis
+
+---
+
 ## [2.7.4] - 2025-01-27
 
 ### ✨ Ajouté
@@ -344,6 +352,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.5]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.4...v2.7.5
 [2.7.4]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.3...v2.7.4
 [2.7.3]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.1...v2.7.2

@@ -1314,9 +1314,12 @@ class RFCVParser:
                     )
                 ]
 
+                # Méthode de valorisation 40 pour les véhicules avec châssis
+                item.tarification.valuation_method = '40'
+
                 logger.debug(
                     f"Article avec châssis {item.packages.chassis_number}: "
-                    f"unités supplémentaires ajoutées (QA=1, 40=1)"
+                    f"unités supplémentaires (QA=1, 40=1), valuation_method=40"
                 )
 
 
