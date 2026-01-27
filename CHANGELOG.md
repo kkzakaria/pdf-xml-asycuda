@@ -5,6 +5,17 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.4] - 2025-01-27
+
+### ✨ Ajouté
+
+- **Unités supplémentaires pour véhicules avec châssis**: Ajout automatique des unités supplémentaires ASYCUDA
+  - Code `QA` (Unité d'apurement) - Quantité: 1
+  - Code `40` (NOMBRE) - Quantité: 1
+  - Appliqué à tous les articles avec numéro de châssis (motos, tricycles, véhicules...)
+
+---
+
 ## [2.7.3] - 2025-01-27
 
 ### 🐛 Corrigé
@@ -333,6 +344,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.4]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.3...v2.7.4
 [2.7.3]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.0...v2.7.1

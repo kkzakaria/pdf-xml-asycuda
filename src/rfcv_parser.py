@@ -108,6 +108,9 @@ class RFCVParser:
         # Ajouter les documents attachés à chaque article
         self._add_attached_documents(rfcv_data)
 
+        # Ajouter les unités supplémentaires pour les véhicules avec châssis
+        self._add_supplementary_units_for_chassis(rfcv_data)
+
         # Ajouter Summary_declaration (Bill of Lading) à tous les items
         if rfcv_data.transport and rfcv_data.transport.bill_of_lading:
             for item in rfcv_data.items:
@@ -1278,6 +1281,43 @@ class RFCVParser:
                     reference=item.packages.chassis_number,
                     from_rule=1
                 ))
+
+    def _add_supplementary_units_for_chassis(self, rfcv_data: RFCVData) -> None:
+        """
+        Ajoute les unités supplémentaires pour les véhicules avec châssis
+
+        Pour chaque article avec châssis (moto, tricycle, véhicule...):
+        - Unité 1: Code QA (Unité d'apurement) - Quantité 1
+        - Unité 2: Code 40 (NOMBRE) - Quantité 1
+
+        Args:
+            rfcv_data: Données RFCV complètes
+        """
+        for item in rfcv_data.items:
+            # Uniquement pour les articles avec châssis
+            if item.packages and item.packages.chassis_number:
+                # S'assurer que tarification existe
+                if not item.tarification:
+                    item.tarification = Tarification()
+
+                # Ajouter les unités supplémentaires
+                item.tarification.supplementary_units = [
+                    SupplementaryUnit(
+                        code='QA',
+                        name="Unité d'apurement",
+                        quantity=1.0
+                    ),
+                    SupplementaryUnit(
+                        code='40',
+                        name='NOMBRE',
+                        quantity=1.0
+                    )
+                ]
+
+                logger.debug(
+                    f"Article avec châssis {item.packages.chassis_number}: "
+                    f"unités supplémentaires ajoutées (QA=1, 40=1)"
+                )
 
 
 def parse_rfcv(pdf_path: str, taux_douane: Optional[float] = None) -> RFCVData:
