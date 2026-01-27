@@ -528,37 +528,24 @@ class XMLGenerator:
         """Construit une section Item complète"""
         item_elem = ET.SubElement(self.root, 'Item')
 
-        # Documents attachés - géré automatiquement par ASYCUDA (janvier 2025)
-        # Pour rollback: décommenter le bloc ci-dessous et commenter les lignes avec <null/>
-        #
-        # for doc in item.attached_documents:
-        #     doc_elem = ET.SubElement(item_elem, 'Attached_documents')
-        #     self._add_simple_element(doc_elem, 'Attached_document_code', doc.code if doc.code else '')
-        #     self._add_simple_element(doc_elem, 'Attached_document_name', doc.name if doc.name else '')
-        #     self._add_simple_element(doc_elem, 'Attached_document_reference', doc.reference if doc.reference else '')
-        #     self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '')
-        #     if doc.document_date:
-        #         self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
-        #
-        # # Document châssis (code 6022 pour motos, 6122 pour autres véhicules) si présent
-        # if item.packages and item.packages.chassis_number:
-        #     hs_code = item.tarification.hscode.commodity_code if item.tarification and item.tarification.hscode else None
-        #     description = item.goods_description if item.goods_description else ''
-        #     doc_code = HSCodeAnalyzer.get_chassis_document_code(hs_code, description)
-        #     doc_name = 'CHASSIS MOTOS' if doc_code == '6022' else 'CHASSIS VEHICULES'
-        #     chassis_doc_elem = ET.SubElement(item_elem, 'Attached_documents')
-        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_code', doc_code)
-        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_name', doc_name)
-        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_reference', item.packages.chassis_number)
-        #     self._add_simple_element(chassis_doc_elem, 'Attached_document_from_rule', '1')
-        #
-        # Version actuelle: tous les champs à null
-        doc_elem = ET.SubElement(item_elem, 'Attached_documents')
-        self._add_element(doc_elem, 'Attached_document_code', None)
-        self._add_element(doc_elem, 'Attached_document_name', None)
-        self._add_element(doc_elem, 'Attached_document_reference', None)
-        self._add_element(doc_elem, 'Attached_document_from_rule', None)
-        self._add_element(doc_elem, 'Attached_document_date', None)
+        # Documents attachés - générés par le parser (codes: 0007, 0014, 2500, 2501, 6022/6122, 6603)
+        if item.attached_documents:
+            for doc in item.attached_documents:
+                doc_elem = ET.SubElement(item_elem, 'Attached_documents')
+                self._add_simple_element(doc_elem, 'Attached_document_code', doc.code if doc.code else '')
+                self._add_simple_element(doc_elem, 'Attached_document_name', doc.name if doc.name else '')
+                self._add_simple_element(doc_elem, 'Attached_document_reference', doc.reference if doc.reference else '')
+                self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '1')
+                if doc.document_date:
+                    self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
+        else:
+            # Fallback: si aucun document attaché, créer un bloc vide
+            doc_elem = ET.SubElement(item_elem, 'Attached_documents')
+            self._add_element(doc_elem, 'Attached_document_code', None)
+            self._add_element(doc_elem, 'Attached_document_name', None)
+            self._add_element(doc_elem, 'Attached_document_reference', None)
+            self._add_element(doc_elem, 'Attached_document_from_rule', None)
+            self._add_element(doc_elem, 'Attached_document_date', None)
 
         # Packages
         if item.packages:
@@ -620,7 +607,14 @@ class XMLGenerator:
             self._add_simple_element(tarif_elem, 'Item_price', str(tarif.item_price) if tarif.item_price else '')
             self._add_simple_element(tarif_elem, 'Valuation_method_code', tarif.valuation_method if tarif.valuation_method else '02')
             self._add_simple_element(tarif_elem, 'Value_item', '')
-            self._add_element(tarif_elem, 'Attached_doc_item')
+
+            # Attached_doc_item: liste des codes de documents attachés séparés par espaces
+            if item.attached_documents:
+                doc_codes = ' '.join([doc.code for doc in item.attached_documents if doc.code])
+                self._add_simple_element(tarif_elem, 'Attached_doc_item', doc_codes + ' ')
+            else:
+                self._add_element(tarif_elem, 'Attached_doc_item')
+
             self._add_element(tarif_elem, 'A.I._code')
 
         # Goods description
