@@ -49,7 +49,7 @@ class HSCodeAnalyzer:
         'BULLDOZER', 'EXCAVATEUR', 'CHARIOT'
     ]
 
-    # Mots-clés spécifiques pour motos (code document 6022)
+    # Mots-clés spécifiques pour motos (code document 6122)
     MOTORCYCLE_KEYWORDS = [
         'MOTORCYCLE', 'MOTO', 'MOTOCYCLE', 'SCOOTER',
         'CYCLOMOTEUR', 'MOTOBIKE', 'BIKE'
@@ -131,39 +131,39 @@ class HSCodeAnalyzer:
         Détermine le code de document ASYCUDA pour les véhicules avec châssis
 
         Règle:
-        - Code 6022: Motos (HS 8711)
-        - Code 6122: Tricycles et autres véhicules (tous les autres codes HS véhicules)
+        - Code 6122: Motos (HS 8711)
+        - Code 6022: Tricycles et autres véhicules (tous les autres codes HS véhicules)
 
         Args:
             hs_code: Code HS (format: "87113019" ou "8711.30.19.00")
             description: Description de la marchandise (fallback si HS absent)
 
         Returns:
-            '6022' pour motos, '6122' pour autres véhicules
+            '6122' pour motos, '6022' pour autres véhicules
 
         Examples:
             >>> get_chassis_document_code('87113019', 'MOTORCYCLE')
-            '6022'
+            '6122'
             >>> get_chassis_document_code('87042110', 'TRICYCLE')
-            '6122'
-            >>> get_chassis_document_code(None, 'MOTO YAMAHA')
             '6022'
-            >>> get_chassis_document_code(None, 'TRICYCLE AP150ZH')
+            >>> get_chassis_document_code(None, 'MOTO YAMAHA')
             '6122'
+            >>> get_chassis_document_code(None, 'TRICYCLE AP150ZH')
+            '6022'
         """
         # Méthode 1: Détection par code HS (priorité)
         if hs_code:
             hs_clean = str(hs_code).replace('.', '').replace(' ', '').strip()
             if len(hs_clean) >= 4:
                 chapter = hs_clean[:4]
-                # Code HS 8711 = Motocycles → code document 6022
+                # Code HS 8711 = Motocycles → code document 6122
                 if chapter == '8711':
-                    logger.debug(f"Code HS {chapter} détecté → Code document 6022 (MOTOS)")
-                    return '6022'
-                # Tous les autres codes HS véhicules → code document 6122
-                elif chapter in HSCodeAnalyzer.CHASSIS_REQUIRED_CHAPTERS:
-                    logger.debug(f"Code HS {chapter} détecté → Code document 6122 (VÉHICULES)")
+                    logger.debug(f"Code HS {chapter} détecté → Code document 6122 (MOTOS)")
                     return '6122'
+                # Tous les autres codes HS véhicules → code document 6022
+                elif chapter in HSCodeAnalyzer.CHASSIS_REQUIRED_CHAPTERS:
+                    logger.debug(f"Code HS {chapter} détecté → Code document 6022 (VÉHICULES)")
+                    return '6022'
 
         # Méthode 2: Fallback sur mots-clés dans description
         if description:
@@ -172,14 +172,14 @@ class HSCodeAnalyzer:
             for keyword in HSCodeAnalyzer.MOTORCYCLE_KEYWORDS:
                 if keyword in desc_upper:
                     logger.warning(
-                        f"Mot-clé moto '{keyword}' détecté → Code document 6022 "
+                        f"Mot-clé moto '{keyword}' détecté → Code document 6122 "
                         f"(fallback - code HS absent ou invalide)"
                     )
-                    return '6022'
+                    return '6122'
 
-        # Par défaut: code 6122 (tricycles et autres véhicules)
-        logger.debug("Aucun code HS moto détecté → Code document 6122 par défaut (VÉHICULES)")
-        return '6122'
+        # Par défaut: code 6022 (tricycles et autres véhicules)
+        logger.debug("Aucun code HS moto détecté → Code document 6022 par défaut (VÉHICULES)")
+        return '6022'
 
     @staticmethod
     def get_chassis_info() -> Dict[str, str]:

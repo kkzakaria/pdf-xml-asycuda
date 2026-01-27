@@ -143,8 +143,8 @@ Result always in XOF. Null if FOB, FRET, or taux missing.
 
 ### Chassis Detection (HS Codes 87xx)
 
-- **Code 6022**: Motos (HS 8711)
-- **Code 6122**: Other vehicles (HS 8701-8705, 8427, 8429, 8716)
+- **Code 6122**: Motos (HS 8711)
+- **Code 6022**: Other vehicles (HS 8701-8705, 8427, 8429, 8716)
 - VIN format: 17 chars, no I/O/Q, ISO 3779 compliant
 - Chassis in `Attached_documents` + `Marks2_of_packages` with `CH:` prefix
 
@@ -159,10 +159,10 @@ Each article includes the following ASYCUDA documents automatically:
 | `6603` | BORDEREAU DE SUIVI DE CARGAISON | `transport.bill_of_lading` |
 | `2500` | NUMERO DE LIGNE ARTICLE | `item.rfcv_line_number` |
 | `2501` | ATTESTATION DE VERIFICATION | `identification.rfcv_number` |
-| `6022` | NUMERO DE CHASSIS (motos) | `packages.chassis_number` |
-| `6122` | NUMERO DE CHASSIS (vehicles) | `packages.chassis_number` |
+| `6122` | NUMERO DE CHASSIS (motos) | `packages.chassis_number` |
+| `6022` | NUMERO DE CHASSIS (vehicles) | `packages.chassis_number` |
 
-The `Attached_doc_item` field lists all document codes: `0007 0014 6603 2500 2501 6022`
+The `Attached_doc_item` field lists all document codes: `0007 0014 6603 2500 2501 6122`
 
 ### Article Grouping
 

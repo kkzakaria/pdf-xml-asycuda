@@ -5,6 +5,16 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.3] - 2025-01-27
+
+### 🐛 Corrigé
+
+- **Inversion des codes documents châssis**: Correction des codes ASYCUDA pour les véhicules
+  - Code **6122**: Motos (HS 8711) - était incorrectement 6022
+  - Code **6022**: Autres véhicules (tricycles, camions, etc.) - était incorrectement 6122
+
+---
+
 ## [2.7.2] - 2025-01-27
 
 ### 🐛 Corrigé
@@ -323,6 +333,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.3]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.1...v2.7.2
 [2.7.1]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.6.0...v2.7.0
