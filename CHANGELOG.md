@@ -5,6 +5,15 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.6] - 2025-01-27
+
+### 🐛 Corrigé
+
+- **Format documents joints simplifié**: Suppression des champs `Attached_document_reference` et `Attached_document_date` pour correspondre au format ASYCUDA de référence
+  - Structure: seulement `code`, `name`, `from_rule`
+
+---
+
 ## [2.7.5] - 2025-01-27
 
 ### ✨ Ajouté
@@ -352,6 +361,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.6]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.5...v2.7.6
 [2.7.5]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.4...v2.7.5
 [2.7.4]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.3...v2.7.4
 [2.7.3]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.2...v2.7.3

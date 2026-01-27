@@ -529,23 +529,19 @@ class XMLGenerator:
         item_elem = ET.SubElement(self.root, 'Item')
 
         # Documents attachés - générés par le parser (codes: 0007, 0014, 2500, 2501, 6022/6122, 6603)
+        # Format ASYCUDA: seulement code, name, from_rule (pas de reference ni date)
         if item.attached_documents:
             for doc in item.attached_documents:
                 doc_elem = ET.SubElement(item_elem, 'Attached_documents')
                 self._add_simple_element(doc_elem, 'Attached_document_code', doc.code if doc.code else '')
                 self._add_simple_element(doc_elem, 'Attached_document_name', doc.name if doc.name else '')
-                self._add_simple_element(doc_elem, 'Attached_document_reference', doc.reference if doc.reference else '')
                 self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '1')
-                if doc.document_date:
-                    self._add_simple_element(doc_elem, 'Attached_document_date', self._convert_date_to_asycuda_format(doc.document_date))
         else:
             # Fallback: si aucun document attaché, créer un bloc vide
             doc_elem = ET.SubElement(item_elem, 'Attached_documents')
             self._add_element(doc_elem, 'Attached_document_code', None)
             self._add_element(doc_elem, 'Attached_document_name', None)
-            self._add_element(doc_elem, 'Attached_document_reference', None)
             self._add_element(doc_elem, 'Attached_document_from_rule', None)
-            self._add_element(doc_elem, 'Attached_document_date', None)
 
         # Packages
         if item.packages:
