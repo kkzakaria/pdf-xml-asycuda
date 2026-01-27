@@ -5,6 +5,16 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.1] - 2025-01-27
+
+### 📝 Documentation
+
+- Mise à jour des descriptions Swagger avec liste des documents joints
+- Mise à jour CHANGELOG, CLAUDE.md et documentation API
+- Correction du déploiement Render (force pull de l'image Docker)
+
+---
+
 ## [2.7.0] - 2025-01-27
 
 ### ✨ Ajouté - Documents joints ASYCUDA
@@ -302,6 +312,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.1]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.5.0...v2.6.0
 [1.1.0]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v1.0.0...v1.1.0
