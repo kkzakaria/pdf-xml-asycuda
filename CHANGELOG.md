@@ -5,6 +5,14 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [2.7.7] - 2025-01-28
+
+### ✨ Ajouté
+
+- **Numéro de châssis dans documents joints 6022/6122**: Ajout du champ `Attached_document_reference` contenant le numéro de châssis (sans préfixe "CH:") pour les documents de type 6022 et 6122
+
+---
+
 ## [2.7.6] - 2025-01-27
 
 ### 🐛 Corrigé
@@ -361,6 +369,7 @@ Mise à niveau vers v1.1.0 recommandée pour déploiements production.
 - **Corrigé** - Corrections de bugs
 - **Sécurité** - Corrections de vulnérabilités
 
+[2.7.7]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.6...v2.7.7
 [2.7.6]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.5...v2.7.6
 [2.7.5]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.4...v2.7.5
 [2.7.4]: https://github.com/kkzakaria/pdf-xml-asycuda/compare/v2.7.3...v2.7.4

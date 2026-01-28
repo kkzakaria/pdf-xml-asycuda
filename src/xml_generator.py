@@ -529,12 +529,15 @@ class XMLGenerator:
         item_elem = ET.SubElement(self.root, 'Item')
 
         # Documents attachés - générés par le parser (codes: 0007, 0014, 2500, 2501, 6022/6122, 6603)
-        # Format ASYCUDA: seulement code, name, from_rule (pas de reference ni date)
+        # Pour 6022/6122: ajouter Attached_document_reference avec le numéro de châssis (sans "CH:")
         if item.attached_documents:
             for doc in item.attached_documents:
                 doc_elem = ET.SubElement(item_elem, 'Attached_documents')
                 self._add_simple_element(doc_elem, 'Attached_document_code', doc.code if doc.code else '')
                 self._add_simple_element(doc_elem, 'Attached_document_name', doc.name if doc.name else '')
+                # Ajouter reference uniquement pour les documents châssis (6022/6122)
+                if doc.code in ('6022', '6122') and item.packages and item.packages.chassis_number:
+                    self._add_simple_element(doc_elem, 'Attached_document_reference', item.packages.chassis_number)
                 self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '1')
         else:
             # Fallback: si aucun document attaché, créer un bloc vide
