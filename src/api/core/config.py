@@ -93,6 +93,15 @@ Pour obtenir une clé, contactez l'administrateur du service.
     rate_limit_upload: str = "10/minute"
     rate_limit_batch: str = "5/hour"
 
+    # Logging Configuration
+    log_level: str = "INFO"
+    log_dir: str = "logs"
+    log_to_file: bool = True
+    log_format: str = "standard"  # standard | detailed
+    log_max_bytes: int = 10 * 1024 * 1024  # 10MB
+    log_backup_count: int = 5
+    log_uvicorn_level: str = "info"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="API_",
@@ -170,6 +179,18 @@ Pour obtenir une clé, contactez l'administrateur du service.
                     UserWarning,
                     stacklevel=2
                 )
+        return v
+
+    @field_validator('log_level')
+    def validate_log_level(cls, v):
+        """Normalise et valide le niveau de log"""
+        v = v.upper()
+        valid_levels = {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
+        if v not in valid_levels:
+            raise ValueError(
+                f"Niveau de log invalide: '{v}'. "
+                f"Valeurs acceptées: {', '.join(sorted(valid_levels))}"
+            )
         return v
 
 
