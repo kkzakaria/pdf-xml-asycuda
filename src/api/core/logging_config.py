@@ -18,8 +18,6 @@ def configure_logging(settings) -> None:
         settings: Instance Settings avec les paramètres de logging
     """
     log_dir = Path(settings.log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
-
     level = settings.log_level
     fmt = settings.log_format  # "standard" ou "detailed"
 
@@ -35,6 +33,7 @@ def configure_logging(settings) -> None:
     handler_list = ['console']
 
     if settings.log_to_file:
+        log_dir.mkdir(parents=True, exist_ok=True)
         handlers['file'] = {
             'class': 'logging.handlers.RotatingFileHandler',
             'level': level,
@@ -74,7 +73,10 @@ def configure_logging(settings) -> None:
     logging.config.dictConfig(config)
 
     # Activer le security logging existant
-    setup_security_logging(log_dir=settings.log_dir)
+    setup_security_logging(
+        log_dir=settings.log_dir,
+        log_level=getattr(logging, settings.log_level)
+    )
 
 
 def setup_security_logging(log_dir: str = "logs", log_level: int = logging.INFO):

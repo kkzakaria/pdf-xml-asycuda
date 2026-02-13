@@ -193,6 +193,29 @@ Pour obtenir une clé, contactez l'administrateur du service.
             )
         return v
 
+    @field_validator('log_uvicorn_level')
+    def validate_log_uvicorn_level(cls, v):
+        """Normalise et valide le niveau de log uvicorn"""
+        v = v.lower()
+        valid_levels = {'debug', 'info', 'warning', 'error', 'critical'}
+        if v not in valid_levels:
+            raise ValueError(
+                f"Niveau de log uvicorn invalide: '{v}'. "
+                f"Valeurs acceptées: {', '.join(sorted(valid_levels))}"
+            )
+        return v
+
+    @field_validator('log_format')
+    def validate_log_format(cls, v):
+        """Valide le format de log"""
+        valid_formats = {'standard', 'detailed'}
+        if v not in valid_formats:
+            raise ValueError(
+                f"Format de log invalide: '{v}'. "
+                f"Valeurs acceptées: {', '.join(sorted(valid_formats))}"
+            )
+        return v
+
 
 # Instance globale
 settings = Settings()

@@ -289,5 +289,6 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
-        log_level="info"
+        log_level=settings.log_uvicorn_level,
+        log_config=None
     )
