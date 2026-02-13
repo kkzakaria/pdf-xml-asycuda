@@ -75,22 +75,20 @@ def configure_logging(settings) -> None:
     # Activer le security logging existant
     setup_security_logging(
         log_dir=settings.log_dir,
-        log_level=getattr(logging, settings.log_level)
+        log_level=getattr(logging, settings.log_level),
+        log_to_file=settings.log_to_file,
     )
 
 
-def setup_security_logging(log_dir: str = "logs", log_level: int = logging.INFO):
+def setup_security_logging(log_dir: str = "logs", log_level: int = logging.INFO, log_to_file: bool = True):
     """
     Configure le logging de sécurité pour l'application
 
     Args:
         log_dir: Répertoire pour les fichiers de log
         log_level: Niveau de logging (DEBUG, INFO, WARNING, ERROR)
+        log_to_file: Si True, écrit dans security.log en plus de la console
     """
-    # Créer le répertoire de logs s'il n'existe pas
-    log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
-
     # Configuration du logger de sécurité
     security_logger = logging.getLogger('security')
     security_logger.setLevel(log_level)
@@ -106,20 +104,26 @@ def setup_security_logging(log_dir: str = "logs", log_level: int = logging.INFO)
     )
 
     # Handler pour fichier security.log avec rotation
-    security_file = log_path / 'security.log'
-    file_handler = RotatingFileHandler(
-        security_file,
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(formatter)
-    security_logger.addHandler(file_handler)
+    if log_to_file:
+        try:
+            log_path = Path(log_dir)
+            log_path.mkdir(parents=True, exist_ok=True)
+            security_file = log_path / 'security.log'
+            file_handler = RotatingFileHandler(
+                security_file,
+                maxBytes=10 * 1024 * 1024,  # 10MB
+                backupCount=5,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(log_level)
+            file_handler.setFormatter(formatter)
+            security_logger.addHandler(file_handler)
+        except OSError as e:
+            logging.getLogger(__name__).warning("Impossible de créer le fichier security.log: %s", e)
 
-    # Handler console (optionnel, utile pour développement)
+    # Handler console
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.WARNING)  # Seulement warnings et erreurs en console
+    console_handler.setLevel(logging.WARNING)
     console_handler.setFormatter(formatter)
     security_logger.addHandler(console_handler)
 

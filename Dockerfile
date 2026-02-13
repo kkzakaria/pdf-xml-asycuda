@@ -59,8 +59,8 @@ COPY --chown=appuser:appuser run_api.py /app/
 COPY --chown=appuser:appuser .env.example /app/
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /app/uploads /app/output /app/data && \
-    chown -R appuser:appuser /app/uploads /app/output /app/data
+RUN mkdir -p /app/uploads /app/output /app/data /app/logs && \
+    chown -R appuser:appuser /app/uploads /app/output /app/data /app/logs
 
 # Switch to non-root user
 USER appuser
