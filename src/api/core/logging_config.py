@@ -1,12 +1,82 @@
 """
-Configuration centralisée du logging de sécurité
+Configuration centralisée du logging
 """
 import logging
+import logging.config
 import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
 from logging.handlers import RotatingFileHandler
+
+
+def configure_logging(settings) -> None:
+    """
+    Point d'entrée: configure tout le système de logging via dictConfig
+
+    Args:
+        settings: Instance Settings avec les paramètres de logging
+    """
+    log_dir = Path(settings.log_dir)
+    level = settings.log_level
+    fmt = settings.log_format  # "standard" ou "detailed"
+
+    # Handlers
+    handlers = {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': level,
+            'formatter': fmt,
+            'stream': 'ext://sys.stdout',
+        }
+    }
+    handler_list = ['console']
+
+    if settings.log_to_file:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handlers['file'] = {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'level': level,
+            'formatter': fmt,
+            'filename': str(log_dir / 'app.log'),
+            'maxBytes': settings.log_max_bytes,
+            'backupCount': settings.log_backup_count,
+            'encoding': 'utf-8',
+        }
+        handler_list.append('file')
+
+    config = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'standard': {
+                'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                'datefmt': '%Y-%m-%d %H:%M:%S',
+            },
+            'detailed': {
+                'format': '%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s',
+                'datefmt': '%Y-%m-%d %H:%M:%S',
+            },
+        },
+        'handlers': handlers,
+        'root': {
+            'level': level,
+            'handlers': handler_list,
+        },
+        'loggers': {
+            'uvicorn.access': {'level': 'WARNING'},
+            'httpx': {'level': 'WARNING'},
+            'pdfplumber': {'level': 'WARNING'},
+        },
+    }
+
+    logging.config.dictConfig(config)
+
+    # Activer le security logging existant
+    setup_security_logging(
+        log_dir=settings.log_dir,
+        log_level=getattr(logging, settings.log_level)
+    )
 
 
 def setup_security_logging(log_dir: str = "logs", log_level: int = logging.INFO):

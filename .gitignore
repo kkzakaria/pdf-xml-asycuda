@@ -45,6 +45,7 @@ Thumbs.db
 
 # Project specific
 *.log
+logs/
 debug_extraction.txt
 
 # Test results

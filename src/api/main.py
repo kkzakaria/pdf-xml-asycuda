@@ -15,14 +15,12 @@ from .core.config import settings
 from .core.dependencies import startup_tasks
 from .core.background import task_manager
 from .core.rate_limit import limiter, rate_limit_exceeded_handler
+from .core.logging_config import configure_logging
 from slowapi.errors import RateLimitExceeded
 from .routes import convert, batch, files, health, chassis
 
-# Configuration du logging
-logging.basicConfig(
-    level=logging.INFO if not settings.debug else logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configuration centralisée du logging
+configure_logging(settings)
 logger = logging.getLogger(__name__)
 
 
@@ -34,9 +32,9 @@ async def lifespan(app: FastAPI):
     Gère le startup et shutdown de l'API
     """
     # Startup
-    print(f"\n{'='*70}")
-    print(f"🚀 Démarrage de l'API {settings.api_title}")
-    print(f"{'='*70}")
+    logger.info("=" * 70)
+    logger.info("Démarrage de l'API %s", settings.api_title)
+    logger.info("=" * 70)
 
     # Exécuter les tâches de démarrage
     startup_tasks()
@@ -44,15 +42,15 @@ async def lifespan(app: FastAPI):
     # Lancer le nettoyage périodique en background
     cleanup_task = asyncio.create_task(task_manager.periodic_cleanup())
 
-    print(f"✓ API prête sur http://{settings.host}:{settings.port}")
-    print(f"✓ Documentation: http://{settings.host}:{settings.port}/docs")
-    print(f"✓ Health check: http://{settings.host}:{settings.port}/api/v1/health")
-    print(f"{'='*70}\n")
+    logger.info("API prête sur http://%s:%s", settings.host, settings.port)
+    logger.info("Documentation: http://%s:%s/docs", settings.host, settings.port)
+    logger.info("Health check: http://%s:%s/api/v1/health", settings.host, settings.port)
+    logger.info("=" * 70)
 
     yield
 
     # Shutdown
-    print("\n🛑 Arrêt de l'API...")
+    logger.info("Arrêt de l'API...")
     cleanup_task.cancel()
     try:
         await cleanup_task
@@ -291,5 +289,6 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
-        log_level="info"
+        log_level=settings.log_uvicorn_level,
+        log_config=None
     )
