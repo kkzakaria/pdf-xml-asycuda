@@ -2,6 +2,8 @@
 Routes de conversion
 """
 import json
+import logging
+import time
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, BackgroundTasks, Depends, Request
 from fastapi.responses import FileResponse
@@ -17,9 +19,12 @@ from ..models.api_models import (
 from ..services.conversion_service import conversion_service
 from ..services.storage_service import storage_service
 from ..services.job_service import job_service
+from ..services.usage_stats_service import usage_stats
 from ..core.dependencies import validate_upload_file
 from ..core.security import verify_api_key
 from ..core.rate_limit import limiter, RateLimits
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/convert", tags=["Conversion"])
 
@@ -135,6 +140,7 @@ async def convert_pdf(
                 )
 
         # Convertir
+        start = time.time()
         result = conversion_service.convert_pdf_to_xml(
             pdf_path=pdf_path,
             output_path=output_path,
@@ -145,10 +151,23 @@ async def convert_pdf(
         )
 
         if not result['success']:
+            logger.error("Conversion échouée: file=%s, error=%s", file.filename, result['error_message'])
+            usage_stats.track_conversion(
+                success=False, is_async=False,
+                has_chassis=chassis_config_dict is not None,
+                has_payment=rapport_paiement is not None
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=result['error_message'] or "Erreur de conversion"
             )
+
+        logger.info("Conversion réussie: file=%s, time=%.2fs", file.filename, time.time() - start)
+        usage_stats.track_conversion(
+            success=True, is_async=False,
+            has_chassis=chassis_config_dict is not None,
+            has_payment=rapport_paiement is not None
+        )
 
         # Construire la réponse avec métriques
         metrics_obj = result['metrics']
@@ -179,6 +198,8 @@ async def convert_pdf(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Conversion échouée: file=%s, error=%s", file.filename, e)
+        usage_stats.track_conversion(success=False, is_async=False)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de la conversion: {str(e)}"
@@ -208,6 +229,12 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
 
     # Mettre à jour le job avec le résultat
     if result['success']:
+        logger.info("Conversion async réussie: job_id=%s, time=%.2fs", job_id, result['processing_time'])
+        usage_stats.track_conversion(
+            success=True, is_async=True,
+            has_chassis=chassis_config is not None,
+            has_payment=rapport_paiement is not None
+        )
         job_service.update_job(
             job_id=job_id,
             status=JobStatus.COMPLETED,
@@ -216,6 +243,12 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
             result=result
         )
     else:
+        logger.error("Conversion async échouée: job_id=%s, error=%s", job_id, result['error_message'])
+        usage_stats.track_conversion(
+            success=False, is_async=True,
+            has_chassis=chassis_config is not None,
+            has_payment=rapport_paiement is not None
+        )
         job_service.update_job(
             job_id=job_id,
             status=JobStatus.FAILED,
@@ -527,6 +560,7 @@ async def convert_with_payment(
         pdf_path = await storage_service.save_upload(file, job_id)
         output_path = storage_service.get_output_path(pdf_path)
 
+        start = time.time()
         result = conversion_service.convert_pdf_to_xml(
             pdf_path=pdf_path,
             output_path=output_path,
@@ -537,10 +571,15 @@ async def convert_with_payment(
         )
 
         if not result['success']:
+            logger.error("Conversion avec paiement échouée: file=%s, error=%s", file.filename, result['error_message'])
+            usage_stats.track_conversion(success=False, is_async=False, has_payment=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=result['error_message'] or "Erreur de conversion"
             )
+
+        logger.info("Conversion avec paiement réussie: file=%s, time=%.2fs", file.filename, time.time() - start)
+        usage_stats.track_conversion(success=True, is_async=False, has_payment=True)
 
         metrics_obj = result['metrics']
         metrics = None
@@ -570,6 +609,8 @@ async def convert_with_payment(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Conversion avec paiement échouée: file=%s, error=%s", file.filename, e)
+        usage_stats.track_conversion(success=False, is_async=False, has_payment=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de la conversion: {str(e)}"
@@ -683,6 +724,7 @@ async def convert_with_chassis(
             "ensure_unique": True
         }
 
+        start = time.time()
         result = conversion_service.convert_pdf_to_xml(
             pdf_path=pdf_path,
             output_path=output_path,
@@ -693,10 +735,15 @@ async def convert_with_chassis(
         )
 
         if not result['success']:
+            logger.error("Conversion avec châssis échouée: file=%s, error=%s", file.filename, result['error_message'])
+            usage_stats.track_conversion(success=False, is_async=False, has_chassis=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=result['error_message'] or "Erreur de conversion"
             )
+
+        logger.info("Conversion avec châssis réussie: file=%s, quantity=%d, time=%.2fs", file.filename, quantity, time.time() - start)
+        usage_stats.track_conversion(success=True, is_async=False, has_chassis=True)
 
         metrics_obj = result['metrics']
         metrics = None
@@ -726,6 +773,8 @@ async def convert_with_chassis(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Conversion avec châssis échouée: file=%s, error=%s", file.filename, e)
+        usage_stats.track_conversion(success=False, is_async=False, has_chassis=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de la conversion: {str(e)}"
@@ -820,6 +869,7 @@ async def convert_complete(
             "ensure_unique": True
         }
 
+        start = time.time()
         result = conversion_service.convert_pdf_to_xml(
             pdf_path=pdf_path,
             output_path=output_path,
@@ -830,10 +880,15 @@ async def convert_complete(
         )
 
         if not result['success']:
+            logger.error("Conversion complète échouée: file=%s, error=%s", file.filename, result['error_message'])
+            usage_stats.track_conversion(success=False, is_async=False, has_chassis=True, has_payment=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=result['error_message'] or "Erreur de conversion"
             )
+
+        logger.info("Conversion complète réussie: file=%s, quantity=%d, time=%.2fs", file.filename, quantity, time.time() - start)
+        usage_stats.track_conversion(success=True, is_async=False, has_chassis=True, has_payment=True)
 
         metrics_obj = result['metrics']
         metrics = None
@@ -863,6 +918,8 @@ async def convert_complete(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("Conversion complète échouée: file=%s, error=%s", file.filename, e)
+        usage_stats.track_conversion(success=False, is_async=False, has_chassis=True, has_payment=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de la conversion: {str(e)}"

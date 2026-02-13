@@ -4,9 +4,12 @@ Wrapper autour de rfcv_parser et xml_generator
 """
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 import traceback
+
+logger = logging.getLogger(__name__)
 
 # Ajouter src au path pour imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -60,18 +63,18 @@ class ConversionService:
 
             # Parser le PDF
             if verbose:
-                print(f"Parsing PDF: {pdf_path}")
+                logger.debug("Parsing PDF: %s", pdf_path)
                 if taux_douane:
-                    print(f"  Taux douanier: {taux_douane:.4f}")
+                    logger.debug("  Taux douanier: %.4f", taux_douane)
                 if rapport_paiement:
-                    print(f"  Rapport de paiement: {rapport_paiement}")
+                    logger.debug("  Rapport de paiement: %s", rapport_paiement)
 
             parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement, chassis_config=chassis_config)
             rfcv_data = parser.parse()
 
             # Générer le XML
             if verbose:
-                print(f"Generating XML: {output_path}")
+                logger.debug("Generating XML: %s", output_path)
 
             generator = XMLGenerator(rfcv_data)
             generator.generate()
@@ -96,14 +99,14 @@ class ConversionService:
             result['metrics'] = metrics
 
             if verbose:
-                print(f"✓ Conversion successful: {Path(pdf_path).name} → {Path(output_path).name}")
+                logger.info("Conversion réussie: %s → %s", Path(pdf_path).name, Path(output_path).name)
 
         except Exception as e:
             result['error_message'] = str(e)
             result['processing_time'] = time.time() - start_time
 
             if verbose:
-                print(f"✗ Conversion failed: {e}")
+                logger.error("Conversion échouée: %s — %s", Path(pdf_path).name, e)
                 traceback.print_exc()
 
         return result

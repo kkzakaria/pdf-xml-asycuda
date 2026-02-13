@@ -127,6 +127,10 @@ app.add_middleware(
     allow_headers=settings.cors_allow_headers,
 )
 
+# Middleware de logging des requêtes
+from .core.request_logging import RequestLoggingMiddleware
+app.add_middleware(RequestLoggingMiddleware)
+
 
 # Exception handlers sécurisés
 

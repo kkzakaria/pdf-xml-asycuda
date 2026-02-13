@@ -102,6 +102,10 @@ Pour obtenir une clé, contactez l'administrateur du service.
     log_backup_count: int = 5
     log_uvicorn_level: str = "info"
 
+    # Usage Statistics
+    stats_enabled: bool = True
+    stats_file: str = "data/usage_stats.json"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="API_",
