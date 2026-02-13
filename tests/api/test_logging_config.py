@@ -4,7 +4,6 @@ Tests unitaires pour la configuration centralisée du logging
 import logging
 import sys
 from pathlib import Path
-from unittest.mock import patch
 import pytest
 import shutil
 
@@ -126,56 +125,46 @@ class TestConfigureLogging:
 class TestLogLevelValidation:
     """Tests pour la validation du log_level dans Settings"""
 
-    def test_valid_log_levels(self):
+    def test_valid_log_levels(self, monkeypatch):
         """Les niveaux valides sont acceptés"""
         from api.core.config import Settings
-        import os
 
         for level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
-            os.environ['API_LOG_LEVEL'] = level
+            monkeypatch.setenv('API_LOG_LEVEL', level)
             s = Settings()
             assert s.log_level == level
-            del os.environ['API_LOG_LEVEL']
 
-    def test_log_level_case_insensitive(self):
+    def test_log_level_case_insensitive(self, monkeypatch):
         """Le log_level est normalisé en majuscule"""
         from api.core.config import Settings
-        import os
 
-        os.environ['API_LOG_LEVEL'] = 'debug'
+        monkeypatch.setenv('API_LOG_LEVEL', 'debug')
         s = Settings()
         assert s.log_level == 'DEBUG'
-        del os.environ['API_LOG_LEVEL']
 
-    def test_invalid_log_level_raises(self):
+    def test_invalid_log_level_raises(self, monkeypatch):
         """Un niveau invalide lève une ValueError"""
         from api.core.config import Settings
         from pydantic import ValidationError
-        import os
 
-        os.environ['API_LOG_LEVEL'] = 'VERBOSE'
+        monkeypatch.setenv('API_LOG_LEVEL', 'VERBOSE')
         with pytest.raises(ValidationError):
             Settings()
-        del os.environ['API_LOG_LEVEL']
 
-    def test_invalid_log_format_raises(self):
+    def test_invalid_log_format_raises(self, monkeypatch):
         """Un format invalide lève une ValueError"""
         from api.core.config import Settings
         from pydantic import ValidationError
-        import os
 
-        os.environ['API_LOG_FORMAT'] = 'json'
+        monkeypatch.setenv('API_LOG_FORMAT', 'json')
         with pytest.raises(ValidationError):
             Settings()
-        del os.environ['API_LOG_FORMAT']
 
-    def test_invalid_uvicorn_level_raises(self):
+    def test_invalid_uvicorn_level_raises(self, monkeypatch):
         """Un niveau uvicorn invalide lève une ValueError"""
         from api.core.config import Settings
         from pydantic import ValidationError
-        import os
 
-        os.environ['API_LOG_UVICORN_LEVEL'] = 'verbose'
+        monkeypatch.setenv('API_LOG_UVICORN_LEVEL', 'verbose')
         with pytest.raises(ValidationError):
             Settings()
-        del os.environ['API_LOG_UVICORN_LEVEL']
