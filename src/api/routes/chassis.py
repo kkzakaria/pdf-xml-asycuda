@@ -2,6 +2,7 @@
 Routes de génération de VINs ISO 3779 indépendante
 Génération de VINs sans PDF RFCV requis
 """
+import logging
 from fastapi import APIRouter, HTTPException, status, Form, Depends
 from fastapi.responses import PlainTextResponse, Response
 from typing import Optional
@@ -16,7 +17,10 @@ from ..models.api_models import (
     ErrorResponse
 )
 from ..services.chassis_service import chassis_service
+from ..services.usage_stats_service import get_usage_stats
 from ..core.security import verify_api_key
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/chassis", tags=["Chassis/VIN"])
 
@@ -78,6 +82,9 @@ async def generate_vins(
             year=year,
             plant_code=plant_code.upper()
         )
+
+        logger.info("VIN générés: count=%d, wmi=%s, year=%d", quantity, wmi.upper(), year)
+        get_usage_stats().track_chassis_generation(vins_count=quantity)
 
         # Retourner selon le format demandé
         if output_format == VINOutputFormat.CSV:
@@ -192,6 +199,9 @@ async def generate_vins_json(request: VINGenerationRequest):
             year=request.year,
             plant_code=request.plant_code.upper()
         )
+
+        logger.info("VIN générés (JSON): count=%d, wmi=%s, year=%d", request.quantity, request.wmi.upper(), request.year)
+        get_usage_stats().track_chassis_generation(vins_count=request.quantity)
 
         return VINGenerationResponse(
             success=True,

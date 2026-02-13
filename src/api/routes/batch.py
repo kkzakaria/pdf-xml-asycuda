@@ -1,6 +1,7 @@
 """
 Routes batch
 """
+import logging
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, BackgroundTasks, Body, Depends, Request
 from typing import List
 from pathlib import Path
@@ -15,8 +16,11 @@ from ..models.api_models import (
 from ..services.batch_service import batch_service
 from ..services.storage_service import storage_service
 from ..services.job_service import job_service
+from ..services.usage_stats_service import get_usage_stats
 from ..core.security import verify_api_key
 from ..core.rate_limit import limiter, RateLimits
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/batch", tags=["Batch"])
 
@@ -42,6 +46,15 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: L
     )
 
     # Mettre à jour le batch avec les résultats
+    logger.info(
+        "Batch terminé: batch_id=%s, success=%d, failed=%d",
+        batch_id, results['successful'], results['failed']
+    )
+    get_usage_stats().track_batch(
+        successful=results['successful'],
+        failed=results['failed'],
+        files_processed=results['processed']
+    )
     job_service.update_batch(
         batch_id=batch_id,
         status=JobStatus.COMPLETED if results['success'] else JobStatus.FAILED,
@@ -196,6 +209,8 @@ async def batch_convert(
             total_files=len(pdf_paths),
             pdf_paths=pdf_paths
         )
+
+        logger.info("Batch démarré: batch_id=%s, files=%d, workers=%d", batch_id, len(pdf_paths), workers)
 
         # Lancer le traitement en background
         background_tasks.add_task(

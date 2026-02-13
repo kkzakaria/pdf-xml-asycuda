@@ -83,6 +83,9 @@ private_keys/.json
 /SECURITY_FIXES.md
 /TEST_RESULTS.md
 
+# Usage statistics (persistent data)
+data/usage_stats.json
+
 # asycude extraction - temporary files
 /asycuda-extraction/
 /CALCUL-DETAIL.xlsx

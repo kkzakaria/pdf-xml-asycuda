@@ -2,10 +2,13 @@
 Tâches background pour l'API
 """
 import asyncio
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class BackgroundTaskManager:
@@ -40,10 +43,10 @@ class BackgroundTaskManager:
                         deleted_count += 1
 
             if deleted_count > 0:
-                print(f"🧹 Cleaned up {deleted_count} expired files")
+                logger.info("Nettoyage: %d fichiers expirés supprimés", deleted_count)
 
         except Exception as e:
-            print(f"❌ Error during cleanup: {e}")
+            logger.error("Erreur nettoyage: %s", e)
 
     @staticmethod
     async def periodic_cleanup():
