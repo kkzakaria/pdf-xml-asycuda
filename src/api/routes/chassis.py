@@ -17,7 +17,7 @@ from ..models.api_models import (
     ErrorResponse
 )
 from ..services.chassis_service import chassis_service
-from ..services.usage_stats_service import usage_stats
+from ..services.usage_stats_service import get_usage_stats
 from ..core.security import verify_api_key
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ async def generate_vins(
         )
 
         logger.info("VIN générés: count=%d, wmi=%s, year=%d", quantity, wmi.upper(), year)
-        usage_stats.track_chassis_generation(vins_count=quantity)
+        get_usage_stats().track_chassis_generation(vins_count=quantity)
 
         # Retourner selon le format demandé
         if output_format == VINOutputFormat.CSV:
@@ -201,7 +201,7 @@ async def generate_vins_json(request: VINGenerationRequest):
         )
 
         logger.info("VIN générés (JSON): count=%d, wmi=%s, year=%d", request.quantity, request.wmi.upper(), request.year)
-        usage_stats.track_chassis_generation(vins_count=request.quantity)
+        get_usage_stats().track_chassis_generation(vins_count=request.quantity)
 
         return VINGenerationResponse(
             success=True,

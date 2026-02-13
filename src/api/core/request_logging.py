@@ -48,13 +48,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 method, path, status_code, duration_ms, client_ip
             )
 
-        # Tracking stats (import lazy pour éviter les imports circulaires)
+        # Tracking stats
         try:
             from ..core.config import settings
             if settings.stats_enabled:
-                from ..services.usage_stats_service import usage_stats
-                usage_stats.track_request(method, status_code)
-        except Exception:
-            pass
+                from ..services.usage_stats_service import get_usage_stats
+                get_usage_stats().track_request(method, status_code)
+        except Exception as e:
+            logger.debug("Erreur tracking stats requête: %s", e)
 
         return response

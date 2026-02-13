@@ -16,7 +16,7 @@ from ..models.api_models import (
 from ..services.batch_service import batch_service
 from ..services.storage_service import storage_service
 from ..services.job_service import job_service
-from ..services.usage_stats_service import usage_stats
+from ..services.usage_stats_service import get_usage_stats
 from ..core.security import verify_api_key
 from ..core.rate_limit import limiter, RateLimits
 
@@ -50,7 +50,7 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: L
         "Batch terminé: batch_id=%s, success=%d, failed=%d",
         batch_id, results['successful'], results['failed']
     )
-    usage_stats.track_batch(
+    get_usage_stats().track_batch(
         successful=results['successful'],
         failed=results['failed'],
         files_processed=results['processed']

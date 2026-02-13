@@ -16,8 +16,9 @@ from .core.dependencies import startup_tasks
 from .core.background import task_manager
 from .core.rate_limit import limiter, rate_limit_exceeded_handler
 from .core.logging_config import configure_logging
+from .core.request_logging import RequestLoggingMiddleware
 from slowapi.errors import RateLimitExceeded
-from .routes import convert, batch, files, health, chassis
+from .routes import convert, batch, files, health, chassis, stats
 
 # Configuration centralisée du logging
 configure_logging(settings)
@@ -56,6 +57,10 @@ async def lifespan(app: FastAPI):
         await cleanup_task
     except asyncio.CancelledError:
         pass
+
+    # Flush les statistiques en attente
+    from .services.usage_stats_service import get_usage_stats
+    get_usage_stats().flush()
 
 
 # Créer l'application FastAPI
@@ -128,7 +133,6 @@ app.add_middleware(
 )
 
 # Middleware de logging des requêtes
-from .core.request_logging import RequestLoggingMiddleware
 app.add_middleware(RequestLoggingMiddleware)
 
 
@@ -236,6 +240,7 @@ app.include_router(batch.router)
 app.include_router(files.router)
 app.include_router(health.router)
 app.include_router(chassis.router)
+app.include_router(stats.router)
 
 
 # Route racine
@@ -279,6 +284,11 @@ async def root():
                 "generate": "POST /api/v1/chassis/generate",
                 "generate_json": "POST /api/v1/chassis/generate/json",
                 "sequences": "GET /api/v1/chassis/sequences"
+            },
+            "statistics": {
+                "all": "GET /api/v1/stats",
+                "conversions": "GET /api/v1/stats/conversions",
+                "requests": "GET /api/v1/stats/requests"
             }
         }
     }

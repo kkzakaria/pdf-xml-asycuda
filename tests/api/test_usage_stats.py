@@ -3,8 +3,6 @@ Tests pour le service de statistiques d'utilisation
 """
 import json
 import pytest
-import pytest_asyncio
-import tempfile
 from pathlib import Path
 
 import sys
@@ -122,6 +120,15 @@ class TestTrackBatch:
         assert stats["batches"]["successful"] == 0
         assert stats["batches"]["failed"] == 1
 
+    def test_track_batch_file_counters(self, stats_service):
+        """Vérifie les compteurs par fichier (successful_files / failed_files)"""
+        stats_service.track_batch(successful=99, failed=1, files_processed=100)
+
+        stats = stats_service.get_stats()
+        assert stats["batches"]["successful_files"] == 99
+        assert stats["batches"]["failed_files"] == 1
+        assert stats["batches"]["total_files_processed"] == 100
+
 
 class TestTrackChassis:
     def test_track_chassis(self, stats_service):
@@ -175,17 +182,35 @@ class TestTrackRequest:
         assert stats["by_status"]["500"] == 1
 
 
+class TestFlush:
+    def test_flush_persists_dirty_data(self, stats_file):
+        """flush() sauvegarde les données en attente"""
+        service = UsageStatsService(stats_file)
+        # track_request utilise _maybe_flush (pas forcément un save immédiat)
+        service.track_request("GET", 200)
+        service.flush()
+
+        # Vérifier que le fichier contient la donnée
+        with open(stats_file, 'r') as f:
+            data = json.load(f)
+        assert data["requests"]["total"] == 1
+
+    def test_flush_noop_when_clean(self, stats_service):
+        """flush() ne fait rien si pas de données en attente"""
+        # Pas de mutation → flush ne devrait pas planter
+        stats_service.flush()
+
+
 class TestPersistence:
     def test_persistence(self, stats_file):
-        """Reload après save conserve les données"""
-        # Premier service: ajouter des données
+        """Reload après flush conserve les données"""
         service1 = UsageStatsService(stats_file)
         service1.track_conversion(success=True, is_async=False)
         service1.track_batch(successful=2, failed=1, files_processed=3)
         service1.track_chassis_generation(vins_count=50)
         service1.track_request("POST", 200)
+        service1.flush()
 
-        # Deuxième service: recharger depuis le fichier
         service2 = UsageStatsService(stats_file)
         stats = service2.get_stats()
 
@@ -198,12 +223,10 @@ class TestPersistence:
 
     def test_corrupted_file_recovery(self, stats_file):
         """Récupère d'un fichier corrompu"""
-        # Écrire un JSON invalide
         Path(stats_file).parent.mkdir(parents=True, exist_ok=True)
         with open(stats_file, 'w') as f:
             f.write("invalid json{{{")
 
-        # Le service doit s'initialiser avec des valeurs par défaut
         service = UsageStatsService(stats_file)
         stats = service.get_stats()
         assert stats["conversions"]["total"] == 0
@@ -245,3 +268,34 @@ class TestStatsEndpoints:
         assert "total" in data
         assert "by_method" in data
         assert "by_status" in data
+
+    @pytest.mark.asyncio
+    async def test_stats_requires_auth(self, client):
+        """Les endpoints stats requièrent une clé API valide"""
+        from httpx import AsyncClient, ASGITransport
+        from api.main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as no_auth_client:
+            response = await no_auth_client.get("/api/v1/stats")
+            assert response.status_code in (401, 403)
+
+            response = await no_auth_client.get("/api/v1/stats/conversions")
+            assert response.status_code in (401, 403)
+
+            response = await no_auth_client.get("/api/v1/stats/requests")
+            assert response.status_code in (401, 403)
+
+    @pytest.mark.asyncio
+    async def test_stats_disabled(self, client):
+        """Avec stats_enabled=False, le middleware ne track pas"""
+        from api.core.config import settings
+
+        original = settings.stats_enabled
+        settings.stats_enabled = False
+        try:
+            # Faire une requête — ne doit pas planter
+            response = await client.get("/api/v1/stats")
+            assert response.status_code == 200
+        finally:
+            settings.stats_enabled = original
