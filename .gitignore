@@ -92,3 +92,4 @@ data/usage_stats.json
 
 # Git worktrees
 .worktrees/
+data/chassis_registry.db
