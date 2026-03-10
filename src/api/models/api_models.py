@@ -506,3 +506,32 @@ class SequencesStatusResponse(BaseModel):
             ]
         }
     })
+
+
+class ChassisRegistryEntry(BaseModel):
+    """Entrée dans le registre de châssis"""
+    chassis_number: str
+    registered_at: str
+    filename: str
+    rfcv_number: Optional[str] = None
+
+
+class ChassisRegistryResponse(BaseModel):
+    """Liste du registre de châssis"""
+    total: int
+    entries: List[ChassisRegistryEntry]
+
+
+class ChassisEntryDetailResponse(BaseModel):
+    """Détail d'une entrée du registre"""
+    chassis_number: str
+    registered_at: str
+    filename: str
+    rfcv_number: Optional[str] = None
+    table: str  # "extracted" ou "generated"
+
+
+class ChassisDeleteResponse(BaseModel):
+    """Confirmation de suppression"""
+    success: bool
+    deleted: str
