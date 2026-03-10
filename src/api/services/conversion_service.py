@@ -46,6 +46,7 @@ class ConversionService:
             taux_douane: Taux de change douanier pour calcul assurance (optionnel)
             rapport_paiement: Numéro de rapport de paiement/quittance Trésor (optionnel)
             chassis_config: Configuration pour génération automatique châssis VIN (optionnel)
+            force_reprocess (bool): Si True, ignore les doublons de châssis et force le retraitement.
 
         Returns:
             Dictionnaire avec résultats et métriques

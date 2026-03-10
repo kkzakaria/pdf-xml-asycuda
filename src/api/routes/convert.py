@@ -573,7 +573,8 @@ curl -X POST "http://localhost:8000/api/v1/convert/with-payment" \\
 ### Résultat XML
 Le champ `<Deffered_payment_reference>` sera rempli avec le numéro de quittance.
     """,
-    dependencies=[Depends(verify_api_key)]
+    dependencies=[Depends(verify_api_key)],
+    responses={409: {"model": DuplicateChassisErrorResponse, "description": "Châssis déjà traité"}}
 )
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
 async def convert_with_payment(
@@ -731,7 +732,8 @@ Chaque article inclut les documents suivants :
 - **2501**: ATTESTATION DE VERIFICATION RFCV
 - **6022/6122**: NUMERO DE CHASSIS (si véhicule)
     """,
-    dependencies=[Depends(verify_api_key)]
+    dependencies=[Depends(verify_api_key)],
+    responses={409: {"model": DuplicateChassisErrorResponse, "description": "Châssis déjà traité"}}
 )
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
 async def convert_with_chassis(
@@ -887,7 +889,8 @@ Le XML généré contiendra :
 - `<Deffered_payment_reference>25P2003J</Deffered_payment_reference>`
 - VIN générés dans documents code 6122 et Marks2
     """,
-    dependencies=[Depends(verify_api_key)]
+    dependencies=[Depends(verify_api_key)],
+    responses={409: {"model": DuplicateChassisErrorResponse, "description": "Châssis déjà traité"}}
 )
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
 async def convert_complete(

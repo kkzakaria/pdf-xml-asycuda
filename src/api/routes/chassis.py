@@ -68,7 +68,8 @@ qu'aucun VIN n'est généré deux fois, même entre redémarrages de l'applicati
         200: {"description": "VINs générés avec succès"},
         400: {"model": ErrorResponse, "description": "Paramètres invalides"},
         500: {"model": ErrorResponse, "description": "Erreur interne"}
-    }
+    },
+    dependencies=[Depends(verify_api_key)]
 )
 async def generate_vins(
     quantity: int = Form(..., ge=1, le=10000, description="Nombre de VINs à générer"),

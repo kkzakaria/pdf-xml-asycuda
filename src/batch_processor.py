@@ -133,6 +133,11 @@ class BatchProcessor:
             output_file.parent.mkdir(parents=True, exist_ok=True)
 
             # Parser le PDF
+            # Note: le registre SQLite est utilisé par chaque worker (via get_registry()),
+            # mais ProcessPoolExecutor crée des processus séparés. Le verrou threading.Lock()
+            # ne protège pas contre les doublons inter-processus. En mode batch, la détection
+            # de doublons est best-effort (SQLite sérialisera les écritures, mais deux workers
+            # peuvent passer le check_extracted simultanément sur le même châssis).
             parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config)
             rfcv_data = parser.parse()
 
