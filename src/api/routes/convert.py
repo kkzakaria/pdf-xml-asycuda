@@ -16,7 +16,7 @@ from ..models.api_models import (
     JobStatus,
     ConversionMetrics
 )
-from ..services.conversion_service import conversion_service
+from ..services.conversion_service import conversion_service, DuplicateChassisError
 from ..services.storage_service import storage_service
 from ..services.job_service import job_service
 from ..services.usage_stats_service import get_usage_stats
@@ -98,7 +98,8 @@ async def convert_pdf(
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
     taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
     rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."),
-    chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel.")
+    chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."),
+    force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
 ):
     """
     Conversion synchrone PDF → XML
@@ -156,7 +157,8 @@ async def convert_pdf(
             verbose=False,
             taux_douane=taux_douane,
             rapport_paiement=rapport_paiement,
-            chassis_config=chassis_config_dict
+            chassis_config=chassis_config_dict,
+            force_reprocess=force_reprocess,
         )
 
         if not result['success']:
@@ -204,6 +206,17 @@ async def convert_pdf(
             processing_time=result['processing_time']
         )
 
+    except DuplicateChassisError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "success": False,
+                "error": "duplicate_chassis",
+                "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
+                "duplicates": e.duplicates,
+                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -215,7 +228,7 @@ async def convert_pdf(
         )
 
 
-async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float, rapport_paiement: Optional[str] = None, chassis_config: Optional[dict] = None):
+async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float, rapport_paiement: Optional[str] = None, chassis_config: Optional[dict] = None, force_reprocess: bool = False):
     """Tâche de conversion asynchrone (background)"""
 
     # Mettre à jour le status à PROCESSING
@@ -227,14 +240,26 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
     )
 
     # Convertir
-    result = conversion_service.convert_pdf_to_xml(
-        pdf_path=pdf_path,
-        output_path=output_path,
-        verbose=False,
-        taux_douane=taux_douane,
-        rapport_paiement=rapport_paiement,
-        chassis_config=chassis_config
-    )
+    try:
+        result = conversion_service.convert_pdf_to_xml(
+            pdf_path=pdf_path,
+            output_path=output_path,
+            verbose=False,
+            taux_douane=taux_douane,
+            rapport_paiement=rapport_paiement,
+            chassis_config=chassis_config,
+            force_reprocess=force_reprocess,
+        )
+    except DuplicateChassisError as e:
+        _track_conversion(success=False, is_async=True)
+        job_service.update_job(
+            job_id=job_id,
+            status=JobStatus.FAILED,
+            progress=0,
+            message=f"Châssis en doublon: {len(e.duplicates)} déjà traité(s)",
+            error=str(e)
+        )
+        return
 
     # Mettre à jour le job avec le résultat
     if result['success']:
@@ -307,7 +332,8 @@ async def convert_pdf_async(
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
     taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
     rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."),
-    chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel.")
+    chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."),
+    force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
 ):
     """
     Conversion asynchrone PDF → XML
@@ -373,7 +399,8 @@ async def convert_pdf_async(
             output_path=output_path,
             taux_douane=taux_douane,
             rapport_paiement=rapport_paiement,
-            chassis_config=chassis_config_dict
+            chassis_config=chassis_config_dict,
+            force_reprocess=force_reprocess,
         )
 
         return ConvertAsyncResponse(
@@ -551,7 +578,8 @@ async def convert_with_payment(
     request: Request,
     file: UploadFile = File(..., description="Fichier PDF RFCV à convertir"),
     taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
-    rapport_paiement: str = Form(..., description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J)", min_length=1)
+    rapport_paiement: str = Form(..., description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J)", min_length=1),
+    force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
 ):
     """
     Conversion avec rapport de paiement (quittance Trésor)
@@ -576,7 +604,8 @@ async def convert_with_payment(
             verbose=False,
             taux_douane=taux_douane,
             rapport_paiement=rapport_paiement,
-            chassis_config=None
+            chassis_config=None,
+            force_reprocess=force_reprocess,
         )
 
         if not result['success']:
@@ -615,6 +644,17 @@ async def convert_with_payment(
             processing_time=result['processing_time']
         )
 
+    except DuplicateChassisError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "success": False,
+                "error": "duplicate_chassis",
+                "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
+                "duplicates": e.duplicates,
+                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -700,7 +740,8 @@ async def convert_with_chassis(
     wmi: str = Form(..., description="World Manufacturer Identifier - 3 caractères (ex: LZS, LFV)", min_length=3, max_length=3),
     year: int = Form(..., description="Année de fabrication (ex: 2025)", ge=1980, le=2055),
     vds: str = Form(default="HCKZS", description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)", min_length=5, max_length=5),
-    plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1)
+    plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1),
+    force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
 ):
     """
     Conversion avec génération automatique de châssis VIN ISO 3779
@@ -740,7 +781,8 @@ async def convert_with_chassis(
             verbose=False,
             taux_douane=taux_douane,
             rapport_paiement=None,
-            chassis_config=chassis_config_dict
+            chassis_config=chassis_config_dict,
+            force_reprocess=force_reprocess,
         )
 
         if not result['success']:
@@ -779,6 +821,17 @@ async def convert_with_chassis(
             processing_time=result['processing_time']
         )
 
+    except DuplicateChassisError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "success": False,
+                "error": "duplicate_chassis",
+                "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
+                "duplicates": e.duplicates,
+                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -844,7 +897,8 @@ async def convert_complete(
     wmi: str = Form(..., description="World Manufacturer Identifier - 3 caractères (ex: LZS)", min_length=3, max_length=3),
     year: int = Form(..., description="Année de fabrication (ex: 2025)", ge=1980, le=2055),
     vds: str = Form(default="HCKZS", description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)", min_length=5, max_length=5),
-    plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1)
+    plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1),
+    force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
 ):
     """
     Conversion complète avec rapport de paiement ET génération de châssis
@@ -885,7 +939,8 @@ async def convert_complete(
             verbose=False,
             taux_douane=taux_douane,
             rapport_paiement=rapport_paiement,
-            chassis_config=chassis_config_dict
+            chassis_config=chassis_config_dict,
+            force_reprocess=force_reprocess,
         )
 
         if not result['success']:
@@ -924,6 +979,17 @@ async def convert_complete(
             processing_time=result['processing_time']
         )
 
+    except DuplicateChassisError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "success": False,
+                "error": "duplicate_chassis",
+                "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
+                "duplicates": e.duplicates,
+                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
