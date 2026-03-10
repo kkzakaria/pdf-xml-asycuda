@@ -522,12 +522,8 @@ class ChassisRegistryResponse(BaseModel):
     entries: List[ChassisRegistryEntry]
 
 
-class ChassisEntryDetailResponse(BaseModel):
+class ChassisEntryDetailResponse(ChassisRegistryEntry):
     """Détail d'une entrée du registre"""
-    chassis_number: str
-    registered_at: str
-    filename: str
-    rfcv_number: Optional[str] = None
     table: str  # "extracted" ou "generated"
 
 

@@ -40,6 +40,17 @@ class TestChassisRegistryEndpoints:
         assert response.json()["total"] == 0
 
     @pytest.mark.asyncio
+    async def test_list_generated_with_entries(self, client):
+        mock_entries = [
+            {"chassis_number": "LZS1234567890001", "registered_at": "2025-01-01T10:00:00+00:00",
+             "filename": "B.pdf", "rfcv_number": "CI-2025-002"},
+        ]
+        with patch.object(get_registry(), "get_all_generated", return_value=mock_entries):
+            response = await client.get("/api/v1/chassis/registry/generated")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["total"] == 1
+
+    @pytest.mark.asyncio
     async def test_get_chassis_entry_found(self, client):
         mock_entry = {
             "chassis_number": "ABC123456789012",
