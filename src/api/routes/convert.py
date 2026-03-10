@@ -14,7 +14,8 @@ from ..models.api_models import (
     ConvertAsyncResponse,
     JobStatusResponse,
     JobStatus,
-    ConversionMetrics
+    ConversionMetrics,
+    DuplicateChassisErrorResponse
 )
 from ..services.conversion_service import conversion_service, DuplicateChassisError
 from ..services.storage_service import storage_service
@@ -90,7 +91,8 @@ Chaque article inclut les documents ASYCUDA suivants :
 | 2501 | ATTESTATION DE VERIFICATION RFCV |
 | 6022/6122 | NUMERO DE CHASSIS (si véhicule) |
     """,
-    dependencies=[Depends(verify_api_key)]
+    dependencies=[Depends(verify_api_key)],
+    responses={409: {"model": DuplicateChassisErrorResponse, "description": "Châssis déjà traité"}}
 )
 @limiter.limit(RateLimits.UPLOAD_SINGLE)
 async def convert_pdf(
