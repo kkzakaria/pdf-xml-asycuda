@@ -17,6 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
 from metrics import MetricsCollector
+from chassis_registry import DuplicateChassisError
+
+# Re-export pour les routes qui n'ont pas accès direct au path src/
+__all__ = ["ConversionService", "conversion_service", "DuplicateChassisError"]
 
 
 class ConversionService:
@@ -29,7 +33,8 @@ class ConversionService:
         verbose: bool = False,
         taux_douane: float = None,
         rapport_paiement: str = None,
-        chassis_config: Optional[Dict[str, Any]] = None
+        chassis_config: Optional[Dict[str, Any]] = None,
+        force_reprocess: bool = False
     ) -> Dict[str, Any]:
         """
         Convertit un PDF RFCV en XML ASYCUDA
@@ -69,7 +74,7 @@ class ConversionService:
                 if rapport_paiement:
                     logger.debug("  Rapport de paiement: %s", rapport_paiement)
 
-            parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement, chassis_config=chassis_config)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement, chassis_config=chassis_config, force_reprocess=force_reprocess)
             rfcv_data = parser.parse()
 
             # Générer le XML
@@ -100,6 +105,9 @@ class ConversionService:
 
             if verbose:
                 logger.info("Conversion réussie: %s → %s", Path(pdf_path).name, Path(output_path).name)
+
+        except DuplicateChassisError:
+            raise  # Laisser remonter jusqu'à la route API
 
         except Exception as e:
             result['error_message'] = str(e)
