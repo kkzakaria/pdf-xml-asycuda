@@ -53,8 +53,8 @@ class RFCVParser:
         self.chassis_config = chassis_config
         self.force_reprocess = force_reprocess
         self.registry = registry if registry is not None else get_registry()
-        self._chassis_duplicates: list = []
-        self._pending_registrations: list = []
+        self._chassis_duplicates: List[Dict[str, Any]] = []
+        self._pending_registrations: List[Dict[str, Any]] = []
         self._rfcv_number: Optional[str] = None
         self.text = ""
         self.tables = []
@@ -118,6 +118,7 @@ class RFCVParser:
                 chassis_number=pending["chassis_number"],
                 filename=pending["filename"],
                 rfcv_number=pending["rfcv_number"],
+                overwrite=self.force_reprocess,
             )
 
         # Regrouper les articles sans châssis par code HS

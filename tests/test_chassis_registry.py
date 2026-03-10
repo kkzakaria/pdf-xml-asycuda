@@ -141,6 +141,22 @@ class TestChassisRegistry:
         assert registry.check_extracted("ABC123456789012") is not None
         assert registry.check_extracted("abc123456789012") is not None
 
+    def test_register_extracted_overwrite_replaces_entry(self, registry):
+        """overwrite=True remplace l'entrée existante au lieu de lever ValueError."""
+        registry.register_extracted("ABC123456789012", "OLD.pdf", "CI-2025-001")
+        # Should not raise — overwrites the previous entry
+        registry.register_extracted("ABC123456789012", "NEW.pdf", "CI-2025-099", overwrite=True)
+        result = registry.check_extracted("ABC123456789012")
+        assert result is not None
+        assert result["filename"] == "NEW.pdf"
+        assert result["rfcv_number"] == "CI-2025-099"
+
+    def test_register_extracted_overwrite_false_still_raises(self, registry):
+        """overwrite=False (défaut) lève toujours ValueError sur doublon."""
+        registry.register_extracted("ABC123456789012", "OLD.pdf", "CI-2025-001")
+        with pytest.raises(ValueError):
+            registry.register_extracted("ABC123456789012", "NEW.pdf", "CI-2025-099", overwrite=False)
+
 
 class TestDuplicateChassisError:
 
@@ -181,8 +197,6 @@ class TestRFCVParserRegistryIntegration:
     @pytest.fixture
     def mock_parser(self, isolated_registry, tmp_path):
         """Crée un RFCVParser avec PDF mocké et registre isolé."""
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
         from rfcv_parser import RFCVParser
 
         # PDF factice (fichier vide)
@@ -278,3 +292,35 @@ class TestRFCVParserRegistryIntegration:
                 isolated_registry.register_extracted(**pending)
 
         assert isolated_registry.check_extracted("NEW999999999999") is None
+
+    def test_force_reprocess_commit_overwrites_existing_chassis(self, mock_parser, isolated_registry):
+        """force_reprocess=True : le commit batch écrase une entrée déjà enregistrée (overwrite=True).
+
+        Reproduit le bug #3 : sans overwrite, register_extracted lèverait ValueError
+        au moment du commit, faisant planter le retraitement forcé.
+        """
+        # Pré-enregistrer le châssis comme si un précédent traitement l'avait déjà vu
+        isolated_registry.register_extracted("ABC123456789012", "OLD.pdf", "CI-2025-001")
+
+        # Simuler force_reprocess=True : le châssis va dans _pending, pas _duplicates
+        mock_parser.force_reprocess = True
+        mock_parser._pending_registrations = [
+            {"chassis_number": "ABC123456789012", "filename": "NEW.pdf", "rfcv_number": "CI-2025-002"},
+        ]
+        mock_parser._chassis_duplicates = []
+
+        # Reproduire la boucle de commit de parse() avec overwrite=self.force_reprocess
+        if not mock_parser._chassis_duplicates:
+            for pending in mock_parser._pending_registrations:
+                isolated_registry.register_extracted(
+                    chassis_number=pending["chassis_number"],
+                    filename=pending["filename"],
+                    rfcv_number=pending["rfcv_number"],
+                    overwrite=mock_parser.force_reprocess,
+                )
+
+        # L'entrée doit avoir été mise à jour (pas de crash, nouvelle source)
+        result = isolated_registry.check_extracted("ABC123456789012")
+        assert result is not None
+        assert result["filename"] == "NEW.pdf"
+        assert result["rfcv_number"] == "CI-2025-002"

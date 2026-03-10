@@ -95,19 +95,42 @@ class ChassisRegistry:
                 ).fetchone()
                 return self._row_to_dict(row)
 
-    def register_extracted(self, chassis_number: str, filename: str, rfcv_number: Optional[str]) -> None:
-        """Enregistre un châssis extrait. Lève ValueError si déjà présent."""
+    def register_extracted(
+        self,
+        chassis_number: str,
+        filename: str,
+        rfcv_number: Optional[str],
+        overwrite: bool = False,
+    ) -> None:
+        """Enregistre un châssis extrait.
+
+        Args:
+            chassis_number: Numéro de châssis à enregistrer.
+            filename: Nom du fichier PDF source.
+            rfcv_number: Numéro RFCV associé.
+            overwrite: Si True, utilise INSERT OR REPLACE (écrase l'entrée existante).
+                       Si False (défaut), lève ValueError si le châssis est déjà présent.
+        """
         cn = chassis_number.upper()
         with self._lock:
             with self._connect() as conn:
-                try:
+                if overwrite:
                     conn.execute(
-                        "INSERT INTO extracted_chassis (chassis_number, registered_at, filename, rfcv_number) "
+                        "INSERT OR REPLACE INTO extracted_chassis "
+                        "(chassis_number, registered_at, filename, rfcv_number) "
                         "VALUES (?, ?, ?, ?)",
                         (cn, self._now(), filename, rfcv_number)
                     )
-                except sqlite3.IntegrityError:
-                    raise ValueError(f"Châssis extrait déjà enregistré: {cn}")
+                else:
+                    try:
+                        conn.execute(
+                            "INSERT INTO extracted_chassis "
+                            "(chassis_number, registered_at, filename, rfcv_number) "
+                            "VALUES (?, ?, ?, ?)",
+                            (cn, self._now(), filename, rfcv_number)
+                        )
+                    except sqlite3.IntegrityError:
+                        raise ValueError(f"Châssis extrait déjà enregistré: {cn}")
 
     def get_all_extracted(self) -> List[Dict]:
         """Retourne tous les châssis extraits, du plus récent au plus ancien."""
