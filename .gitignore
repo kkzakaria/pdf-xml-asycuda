@@ -89,3 +89,6 @@ data/usage_stats.json
 # asycude extraction - temporary files
 /asycuda-extraction/
 /CALCUL-DETAIL.xlsx
+
+# Git worktrees
+.worktrees/
