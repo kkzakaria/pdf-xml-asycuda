@@ -283,7 +283,11 @@ async def root():
             "chassis": {
                 "generate": "POST /api/v1/chassis/generate",
                 "generate_json": "POST /api/v1/chassis/generate/json",
-                "sequences": "GET /api/v1/chassis/sequences"
+                "sequences": "GET /api/v1/chassis/sequences",
+                "registry_extracted": "GET /api/v1/chassis/registry/extracted",
+                "registry_generated": "GET /api/v1/chassis/registry/generated",
+                "registry_entry": "GET /api/v1/chassis/registry/{chassis_number}",
+                "registry_delete": "DELETE /api/v1/chassis/registry/{chassis_number}"
             },
             "statistics": {
                 "all": "GET /api/v1/stats",

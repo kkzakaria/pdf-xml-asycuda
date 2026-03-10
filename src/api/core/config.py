@@ -52,6 +52,12 @@ en fichiers XML compatibles ASYCUDA (Automated System for Customs Data) pour les
 - **Configuration par fichier**: Taux douaniers et configs châssis individuels
 - **Rapports**: Génération de rapports JSON/CSV/Markdown
 
+### 📋 Registre de châssis (v2.9)
+- **Détection de doublons**: Avertissement HTTP 409 si un châssis a déjà été traité
+- **Historique persistant**: Base SQLite — date, fichier source, numéro RFCV
+- **Force retraitement**: Paramètre `force_reprocess=true` pour outrepasser le blocage
+- **Administration**: Endpoints pour lister, consulter et supprimer les entrées du registre
+
 ## Authentification
 
 Tous les endpoints nécessitent une clé API dans le header `X-API-Key`.
