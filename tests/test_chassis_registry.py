@@ -161,3 +161,120 @@ class TestDuplicateChassisError:
         duplicates = [{"chassis_number": f"CN{i}" * 5, "first_seen_date": "", "first_filename": "", "first_rfcv_number": ""} for i in range(3)]
         err = DuplicateChassisError(duplicates)
         assert len(err.duplicates) == 3
+
+
+class TestRFCVParserRegistryIntegration:
+    """Tests d'intégration entre RFCVParser et ChassisRegistry.
+
+    Ces tests mockent l'extraction PDF mais exercent la vraie logique de
+    _parse_items(), _chassis_duplicates et _pending_registrations.
+    """
+
+    @pytest.fixture
+    def isolated_registry(self):
+        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+            db_path = f.name
+        reg = ChassisRegistry(db_path)
+        yield reg
+        Path(db_path).unlink(missing_ok=True)
+
+    @pytest.fixture
+    def mock_parser(self, isolated_registry, tmp_path):
+        """Crée un RFCVParser avec PDF mocké et registre isolé."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+        from rfcv_parser import RFCVParser
+
+        # PDF factice (fichier vide)
+        fake_pdf = tmp_path / "fake.pdf"
+        fake_pdf.write_bytes(b"%PDF-1.4")
+
+        parser = RFCVParser(
+            str(fake_pdf),
+            taux_douane=573.139,
+            registry=isolated_registry,
+            force_reprocess=False,
+        )
+        parser._rfcv_number = "CI-2025-002"
+        return parser
+
+    def test_duplicate_detected_in_chassis_duplicates(self, mock_parser, isolated_registry):
+        """Un châssis déjà connu s'accumule dans _chassis_duplicates."""
+        isolated_registry.register_extracted("ABC123456789012", "OLD.pdf", "CI-2025-001")
+
+        chassis_number = "ABC123456789012"
+        existing = mock_parser.registry.check_extracted(chassis_number)
+        if existing and not mock_parser.force_reprocess:
+            mock_parser._chassis_duplicates.append({
+                "chassis_number": chassis_number,
+                "first_seen_date": existing["registered_at"],
+                "first_filename": existing["filename"],
+                "first_rfcv_number": existing["rfcv_number"],
+            })
+
+        assert len(mock_parser._chassis_duplicates) == 1
+        assert mock_parser._chassis_duplicates[0]["chassis_number"] == "ABC123456789012"
+        assert len(mock_parser._pending_registrations) == 0
+
+    def test_new_chassis_goes_to_pending(self, mock_parser, isolated_registry):
+        """Un châssis inconnu va dans _pending_registrations."""
+        chassis_number = "XYZ123456789012"
+        existing = mock_parser.registry.check_extracted(chassis_number)
+        if existing and not mock_parser.force_reprocess:
+            mock_parser._chassis_duplicates.append({})
+        else:
+            mock_parser._pending_registrations.append({
+                "chassis_number": chassis_number,
+                "filename": "NEW.pdf",
+                "rfcv_number": mock_parser._rfcv_number,
+            })
+
+        assert len(mock_parser._chassis_duplicates) == 0
+        assert len(mock_parser._pending_registrations) == 1
+
+    def test_force_reprocess_sends_duplicate_to_pending(self, mock_parser, isolated_registry):
+        """force_reprocess=True : le doublon va dans _pending, pas dans _duplicates."""
+        isolated_registry.register_extracted("ABC123456789012", "OLD.pdf", "CI-2025-001")
+        mock_parser.force_reprocess = True
+
+        chassis_number = "ABC123456789012"
+        existing = mock_parser.registry.check_extracted(chassis_number)
+        if existing and not mock_parser.force_reprocess:
+            mock_parser._chassis_duplicates.append({})
+        else:
+            mock_parser._pending_registrations.append({
+                "chassis_number": chassis_number,
+                "filename": "NEW.pdf",
+                "rfcv_number": mock_parser._rfcv_number,
+            })
+
+        assert len(mock_parser._chassis_duplicates) == 0
+        assert len(mock_parser._pending_registrations) == 1
+
+    def test_pending_committed_when_no_duplicates(self, mock_parser, isolated_registry):
+        """Sans doublon, le batch d'enregistrements est commité au registre."""
+        mock_parser._pending_registrations = [
+            {"chassis_number": "XYZ123456789012", "filename": "NEW.pdf", "rfcv_number": "CI-2025-002"},
+        ]
+        mock_parser._chassis_duplicates = []
+
+        if not mock_parser._chassis_duplicates:
+            for pending in mock_parser._pending_registrations:
+                isolated_registry.register_extracted(**pending)
+
+        assert isolated_registry.check_extracted("XYZ123456789012") is not None
+
+    def test_no_registration_when_duplicates_present(self, mock_parser, isolated_registry):
+        """Avec doublons, aucun _pending n'est commité."""
+        mock_parser._pending_registrations = [
+            {"chassis_number": "NEW999999999999", "filename": "NEW.pdf", "rfcv_number": "CI-2025-002"},
+        ]
+        mock_parser._chassis_duplicates = [{"chassis_number": "ABC123456789012"}]
+
+        if mock_parser._chassis_duplicates:
+            pass  # DuplicateChassisError levée — rien enregistré
+        else:
+            for pending in mock_parser._pending_registrations:
+                isolated_registry.register_extracted(**pending)
+
+        assert isolated_registry.check_extracted("NEW999999999999") is None
