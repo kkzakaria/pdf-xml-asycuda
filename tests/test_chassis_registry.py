@@ -81,6 +81,15 @@ class TestChassisRegistry:
         results = registry.get_all_generated()
         assert len(results) == 1
 
+    def test_register_generated_duplicate_is_silent(self, registry):
+        """register_generated silently ignores duplicates (INSERT OR IGNORE)"""
+        registry.register_generated("LZSHCKZS2S8000001", "A.pdf", "CI-2025-001")
+        # Second registration with same number should not raise
+        registry.register_generated("LZSHCKZS2S8000001", "B.pdf", "CI-2025-002")
+        # Original entry should remain unchanged
+        result = registry.check_generated("LZSHCKZS2S8000001")
+        assert result["filename"] == "A.pdf"
+
     def test_delete_extracted(self, registry):
         registry.register_extracted("ABC123456789012", "A.pdf", "CI-2025-001")
         deleted = registry.delete("ABC123456789012")
