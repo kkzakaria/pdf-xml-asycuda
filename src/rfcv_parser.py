@@ -5,6 +5,7 @@ Extrait les données structurées et les mappe aux modèles
 import re
 import math
 import logging
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pdf_extractor import PDFExtractor
@@ -17,6 +18,7 @@ from models import (
 from hs_code_rules import HSCodeAnalyzer
 from proportional_calculator import ProportionalCalculator
 from item_grouper import group_items_by_hs_code
+from chassis_registry import ChassisRegistry, DuplicateChassisError, get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,9 @@ class RFCVParser:
         pdf_path: str,
         taux_douane: Optional[float] = None,
         rapport_paiement: Optional[str] = None,
-        chassis_config: Optional[Dict[str, Any]] = None
+        chassis_config: Optional[Dict[str, Any]] = None,
+        force_reprocess: bool = False,
+        registry: Optional[ChassisRegistry] = None,
     ):
         """
         Initialise le parser
@@ -47,6 +51,11 @@ class RFCVParser:
         self.taux_douane = taux_douane
         self.rapport_paiement = rapport_paiement
         self.chassis_config = chassis_config
+        self.force_reprocess = force_reprocess
+        self.registry = registry if registry is not None else get_registry()
+        self._chassis_duplicates: List[Dict[str, Any]] = []
+        self._pending_registrations: List[Dict[str, Any]] = []
+        self._rfcv_number: Optional[str] = None
         self.text = ""
         self.tables = []
 
@@ -84,6 +93,7 @@ class RFCVParser:
         # Parse toutes les sections
         rfcv_data.property = self._parse_property()
         rfcv_data.identification = self._parse_identification()
+        self._rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
         rfcv_data.exporter = self._parse_exporter()
         rfcv_data.consignee = self._parse_consignee()
         rfcv_data.declarant = self._parse_declarant()
@@ -97,6 +107,19 @@ class RFCVParser:
 
         # Générer des articles supplémentaires si plus de VINs sont demandés que d'articles véhicule
         rfcv_data.items = self._add_additional_vin_items(rfcv_data.items)
+
+        # Vérification des doublons de châssis — après parsing complet pour collecter tous les doublons
+        if self._chassis_duplicates:
+            raise DuplicateChassisError(self._chassis_duplicates)
+
+        # Aucun doublon : enregistrer les châssis extraits en batch
+        for pending in self._pending_registrations:
+            self.registry.register_extracted(
+                chassis_number=pending["chassis_number"],
+                filename=pending["filename"],
+                rfcv_number=pending["rfcv_number"],
+                overwrite=self.force_reprocess,
+            )
 
         # Regrouper les articles sans châssis par code HS
         # Seul le premier article du premier groupe aura quantité = total_packages
@@ -742,6 +765,13 @@ class RFCVParser:
                 f"VIN généré - {vin}"
             )
 
+            if vin:
+                self.registry.register_generated(
+                    chassis_number=vin,
+                    filename=Path(self.pdf_path).name,
+                    rfcv_number=self._rfcv_number,
+                )
+
             return vin
 
         except KeyError as e:
@@ -1006,6 +1036,27 @@ class RFCVParser:
                     chassis_number = self._extract_chassis_number(raw_description)
 
                     if chassis_number:
+                        existing = self.registry.check_extracted(chassis_number)
+                        if existing and not self.force_reprocess:
+                            # Doublon : accumuler sans enregistrer
+                            self._chassis_duplicates.append({
+                                "chassis_number": chassis_number,
+                                "first_seen_date": existing["registered_at"],
+                                "first_filename": existing["filename"],
+                                "first_rfcv_number": existing["rfcv_number"],
+                            })
+                            logger.warning(
+                                f"Article {match.group(1)}: Châssis {chassis_number} déjà traité "
+                                f"(premier: {existing['registered_at']}, fichier: {existing['filename']})"
+                            )
+                        else:
+                            # Nouveau ou force_reprocess : différer l'enregistrement
+                            self._pending_registrations.append({
+                                "chassis_number": chassis_number,
+                                "filename": Path(self.pdf_path).name,
+                                "rfcv_number": self._rfcv_number,
+                            })
+
                         # Châssis trouvé: nettoyer la description
                         goods_description_clean = raw_description.replace(chassis_number, '').strip()
                         goods_description_clean = re.sub(r'\s+', ' ', goods_description_clean)

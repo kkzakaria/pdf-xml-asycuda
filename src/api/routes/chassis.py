@@ -2,11 +2,17 @@
 Routes de génération de VINs ISO 3779 indépendante
 Génération de VINs sans PDF RFCV requis
 """
+import sys
 import logging
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, status, Form, Depends
 from fastapi.responses import PlainTextResponse, Response
 from typing import Optional
 
+# Ajouter src au path pour imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from chassis_registry import get_registry
 from ..models.api_models import (
     VINGenerationRequest,
     VINGenerationResponse,
@@ -14,7 +20,11 @@ from ..models.api_models import (
     VINOutputFormat,
     SequencesStatusResponse,
     SequenceInfo,
-    ErrorResponse
+    ErrorResponse,
+    ChassisRegistryEntry,
+    ChassisRegistryResponse,
+    ChassisEntryDetailResponse,
+    ChassisDeleteResponse,
 )
 from ..services.chassis_service import chassis_service
 from ..services.usage_stats_service import get_usage_stats
@@ -58,7 +68,8 @@ qu'aucun VIN n'est généré deux fois, même entre redémarrages de l'applicati
         200: {"description": "VINs générés avec succès"},
         400: {"model": ErrorResponse, "description": "Paramètres invalides"},
         500: {"model": ErrorResponse, "description": "Erreur interne"}
-    }
+    },
+    dependencies=[Depends(verify_api_key)]
 )
 async def generate_vins(
     quantity: int = Form(..., ge=1, le=10000, description="Nombre de VINs à générer"),
@@ -229,3 +240,67 @@ async def generate_vins_json(request: VINGenerationRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de la génération des VINs: {str(e)}"
         )
+
+
+@router.get(
+    "/registry/extracted",
+    response_model=ChassisRegistryResponse,
+    summary="Liste des châssis extraits",
+    description="Retourne tous les numéros de châssis extraits des PDFs RFCV.",
+    dependencies=[Depends(verify_api_key)]
+)
+async def list_extracted_chassis():
+    entries = get_registry().get_all_extracted()
+    return ChassisRegistryResponse(
+        total=len(entries),
+        entries=[ChassisRegistryEntry(**e) for e in entries]
+    )
+
+
+@router.get(
+    "/registry/generated",
+    response_model=ChassisRegistryResponse,
+    summary="Liste des VINs générés",
+    description="Retourne tous les VINs générés automatiquement.",
+    dependencies=[Depends(verify_api_key)]
+)
+async def list_generated_chassis():
+    entries = get_registry().get_all_generated()
+    return ChassisRegistryResponse(
+        total=len(entries),
+        entries=[ChassisRegistryEntry(**e) for e in entries]
+    )
+
+
+@router.get(
+    "/registry/{chassis_number}",
+    response_model=ChassisEntryDetailResponse,
+    summary="Détail d'un châssis",
+    description="Cherche un châssis dans les deux registres (extrait et généré).",
+    dependencies=[Depends(verify_api_key)]
+)
+async def get_chassis_entry(chassis_number: str):
+    entry = get_registry().get_entry(chassis_number.upper())
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Châssis introuvable: {chassis_number}"
+        )
+    return ChassisEntryDetailResponse(**entry)
+
+
+@router.delete(
+    "/registry/{chassis_number}",
+    response_model=ChassisDeleteResponse,
+    summary="Supprimer une entrée du registre",
+    description="Supprime un châssis du registre (extrait ou généré). Action irréversible.",
+    dependencies=[Depends(verify_api_key)]
+)
+async def delete_chassis_entry(chassis_number: str):
+    deleted = get_registry().delete(chassis_number.upper())
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Châssis introuvable: {chassis_number}"
+        )
+    return ChassisDeleteResponse(success=True, deleted=chassis_number.upper())

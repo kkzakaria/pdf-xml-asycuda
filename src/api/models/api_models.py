@@ -358,6 +358,23 @@ class ErrorResponse(BaseModel):
     })
 
 
+class DuplicateChassisEntry(BaseModel):
+    """Un châssis en doublon avec son historique"""
+    chassis_number: str
+    first_seen_date: str
+    first_filename: str
+    first_rfcv_number: Optional[str] = None
+
+
+class DuplicateChassisErrorResponse(BaseModel):
+    """Réponse HTTP 409 pour châssis déjà traité"""
+    success: bool = False
+    error: str = "duplicate_chassis"
+    detail: str
+    duplicates: List[DuplicateChassisEntry]
+    hint: str = "Relancer avec force_reprocess=true pour forcer le retraitement"
+
+
 # ============= VIN Generation Models =============
 
 class VINOutputFormat(str, Enum):
@@ -489,3 +506,28 @@ class SequencesStatusResponse(BaseModel):
             ]
         }
     })
+
+
+class ChassisRegistryEntry(BaseModel):
+    """Entrée dans le registre de châssis"""
+    chassis_number: str
+    registered_at: str
+    filename: str
+    rfcv_number: Optional[str] = None
+
+
+class ChassisRegistryResponse(BaseModel):
+    """Liste du registre de châssis"""
+    total: int
+    entries: List[ChassisRegistryEntry]
+
+
+class ChassisEntryDetailResponse(ChassisRegistryEntry):
+    """Détail d'une entrée du registre"""
+    table: str  # "extracted" ou "generated"
+
+
+class ChassisDeleteResponse(BaseModel):
+    """Confirmation de suppression"""
+    success: bool
+    deleted: str
