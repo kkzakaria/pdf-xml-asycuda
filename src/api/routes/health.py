@@ -58,7 +58,7 @@ async def get_system_metrics():
 
     # Calculer les statistiques sur les jobs
     total_conversions = len(jobs)
-    successful = sum(1 for job in jobs if job.get('result', {}).get('success', False))
+    successful = sum(1 for job in jobs if (job.get('result') or {}).get('success', False))
     failed = total_conversions - successful
 
     # Métriques moyennes
@@ -67,14 +67,14 @@ async def get_system_metrics():
     total_items = 0
     total_containers = 0
 
-    successful_jobs = [job for job in jobs if job.get('result', {}).get('success', False)]
+    successful_jobs = [job for job in jobs if (job.get('result') or {}).get('success', False)]
 
     if successful_jobs:
         processing_times = []
         fill_rates = []
 
         for job in successful_jobs:
-            result = job.get('result', {})
+            result = job.get('result') or {}
             metrics = result.get('metrics')
 
             if metrics:
@@ -125,7 +125,7 @@ async def get_job_metrics(job_id: str):
             detail=f"Job {job_id} introuvable"
         )
 
-    result = job.get('result', {})
+    result = job.get('result') or {}
     metrics = result.get('metrics')
 
     if not metrics:

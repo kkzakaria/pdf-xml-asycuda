@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "API Convertisseur PDF RFCV → XML ASYCUDA",
-    "description": "\nAPI REST pour convertir les documents PDF RFCV (Rapport Final de Contrôle et de Vérification)\nen fichiers XML compatibles ASYCUDA (Automated System for Customs Data) pour les douanes ivoiriennes.\n\n## Fonctionnalités principales\n\n### 🚗 Génération automatique de châssis VIN (v2.1)\n- **VIN ISO 3779**: Génération de numéros de châssis conformes (17 caractères avec checksum)\n- **Unicité garantie**: Persistance des séquences pour éviter les doublons\n- **Personnalisation**: WMI, VDS, année de fabrication, code d'usine configurables\n- **Limitation**: Contrôle du nombre de VIN générés par conversion\n\n### 📄 Conversion de documents\n- **Extraction PDF**: Analyse automatique des sections RFCV (24 sections)\n- **Validation**: Vérification de la conformité des données extraites\n- **XML ASYCUDA**: Génération XML compatible avec le système douanier\n\n### 🔍 Détection de châssis\n- **Codes HS**: Identification automatique des véhicules (8701-8716, 8427, 8429)\n- **Patterns**: Extraction des VIN et numéros de châssis existants\n- **Validation**: Vérification format ISO 3779 (17 caractères, pas de I/O/Q)\n\n### ⚖️ Calculs douaniers\n- **Assurance**: Formule douanière avec taux de change variable\n- **Répartition proportionnelle**: Distribution des montants globaux par article\n- **Regroupement**: Consolidation des articles par code HS\n\n### 🔄 Traitement batch\n- **Parallélisation**: Traitement concurrent avec workers configurables\n- **Configuration par fichier**: Taux douaniers et configs châssis individuels\n- **Rapports**: Génération de rapports JSON/CSV/Markdown\n\n## Authentification\n\nTous les endpoints nécessitent une clé API dans le header `X-API-Key`.\nPour obtenir une clé, contactez l'administrateur du service.\n",
-    "version": "2.1.0"
+    "description": "\nAPI REST pour convertir les documents PDF RFCV (Rapport Final de Contrôle et de Vérification)\nen fichiers XML compatibles ASYCUDA (Automated System for Customs Data) pour les douanes ivoiriennes.\n\n## Fonctionnalités principales\n\n### 🚗 Génération automatique de châssis VIN (v2.1)\n- **VIN ISO 3779**: Génération de numéros de châssis conformes (17 caractères avec checksum)\n- **Unicité garantie**: Persistance des séquences pour éviter les doublons\n- **Personnalisation**: WMI, VDS, année de fabrication, code d'usine configurables\n- **Limitation**: Contrôle du nombre de VIN générés par conversion\n\n### 📄 Conversion de documents\n- **Extraction PDF**: Analyse automatique des sections RFCV (24 sections)\n- **Validation**: Vérification de la conformité des données extraites\n- **XML ASYCUDA**: Génération XML compatible avec le système douanier\n\n### 🔍 Détection de châssis\n- **Codes HS**: Identification automatique des véhicules (8701-8716, 8427, 8429)\n- **Patterns**: Extraction des VIN et numéros de châssis existants\n- **Validation**: Vérification format ISO 3779 (17 caractères, pas de I/O/Q)\n\n### ⚖️ Calculs douaniers\n- **Assurance**: Formule douanière avec taux de change variable\n- **Répartition proportionnelle**: Distribution des montants globaux par article\n- **Regroupement**: Consolidation des articles par code HS\n\n### 🔄 Traitement batch\n- **Parallélisation**: Traitement concurrent avec workers configurables\n- **Configuration par fichier**: Taux douaniers et configs châssis individuels\n- **Rapports**: Génération de rapports JSON/CSV/Markdown\n\n### 📋 Registre de châssis (v2.9)\n- **Détection de doublons**: Avertissement HTTP 409 si un châssis a déjà été traité\n- **Historique persistant**: Base SQLite — date, fichier source, numéro RFCV\n- **Force retraitement**: Paramètre `force_reprocess=true` pour outrepasser le blocage\n- **Administration**: Endpoints pour lister, consulter et supprimer les entrées du registre\n\n## Authentification\n\nTous les endpoints nécessitent une clé API dans le header `X-API-Key`.\nPour obtenir une clé, contactez l'administrateur du service.\n",
+    "version": "2.9.0"
   },
   "paths": {
     "/api/v1/convert": {
@@ -12,7 +12,7 @@
           "Conversion"
         ],
         "summary": "Conversion synchrone PDF → XML ASYCUDA",
-        "description": "Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement.\n\n### Paramètres requis\n- **file**: Fichier PDF RFCV (max 50MB)\n- **taux_douane**: Taux de change douanier (format: 573.1390)\n\n### Paramètres optionnels\n- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)\n- **chassis_config**: Configuration JSON pour génération automatique de châssis VIN\n\n### 🚗 Exemple de génération de châssis\n\n**Configuration JSON** :\n```json\n{\n  \"generate_chassis\": true,\n  \"quantity\": 180,\n  \"wmi\": \"LZS\",\n  \"year\": 2025,\n  \"vds\": \"HCKZS\",\n  \"plant_code\": \"S\",\n  \"ensure_unique\": true\n}\n```\n\n**Exemple curl avec génération de 180 châssis** :\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F 'chassis_config={\"generate_chassis\":true,\"quantity\":180,\"wmi\":\"LZS\",\"year\":2025}'\n```\n\n**Résultat** : VIN générés (LZSHCKZS0SS000001, LZSHCKZS2SS000002...) dans documents code 6122.",
+        "description": "Upload un PDF RFCV et retourne le XML ASYCUDA immédiatement.\n\n### Paramètres requis\n- **file**: Fichier PDF RFCV (max 50MB)\n- **taux_douane**: Taux de change douanier (format: 573.1390)\n\n### Paramètres optionnels\n- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)\n- **chassis_config**: Configuration JSON pour génération automatique de châssis VIN\n\n### 🚗 Exemple de génération de châssis\n\n**Configuration JSON** :\n```json\n{\n  \"generate_chassis\": true,\n  \"quantity\": 180,\n  \"wmi\": \"LZS\",\n  \"year\": 2025,\n  \"vds\": \"HCKZS\",\n  \"plant_code\": \"S\",\n  \"ensure_unique\": true\n}\n```\n\n**Exemple curl avec génération de 180 châssis** :\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F 'chassis_config={\"generate_chassis\":true,\"quantity\":180,\"wmi\":\"LZS\",\"year\":2025}'\n```\n\n**Résultat** : VIN générés (LZSHCKZS0SS000001, LZSHCKZS2SS000002...) dans documents code 6022 (motos) ou 6122 (autres véhicules).\n\n### 📄 Documents joints générés automatiquement\nChaque article inclut les documents ASYCUDA suivants :\n| Code | Document |\n|------|----------|\n| 0007 | FACTURE |\n| 0014 | JUSTIFICATION D'ASSURANCE |\n| 6603 | BORDEREAU DE SUIVI DE CARGAISON (BSC) |\n| 2500 | NUMERO DE LIGNE ARTICLE RFCV |\n| 2501 | ATTESTATION DE VERIFICATION RFCV |\n| 6022/6122 | NUMERO DE CHASSIS (si véhicule) |",
         "operationId": "convert_pdf_api_v1_convert_post",
         "requestBody": {
           "content": {
@@ -31,6 +31,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConvertResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Châssis déjà traité",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateChassisErrorResponse"
                 }
               }
             }
@@ -106,7 +116,7 @@
           "Conversion"
         ],
         "summary": "Status d'un job",
-        "description": "Récupère le status et la progression d'un job de conversion",
+        "description": "Récupère le status et la progression d'un job de conversion.\n\nSi le job a échoué à cause de châssis en doublon, le champ `duplicate_chassis` contient\nla liste structurée des doublons (numéro, date première vue, fichier source, numéro RFCV).\nRelancer avec `force_reprocess=true` pour forcer le retraitement.",
         "operationId": "get_job_status_api_v1_convert__job_id__get",
         "security": [
           {
@@ -233,6 +243,177 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/convert/with-payment": {
+      "post": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Conversion avec rapport de paiement",
+        "description": "Conversion synchrone PDF → XML ASYCUDA avec numéro de rapport de paiement (quittance Trésor).\n\n### Paramètres requis\n- **file**: Fichier PDF RFCV (max 50MB)\n- **taux_douane**: Taux de change douanier (format: 573.1390)\n- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)\n\n### Cas d'usage\nUtilisez cet endpoint quand vous avez DÉJÀ le numéro de quittance du Trésor Public après paiement des taxes douanières.\n\n### Workflow typique\n1. **Conversion initiale** → Utiliser `/convert` (sans rapport)\n2. **Calcul des taxes** → ASYCUDA calcule les montants\n3. **Paiement au Trésor** → Obtention du numéro de quittance (ex: 25P2003J)\n4. **Re-conversion** → Utiliser `/convert/with-payment` pour inclure le numéro\n\n### Exemple\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert/with-payment\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F \"rapport_paiement=25P2003J\"\n```\n\n### Résultat XML\nLe champ `<Deffered_payment_reference>` sera rempli avec le numéro de quittance.",
+        "operationId": "convert_with_payment_api_v1_convert_with_payment_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_convert_with_payment_api_v1_convert_with_payment_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Châssis déjà traité",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateChassisErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/convert/with-chassis": {
+      "post": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Conversion avec génération de châssis VIN",
+        "description": "Conversion synchrone PDF → XML ASYCUDA avec génération automatique de numéros de châssis VIN ISO 3779.\n\n### Paramètres requis\n- **file**: Fichier PDF RFCV (max 50MB)\n- **taux_douane**: Taux de change douanier (format: 573.1390)\n- **quantity**: Nombre de châssis VIN à générer\n- **wmi**: World Manufacturer Identifier - Code fabricant 3 caractères (ex: LZS, LFV)\n- **year**: Année de fabrication (ex: 2025)\n\n### Paramètres optionnels\n- **vds**: Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)\n- **plant_code**: Code usine - 1 caractère (défaut: S)\n\n### Fonctionnalités\n- ✅ Génération VIN ISO 3779 avec checksum\n- ✅ Séquences persistantes (pas de doublons)\n- ✅ Thread-safe pour traitement parallèle\n- ✅ Nettoyage automatique des anciens châssis dans descriptions\n- ✅ Documents code 6022 (motos) et 6122 (autres véhicules)\n\n### Exemple - 180 châssis LZS/2025\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert/with-chassis\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F \"quantity=180\" \\\n  -F \"wmi=LZS\" \\\n  -F \"year=2025\"\n```\n\n### Exemple - 50 châssis LFV/2024 avec VDS personnalisé\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert/with-chassis\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F \"quantity=50\" \\\n  -F \"wmi=LFV\" \\\n  -F \"year=2024\" \\\n  -F \"vds=BA01A\" \\\n  -F \"plant_code=P\"\n```\n\n### Résultat\nVIN générés (ex: LZSHCKZS0SS000001) apparaissent dans :\n- Document code 6022 (motos) ou 6122 (autres véhicules) (`<Attached_document_reference>`)\n- Marks2 avec préfixe CH: (`<Marks2_of_packages>`)\n\n### Documents joints générés automatiquement\nChaque article inclut les documents suivants :\n- **0007**: FACTURE\n- **0014**: JUSTIFICATION D'ASSURANCE\n- **6603**: BORDEREAU DE SUIVI DE CARGAISON (BSC)\n- **2500**: NUMERO DE LIGNE ARTICLE RFCV\n- **2501**: ATTESTATION DE VERIFICATION RFCV\n- **6022/6122**: NUMERO DE CHASSIS (si véhicule)",
+        "operationId": "convert_with_chassis_api_v1_convert_with_chassis_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_convert_with_chassis_api_v1_convert_with_chassis_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Châssis déjà traité",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateChassisErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/convert/complete": {
+      "post": {
+        "tags": [
+          "Conversion"
+        ],
+        "summary": "Conversion complète (rapport + châssis)",
+        "description": "Conversion synchrone PDF → XML ASYCUDA avec rapport de paiement ET génération de châssis VIN.\n\n### Paramètres requis\n- **file**: Fichier PDF RFCV (max 50MB)\n- **taux_douane**: Taux de change douanier (format: 573.1390)\n- **rapport_paiement**: Numéro de quittance du Trésor Public (ex: 25P2003J)\n- **quantity**: Nombre de châssis VIN à générer\n- **wmi**: World Manufacturer Identifier - Code fabricant 3 caractères\n- **year**: Année de fabrication\n\n### Paramètres optionnels\n- **vds**: Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)\n- **plant_code**: Code usine - 1 caractère (défaut: S)\n\n### Cas d'usage\nUtilisez cet endpoint pour une conversion complète incluant :\n- ✅ Numéro de quittance du Trésor Public\n- ✅ Génération automatique de châssis VIN ISO 3779\n- ✅ Toutes les fonctionnalités combinées\n\n### Exemple\n```bash\ncurl -X POST \"http://localhost:8000/api/v1/convert/complete\" \\\n  -H \"X-API-Key: votre_cle_api\" \\\n  -F \"file=@DOSSIER.pdf\" \\\n  -F \"taux_douane=573.139\" \\\n  -F \"rapport_paiement=25P2003J\" \\\n  -F \"quantity=180\" \\\n  -F \"wmi=LZS\" \\\n  -F \"year=2025\"\n```\n\n### Résultat\nLe XML généré contiendra :\n- `<Deffered_payment_reference>25P2003J</Deffered_payment_reference>`\n- VIN générés dans documents code 6122 et Marks2",
+        "operationId": "convert_complete_api_v1_convert_complete_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_convert_complete_api_v1_convert_complete_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Châssis déjà traité",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateChassisErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
       }
     },
     "/api/v1/batch": {
@@ -628,6 +809,370 @@
         }
       }
     },
+    "/api/v1/chassis/generate": {
+      "post": {
+        "tags": [
+          "Chassis/VIN"
+        ],
+        "summary": "Générer des VINs ISO 3779",
+        "description": "Génère des numéros de châssis VIN ISO 3779 de manière indépendante, sans PDF RFCV requis.\n\n## Paramètres requis\n- **quantity**: Nombre de VINs à générer (1-10000)\n- **wmi**: World Manufacturer Identifier - 3 caractères (ex: LZS pour Chine)\n- **year**: Année modèle (2001-2030)\n\n## Paramètres optionnels\n- **vds**: Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)\n- **plant_code**: Code usine - 1 caractère (défaut: S)\n- **output_format**: Format de sortie - json, csv ou text (défaut: json)\n\n## Structure VIN ISO 3779\n```\nPosition:  1-3    4-8    9        10    11     12-17\n           ----   -----  ----     ----  -----  ------\n           WMI    VDS    Checksum Year  Plant  Séquence\n           LZS    HCKZS  2        S     8      054073\n```\n\n## Unicité garantie\nLes séquences sont persistées dans `data/chassis_sequences.json` pour garantir\nqu'aucun VIN n'est généré deux fois, même entre redémarrages de l'application.",
+        "operationId": "generate_vins_api_v1_chassis_generate_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_generate_vins_api_v1_chassis_generate_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "VINs générés avec succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VINGenerationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Paramètres invalides",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erreur interne",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/chassis/sequences": {
+      "get": {
+        "tags": [
+          "Chassis/VIN"
+        ],
+        "summary": "État des séquences VIN",
+        "description": "Affiche l'état actuel des séquences de génération VIN.\n\nPermet de voir:\n- Le nombre total de préfixes utilisés\n- Le nombre total de VINs générés\n- La séquence actuelle pour chaque préfixe",
+        "operationId": "get_sequences_status_api_v1_chassis_sequences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequencesStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/chassis/generate/json": {
+      "post": {
+        "tags": [
+          "Chassis/VIN"
+        ],
+        "summary": "Générer des VINs (JSON)",
+        "description": "Génère des VINs et retourne directement en JSON. Endpoint simplifié.",
+        "operationId": "generate_vins_json_api_v1_chassis_generate_json_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VINGenerationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VINGenerationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/chassis/registry/extracted": {
+      "get": {
+        "tags": [
+          "Chassis/VIN"
+        ],
+        "summary": "Liste des châssis extraits",
+        "description": "Retourne tous les numéros de châssis extraits des PDFs RFCV.",
+        "operationId": "list_extracted_chassis_api_v1_chassis_registry_extracted_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChassisRegistryResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/chassis/registry/generated": {
+      "get": {
+        "tags": [
+          "Chassis/VIN"
+        ],
+        "summary": "Liste des VINs générés",
+        "description": "Retourne tous les VINs générés automatiquement.",
+        "operationId": "list_generated_chassis_api_v1_chassis_registry_generated_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChassisRegistryResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/chassis/registry/{chassis_number}": {
+      "get": {
+        "tags": [
+          "Chassis/VIN"
+        ],
+        "summary": "Détail d'un châssis",
+        "description": "Cherche un châssis dans les deux registres (extrait et généré).",
+        "operationId": "get_chassis_entry_api_v1_chassis_registry__chassis_number__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "chassis_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chassis Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChassisEntryDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Chassis/VIN"
+        ],
+        "summary": "Supprimer une entrée du registre",
+        "description": "Supprime un châssis du registre (extrait ou généré). Action irréversible.",
+        "operationId": "delete_chassis_entry_api_v1_chassis_registry__chassis_number__delete",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "chassis_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chassis Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChassisDeleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Statistiques d'utilisation",
+        "description": "Retourne toutes les statistiques d'utilisation persistantes de l'API",
+        "operationId": "get_usage_stats_endpoint_api_v1_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stats/conversions": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Statistiques de conversions",
+        "description": "Retourne les statistiques de conversions uniquement",
+        "operationId": "get_conversion_stats_api_v1_stats_conversions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stats/requests": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Statistiques de requêtes",
+        "description": "Retourne les statistiques de requêtes HTTP",
+        "operationId": "get_request_stats_api_v1_stats_requests_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -878,6 +1423,80 @@
         ],
         "title": "Body_batch_convert_api_v1_batch_post"
       },
+      "Body_convert_complete_api_v1_convert_complete_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Fichier PDF RFCV à convertir"
+          },
+          "taux_douane": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Taux Douane",
+            "description": "Taux de change douanier (ex: 573.1390)"
+          },
+          "rapport_paiement": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rapport Paiement",
+            "description": "Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J)"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "description": "Nombre de châssis VIN à générer"
+          },
+          "wmi": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Wmi",
+            "description": "World Manufacturer Identifier - 3 caractères (ex: LZS)"
+          },
+          "year": {
+            "type": "integer",
+            "maximum": 2055.0,
+            "minimum": 1980.0,
+            "title": "Year",
+            "description": "Année de fabrication (ex: 2025)"
+          },
+          "vds": {
+            "type": "string",
+            "maxLength": 5,
+            "minLength": 5,
+            "title": "Vds",
+            "description": "Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)",
+            "default": "HCKZS"
+          },
+          "plant_code": {
+            "type": "string",
+            "maxLength": 1,
+            "minLength": 1,
+            "title": "Plant Code",
+            "description": "Code usine de fabrication - 1 caractère (défaut: S)",
+            "default": "S"
+          },
+          "force_reprocess": {
+            "type": "boolean",
+            "title": "Force Reprocess",
+            "description": "Forcer le retraitement d'un châssis déjà connu",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "taux_douane",
+          "rapport_paiement",
+          "quantity",
+          "wmi",
+          "year"
+        ],
+        "title": "Body_convert_complete_api_v1_convert_complete_post"
+      },
       "Body_convert_pdf_api_v1_convert_post": {
         "properties": {
           "file": {
@@ -915,6 +1534,12 @@
             ],
             "title": "Chassis Config",
             "description": "Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."
+          },
+          "force_reprocess": {
+            "type": "boolean",
+            "title": "Force Reprocess",
+            "description": "Forcer le retraitement d'un châssis déjà connu",
+            "default": false
           }
         },
         "type": "object",
@@ -961,6 +1586,12 @@
             ],
             "title": "Chassis Config",
             "description": "Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."
+          },
+          "force_reprocess": {
+            "type": "boolean",
+            "title": "Force Reprocess",
+            "description": "Forcer le retraitement d'un châssis déjà connu",
+            "default": false
           }
         },
         "type": "object",
@@ -969,6 +1600,277 @@
           "taux_douane"
         ],
         "title": "Body_convert_pdf_async_api_v1_convert_async_post"
+      },
+      "Body_convert_with_chassis_api_v1_convert_with_chassis_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Fichier PDF RFCV à convertir"
+          },
+          "taux_douane": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Taux Douane",
+            "description": "Taux de change douanier (ex: 573.1390)"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "description": "Nombre de châssis VIN à générer"
+          },
+          "wmi": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Wmi",
+            "description": "World Manufacturer Identifier - 3 caractères (ex: LZS, LFV)"
+          },
+          "year": {
+            "type": "integer",
+            "maximum": 2055.0,
+            "minimum": 1980.0,
+            "title": "Year",
+            "description": "Année de fabrication (ex: 2025)"
+          },
+          "vds": {
+            "type": "string",
+            "maxLength": 5,
+            "minLength": 5,
+            "title": "Vds",
+            "description": "Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)",
+            "default": "HCKZS"
+          },
+          "plant_code": {
+            "type": "string",
+            "maxLength": 1,
+            "minLength": 1,
+            "title": "Plant Code",
+            "description": "Code usine de fabrication - 1 caractère (défaut: S)",
+            "default": "S"
+          },
+          "force_reprocess": {
+            "type": "boolean",
+            "title": "Force Reprocess",
+            "description": "Forcer le retraitement d'un châssis déjà connu",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "taux_douane",
+          "quantity",
+          "wmi",
+          "year"
+        ],
+        "title": "Body_convert_with_chassis_api_v1_convert_with_chassis_post"
+      },
+      "Body_convert_with_payment_api_v1_convert_with_payment_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "Fichier PDF RFCV à convertir"
+          },
+          "taux_douane": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Taux Douane",
+            "description": "Taux de change douanier (ex: 573.1390)"
+          },
+          "rapport_paiement": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rapport Paiement",
+            "description": "Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J)"
+          },
+          "force_reprocess": {
+            "type": "boolean",
+            "title": "Force Reprocess",
+            "description": "Forcer le retraitement d'un châssis déjà connu",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "taux_douane",
+          "rapport_paiement"
+        ],
+        "title": "Body_convert_with_payment_api_v1_convert_with_payment_post"
+      },
+      "Body_generate_vins_api_v1_chassis_generate_post": {
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Quantity",
+            "description": "Nombre de VINs à générer"
+          },
+          "wmi": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Wmi",
+            "description": "World Manufacturer Identifier (3 caractères)"
+          },
+          "year": {
+            "type": "integer",
+            "maximum": 2030.0,
+            "minimum": 2001.0,
+            "title": "Year",
+            "description": "Année modèle (2001-2030)"
+          },
+          "vds": {
+            "type": "string",
+            "maxLength": 5,
+            "minLength": 5,
+            "title": "Vds",
+            "description": "Vehicle Descriptor Section (5 caractères)",
+            "default": "HCKZS"
+          },
+          "plant_code": {
+            "type": "string",
+            "maxLength": 1,
+            "minLength": 1,
+            "title": "Plant Code",
+            "description": "Code usine (1 caractère)",
+            "default": "S"
+          },
+          "output_format": {
+            "$ref": "#/components/schemas/VINOutputFormat",
+            "description": "Format de sortie",
+            "default": "json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quantity",
+          "wmi",
+          "year"
+        ],
+        "title": "Body_generate_vins_api_v1_chassis_generate_post"
+      },
+      "ChassisDeleteResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "deleted": {
+            "type": "string",
+            "title": "Deleted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "deleted"
+        ],
+        "title": "ChassisDeleteResponse",
+        "description": "Confirmation de suppression"
+      },
+      "ChassisEntryDetailResponse": {
+        "properties": {
+          "chassis_number": {
+            "type": "string",
+            "title": "Chassis Number"
+          },
+          "registered_at": {
+            "type": "string",
+            "title": "Registered At"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "rfcv_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rfcv Number"
+          },
+          "table": {
+            "type": "string",
+            "title": "Table"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chassis_number",
+          "registered_at",
+          "filename",
+          "table"
+        ],
+        "title": "ChassisEntryDetailResponse",
+        "description": "Détail d'une entrée du registre"
+      },
+      "ChassisRegistryEntry": {
+        "properties": {
+          "chassis_number": {
+            "type": "string",
+            "title": "Chassis Number"
+          },
+          "registered_at": {
+            "type": "string",
+            "title": "Registered At"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "rfcv_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rfcv Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chassis_number",
+          "registered_at",
+          "filename"
+        ],
+        "title": "ChassisRegistryEntry",
+        "description": "Entrée dans le registre de châssis"
+      },
+      "ChassisRegistryResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ChassisRegistryEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "entries"
+        ],
+        "title": "ChassisRegistryResponse",
+        "description": "Liste du registre de châssis"
       },
       "ConversionMetrics": {
         "properties": {
@@ -1147,6 +2049,113 @@
           "success": true
         }
       },
+      "DuplicateChassisEntry": {
+        "properties": {
+          "chassis_number": {
+            "type": "string",
+            "title": "Chassis Number"
+          },
+          "first_seen_date": {
+            "type": "string",
+            "title": "First Seen Date"
+          },
+          "first_filename": {
+            "type": "string",
+            "title": "First Filename"
+          },
+          "first_rfcv_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Rfcv Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chassis_number",
+          "first_seen_date",
+          "first_filename"
+        ],
+        "title": "DuplicateChassisEntry",
+        "description": "Un châssis en doublon avec son historique"
+      },
+      "DuplicateChassisErrorResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": false
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "default": "duplicate_chassis"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "duplicates": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateChassisEntry"
+            },
+            "type": "array",
+            "title": "Duplicates"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint",
+            "default": "Relancer avec force_reprocess=true pour forcer le retraitement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail",
+          "duplicates"
+        ],
+        "title": "DuplicateChassisErrorResponse",
+        "description": "Réponse HTTP 409 pour châssis déjà traité"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "Réponse d'erreur standard",
+        "example": {
+          "detail": "Invalid PDF structure",
+          "error": "Conversion failed",
+          "timestamp": "2025-01-15T10:30:45Z"
+        }
+      },
       "FileMetadataResponse": {
         "properties": {
           "file_id": {
@@ -1309,6 +2318,20 @@
               }
             ],
             "title": "Error"
+          },
+          "duplicate_chassis": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DuplicateChassisEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Chassis"
           }
         },
         "type": "object",
@@ -1389,6 +2412,244 @@
           "total_conversions": 42,
           "total_items": 504
         }
+      },
+      "SequenceInfo": {
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "title": "Prefix"
+          },
+          "current_sequence": {
+            "type": "integer",
+            "title": "Current Sequence"
+          },
+          "total_generated": {
+            "type": "integer",
+            "title": "Total Generated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prefix",
+          "current_sequence",
+          "total_generated"
+        ],
+        "title": "SequenceInfo",
+        "description": "Information sur une séquence VIN"
+      },
+      "SequencesStatusResponse": {
+        "properties": {
+          "total_prefixes": {
+            "type": "integer",
+            "title": "Total Prefixes"
+          },
+          "total_vins_generated": {
+            "type": "integer",
+            "title": "Total Vins Generated"
+          },
+          "sequences": {
+            "items": {
+              "$ref": "#/components/schemas/SequenceInfo"
+            },
+            "type": "array",
+            "title": "Sequences"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_prefixes",
+          "total_vins_generated",
+          "sequences"
+        ],
+        "title": "SequencesStatusResponse",
+        "description": "État des séquences de VINs",
+        "example": {
+          "sequences": [
+            {
+              "current_sequence": 270,
+              "prefix": "LZSHCKZSS",
+              "total_generated": 270
+            },
+            {
+              "current_sequence": 180,
+              "prefix": "LFVBA01AS",
+              "total_generated": 180
+            }
+          ],
+          "total_prefixes": 2,
+          "total_vins_generated": 450
+        }
+      },
+      "VINGenerationMetadata": {
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "wmi": {
+            "type": "string",
+            "title": "Wmi"
+          },
+          "vds": {
+            "type": "string",
+            "title": "Vds"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "plant_code": {
+            "type": "string",
+            "title": "Plant Code"
+          },
+          "prefix": {
+            "type": "string",
+            "title": "Prefix"
+          },
+          "start_sequence": {
+            "type": "integer",
+            "title": "Start Sequence"
+          },
+          "end_sequence": {
+            "type": "integer",
+            "title": "End Sequence"
+          },
+          "generated_at": {
+            "type": "string",
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quantity",
+          "wmi",
+          "vds",
+          "year",
+          "plant_code",
+          "prefix",
+          "start_sequence",
+          "end_sequence",
+          "generated_at"
+        ],
+        "title": "VINGenerationMetadata",
+        "description": "Métadonnées de génération VIN"
+      },
+      "VINGenerationRequest": {
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Quantity",
+            "description": "Nombre de VINs à générer (1-10000)"
+          },
+          "wmi": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Wmi",
+            "description": "World Manufacturer Identifier - Code fabricant 3 caractères (ex: LZS, LFV)"
+          },
+          "vds": {
+            "type": "string",
+            "maxLength": 5,
+            "minLength": 5,
+            "title": "Vds",
+            "description": "Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)",
+            "default": "HCKZS"
+          },
+          "year": {
+            "type": "integer",
+            "maximum": 2030.0,
+            "minimum": 2001.0,
+            "title": "Year",
+            "description": "Année modèle pour code année ISO 3779 (2001-2030)"
+          },
+          "plant_code": {
+            "type": "string",
+            "maxLength": 1,
+            "minLength": 1,
+            "title": "Plant Code",
+            "description": "Code usine de fabrication - 1 caractère (défaut: S)",
+            "default": "S"
+          },
+          "output_format": {
+            "$ref": "#/components/schemas/VINOutputFormat",
+            "description": "Format de sortie: json, csv ou text",
+            "default": "json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quantity",
+          "wmi",
+          "year"
+        ],
+        "title": "VINGenerationRequest",
+        "description": "Requête de génération de VINs ISO 3779 indépendante",
+        "example": {
+          "output_format": "json",
+          "plant_code": "S",
+          "quantity": 180,
+          "vds": "HCKZS",
+          "wmi": "LZS",
+          "year": 2025
+        }
+      },
+      "VINGenerationResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "vins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Vins"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/VINGenerationMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "vins",
+          "metadata"
+        ],
+        "title": "VINGenerationResponse",
+        "description": "Réponse de génération de VINs",
+        "example": {
+          "metadata": {
+            "end_sequence": 3,
+            "generated_at": "2025-01-07T16:30:00Z",
+            "plant_code": "S",
+            "prefix": "LZSHCKZSS",
+            "quantity": 3,
+            "start_sequence": 1,
+            "vds": "HCKZS",
+            "wmi": "LZS",
+            "year": 2025
+          },
+          "success": true,
+          "vins": [
+            "LZSHCKZS2S8000001",
+            "LZSHCKZS2S8000002",
+            "LZSHCKZS2S8000003"
+          ]
+        }
+      },
+      "VINOutputFormat": {
+        "type": "string",
+        "enum": [
+          "json",
+          "csv",
+          "text"
+        ],
+        "title": "VINOutputFormat",
+        "description": "Formats de sortie pour les VINs générés"
       },
       "ValidationError": {
         "properties": {

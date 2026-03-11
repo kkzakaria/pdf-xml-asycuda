@@ -259,7 +259,8 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
             status=JobStatus.FAILED,
             progress=0,
             message=f"Châssis en doublon: {len(e.duplicates)} déjà traité(s)",
-            error=str(e)
+            error=str(e),
+            duplicate_chassis=e.duplicates,
         )
         return
 
@@ -423,7 +424,11 @@ async def convert_pdf_async(
     "/{job_id}",
     response_model=JobStatusResponse,
     summary="Status d'un job",
-    description="Récupère le status et la progression d'un job de conversion",
+    description="""Récupère le status et la progression d'un job de conversion.
+
+Si le job a échoué à cause de châssis en doublon, le champ `duplicate_chassis` contient
+la liste structurée des doublons (numéro, date première vue, fichier source, numéro RFCV).
+Relancer avec `force_reprocess=true` pour forcer le retraitement.""",
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.DEFAULT)
@@ -451,7 +456,8 @@ async def get_job_status(request: Request, job_id: str):
         completed_at=job['completed_at'],
         progress=job['progress'],
         message=job['message'],
-        error=job['error']
+        error=job['error'],
+        duplicate_chassis=job.get('duplicate_chassis'),
     )
 
 

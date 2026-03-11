@@ -84,3 +84,37 @@ class TestConvertDuplicateChassis:
             )
 
         assert captured_kwargs.get("force_reprocess") is True
+
+    @pytest.mark.asyncio
+    async def test_async_job_exposes_duplicate_chassis(self, client, minimal_pdf_bytes):
+        """En mode async, GET /convert/{job_id} expose la liste structurée des doublons"""
+        from chassis_registry import DuplicateChassisError
+
+        duplicate_entry = [{
+            "chassis_number": "LZSHCKZS2S8000001",
+            "first_seen_date": "2025-01-01T10:00:00+00:00",
+            "first_filename": "OLD_DOSSIER.pdf",
+            "first_rfcv_number": "CI-2025-001",
+        }]
+
+        with patch(
+            "api.services.conversion_service.ConversionService.convert_pdf_to_xml",
+            side_effect=DuplicateChassisError(duplicate_entry)
+        ):
+            post_response = await client.post(
+                "/api/v1/convert/async",
+                files={"file": ("DOSSIER.pdf", minimal_pdf_bytes, "application/pdf")},
+                data={"taux_douane": "573.139"},
+            )
+            assert post_response.status_code == 200
+            job_id = post_response.json()["job_id"]
+
+            status_response = await client.get(f"/api/v1/convert/{job_id}")
+
+        assert status_response.status_code == 200
+        body = status_response.json()
+        assert body["status"] == "failed"
+        assert body["duplicate_chassis"] is not None
+        assert len(body["duplicate_chassis"]) == 1
+        assert body["duplicate_chassis"][0]["chassis_number"] == "LZSHCKZS2S8000001"
+        assert body["duplicate_chassis"][0]["first_filename"] == "OLD_DOSSIER.pdf"
