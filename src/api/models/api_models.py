@@ -109,6 +109,14 @@ class BatchConvertRequest(BaseModel):
 
 # ============= Response Models =============
 
+class DuplicateChassisEntry(BaseModel):
+    """Un châssis en doublon avec son historique"""
+    chassis_number: str
+    first_seen_date: str
+    first_filename: str
+    first_rfcv_number: Optional[str] = None
+
+
 class ConversionMetrics(BaseModel):
     """Métriques d'une conversion"""
     items_count: int
@@ -196,6 +204,7 @@ class JobStatusResponse(BaseModel):
     progress: Optional[int] = None  # 0-100
     message: str
     error: Optional[str] = None
+    duplicate_chassis: Optional[List[DuplicateChassisEntry]] = None
 
     model_config = ConfigDict(json_schema_extra={
         "example": {
@@ -356,14 +365,6 @@ class ErrorResponse(BaseModel):
             "timestamp": "2025-01-15T10:30:45Z"
         }
     })
-
-
-class DuplicateChassisEntry(BaseModel):
-    """Un châssis en doublon avec son historique"""
-    chassis_number: str
-    first_seen_date: str
-    first_filename: str
-    first_rfcv_number: Optional[str] = None
 
 
 class DuplicateChassisErrorResponse(BaseModel):

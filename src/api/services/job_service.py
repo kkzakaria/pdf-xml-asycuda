@@ -45,7 +45,8 @@ class JobService:
             'progress': 0,
             'message': 'Job créé',
             'error': None,
-            'result': None
+            'result': None,
+            'duplicate_chassis': None,
         }
 
         self.jobs[job_id] = job
@@ -58,7 +59,8 @@ class JobService:
         progress: Optional[int] = None,
         message: Optional[str] = None,
         error: Optional[str] = None,
-        result: Optional[Dict] = None
+        result: Optional[Dict] = None,
+        duplicate_chassis: Optional[List] = None,
     ) -> Optional[Dict]:
         """
         Met à jour un job
@@ -95,6 +97,9 @@ class JobService:
 
         if result:
             job['result'] = result
+
+        if duplicate_chassis is not None:
+            job['duplicate_chassis'] = duplicate_chassis
 
         return job
 
