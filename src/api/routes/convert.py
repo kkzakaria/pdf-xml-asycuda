@@ -424,7 +424,11 @@ async def convert_pdf_async(
     "/{job_id}",
     response_model=JobStatusResponse,
     summary="Status d'un job",
-    description="Récupère le status et la progression d'un job de conversion",
+    description="""Récupère le status et la progression d'un job de conversion.
+
+Si le job a échoué à cause de châssis en doublon, le champ `duplicate_chassis` contient
+la liste structurée des doublons (numéro, date première vue, fichier source, numéro RFCV).
+Relancer avec `force_reprocess=true` pour forcer le retraitement.""",
     dependencies=[Depends(verify_api_key)]
 )
 @limiter.limit(RateLimits.DEFAULT)

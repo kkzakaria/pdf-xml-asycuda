@@ -215,7 +215,8 @@ class JobStatusResponse(BaseModel):
             "completed_at": "2025-01-15T10:30:45Z",
             "progress": 100,
             "message": "Conversion terminée",
-            "error": None
+            "error": None,
+            "duplicate_chassis": None
         }
     })
 
