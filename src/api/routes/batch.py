@@ -18,6 +18,7 @@ from ..services.storage_service import storage_service
 from ..services.job_service import job_service
 from ..services.usage_stats_service import get_usage_stats
 from ..core.security import verify_api_key
+from ..core.declaration_options import BatchDeclarationOptions, batch_declaration_options
 from ..core.rate_limit import limiter, RateLimits
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/batch", tags=["Batch"])
 
 
-async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: List[float], output_dir: str, workers: int, chassis_configs: List[dict] = None):
+async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: List[float], output_dir: str, workers: int, chassis_configs: List[dict] = None, options: BatchDeclarationOptions = None):
     """Tâche de traitement batch asynchrone"""
 
     # Mettre à jour le status à PROCESSING
@@ -42,7 +43,8 @@ async def _async_batch_task(batch_id: str, pdf_paths: List[str], taux_douanes: L
         chassis_configs=chassis_configs or [],
         output_dir=output_dir,
         workers=workers,
-        verbose=False
+        verbose=False,
+        **(options or BatchDeclarationOptions()).service_kwargs(),
     )
 
     # Mettre à jour le batch avec les résultats
@@ -119,7 +121,8 @@ async def batch_convert(
     files: List[UploadFile] = File(..., description="Fichiers PDF à convertir"),
     taux_douanes: str = Form(..., description="Liste JSON de taux douaniers (ex: [573.1390, 580.2500])"),
     chassis_configs: str = Form(None, description="Liste JSON de configurations chassis (ex: [{\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"year\": 2025}, null]). Optionnel - un par fichier ou null."),
-    workers: int = Body(default=4, ge=1, le=8, description="Nombre de workers parallèles")
+    workers: int = Body(default=4, ge=1, le=8, description="Nombre de workers parallèles"),
+    options: BatchDeclarationOptions = Depends(batch_declaration_options),
 ):
     """
     Conversion batch de plusieurs PDFs
@@ -128,6 +131,9 @@ async def batch_convert(
     - **taux_douanes**: Liste de taux douaniers (un par fichier, format JSON)
     - **chassis_configs**: Liste de configurations chassis (optionnel, un par fichier ou null)
     - **workers**: Nombre de workers pour traitement parallèle (1-8)
+    - **profil**: Nom du profil société du serveur, commun à tous les fichiers (optionnel)
+    - **dossiers / manifestes / nationalites_transport**: Listes JSON, une valeur par fichier ou null (optionnel)
+    - **assurance**: 'formule' (défaut) ou 'rfcv'
 
     Retourne un batch_id pour suivre la progression
     """
@@ -163,6 +169,9 @@ async def batch_convert(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Taux invalide pour le fichier {i+1}: {taux} (doit être > 0)"
             )
+
+    # Données de dossier : une par fichier
+    options.check_lengths(len(files))
 
     # Parser les configurations chassis (optionnel)
     chassis_configs_list = []
@@ -220,7 +229,8 @@ async def batch_convert(
             taux_douanes=taux_list,
             output_dir=f"output/{batch_id}",
             workers=workers,
-            chassis_configs=chassis_configs_list
+            chassis_configs=chassis_configs_list,
+            options=options,
         )
 
         return BatchJobResponse(

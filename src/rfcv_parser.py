@@ -19,6 +19,8 @@ from hs_code_rules import HSCodeAnalyzer
 from proportional_calculator import ProportionalCalculator
 from item_grouper import group_items_by_hs_code
 from chassis_registry import ChassisRegistry, DuplicateChassisError, get_registry
+import rfcv_format_2026 as fmt2026
+from asycuda_enrichment import enrich_for_asycuda
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ class RFCVParser:
         chassis_config: Optional[Dict[str, Any]] = None,
         force_reprocess: bool = False,
         registry: Optional[ChassisRegistry] = None,
+        insurance_mode: str = "formule",
     ):
         """
         Initialise le parser
@@ -46,7 +49,15 @@ class RFCVParser:
                            Format: {'generate_chassis': True, 'quantity': 180, 'wmi': 'LZS',
                                    'vds': 'HCKZS', 'year': 2025, 'plant_code': 'S',
                                    'ensure_unique': True}
+            insurance_mode: 'formule' (défaut) = ceiling(2500 + (FOB + FRET) × taux × 0,15 %),
+                           comme les déclarations de production (28923, 28928, 31287).
+                           'rfcv' = assurance attestée en case 21 du RFCV × taux douanier
+                           (repli sur la formule si le RFCV n'en porte pas).
         """
+        if insurance_mode not in ("rfcv", "formule"):
+            raise ValueError(f"insurance_mode invalide : {insurance_mode!r} (attendu 'rfcv' ou 'formule')")
+        self.insurance_mode = insurance_mode
+        self.is_format_2026 = False
         self.pdf_path = pdf_path
         self.taux_douane = taux_douane
         self.rapport_paiement = rapport_paiement
@@ -89,8 +100,18 @@ class RFCVParser:
             self.tables = extractor.extract_all_tables()
 
         rfcv_data = RFCVData()
+        self.is_format_2026 = fmt2026.is_format_2026(self.text)
 
-        # Parse toutes les sections
+        if self.is_format_2026:
+            # Format RFCV actuel (nombres 1,234.56, libellés courts, article sur 3 lignes)
+            self._parse_format_2026(rfcv_data)
+        else:
+            self._parse_format_legacy(rfcv_data)
+
+        return self._finalize(rfcv_data)
+
+    def _parse_format_legacy(self, rfcv_data: RFCVData) -> None:
+        """Format RFCV historique (nombres 1 234,56, code SH à points)."""
         rfcv_data.property = self._parse_property()
         rfcv_data.identification = self._parse_identification()
         self._rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
@@ -105,6 +126,132 @@ class RFCVParser:
         rfcv_data.items = self._parse_items()
         rfcv_data.value_details = self._extract_value_details()
 
+    def _parse_format_2026(self, rfcv_data: RFCVData) -> None:
+        """Format RFCV actuel : en-tête et articles lus par rfcv_format_2026."""
+        h = fmt2026.parse_header(self.text)
+        missing = [k for k in ("rfcv_number", "fob", "currency_code", "exchange_rate") if h.get(k) is None]
+        if missing:
+            logger.warning(f"RFCV format 2026 : champs d'en-tête introuvables : {', '.join(missing)}")
+
+        rfcv_data.property = Property(
+            sad_flow='I', selected_page=1,
+            total_packages=h["total_packages"], package_type=self.PACKAGE_KIND_2026[1])
+
+        rfcv_data.identification = Identification(
+            type_of_declaration='IM', declaration_procedure_code='4',
+            customs_office_code='CIAB1', customs_office_name='ABIDJAN-PORT',
+            rfcv_number=h["rfcv_number"], rfcv_date=h["rfcv_date"],
+            fdi_number=h["fdi_number"], fdi_date=h["fdi_date"], delivery_type=h["delivery_type"])
+        self._rfcv_number = h["rfcv_number"]
+
+        rfcv_data.exporter = Trader(name=h["exporter_name"], address=h["exporter_address"])
+        rfcv_data.consignee = Trader(code=h["importer_code"], name=h["importer_name"],
+                                     address=h["importer_address"])
+        rfcv_data.declarant = self._parse_declarant()
+
+        rfcv_data.country = Country(
+            export_country_code=h["country_code"], export_country_name=h["country_name"],
+            origin_country_name=h["country_name"], first_destination=h["country_code"],
+            destination_country_code='CI', destination_country_name="Cote d'Ivoire",
+            trading_country='CI')
+
+        rfcv_data.transport = TransportInfo(
+            border_mode=h["transport_mode_code"],
+            vessel_identity=h["carrier"], vessel_name=h["carrier"],
+            delivery_terms_code=h["incoterm"], incoterm=h["incoterm"],
+            bill_of_lading=h["bill_of_lading"], bl_date=h["bl_date"], voyage_number=h["voyage_number"],
+            loading_place_code=h["loading_place"], loading_place_name=h["loading_place_name"],
+            loading_location=h["loading_place"],
+            location_of_goods=h["discharge_place"], discharge_location=h["discharge_place"],
+            fcl_count=h["fcl_count"], lcl_count=h["lcl_count"],
+            container_flag=bool(h["fcl_count"]),
+            border_office_code='CIAB1', border_office_name='ABIDJAN-PORT')
+
+        rfcv_data.financial = Financial(
+            transaction_code1='0', transaction_code2='1',
+            mode_of_payment=('COMPTE DE PAIEMENT' if h["payment_mode"] and 'compte' in h["payment_mode"].lower()
+                             else h["payment_mode"]),
+            deferred_payment_ref=self.rapport_paiement or None,
+            invoice_number=h["invoice_number"], invoice_date=h["invoice_date"],
+            invoice_amount=None,  # case 18 non utilisée par ASYCUDA
+            currency_code=h["currency_code"], exchange_rate=self._customs_rate(h))
+
+        cur, rate = h["currency_code"], self._customs_rate(h)
+
+        def amount(value: Optional[float]) -> Optional[CurrencyAmount]:
+            if value is None or not cur or not rate:
+                return None
+            return CurrencyAmount(amount_foreign=value, amount_national=value * rate, currency_code=cur,
+                                  currency_name='Pas de devise étrangère', currency_rate=rate)
+
+        valuation = Valuation(
+            calculation_mode='2', gross_weight=h["gross_weight"], net_weight=h["net_weight"],
+            total_weight=h["gross_weight"], invoice=amount(h["fob"]),
+            external_freight=amount(h["freight"]), total_invoice=h["fob"])
+        valuation.insurance = self._insurance_xof(h["fob"], h["freight"], h["insurance"], rate)
+        rfcv_data.valuation = valuation
+        rfcv_data.containers = []  # non générés (ASYCUDA les gère)
+
+        # Code colis : CT (carton) comme dans les déclarations de production, quel que soit le
+        # libellé du RFCV (« Colis »)
+        kind_code, kind_name = self.PACKAGE_KIND_2026
+        rows, _subtotals, problems = fmt2026.parse_items(self.text)
+        for p in problems:
+            logger.warning(f"RFCV format 2026 : {p}")
+        total_rows = round(sum(r["fob"] or 0 for r in rows), 2)
+        if h["fob"] is not None and abs(total_rows - h["fob"]) > 0.01:
+            logger.warning(f"RFCV format 2026 : Σ FOB articles {total_rows} ≠ case 19 {h['fob']}")
+
+        rfcv_data.items = [
+            self._build_item(
+                line_number=r["n"], raw_description=r["description"], hs_code_clean=r["hs"],
+                origin_code=r["origin"], fob=r["fob"], taxable=r["taxable"],
+                kind_code=kind_code, kind_name=kind_name,
+                designation=fmt2026.short_designation(r["description"]))
+            for r in rows
+        ]
+        rfcv_data.value_details = None  # calculé par enrich_for_asycuda (fret + assurance)
+
+    PACKAGE_KIND_2026 = ('CT', 'Carton')
+
+    def _customs_rate(self, h: Dict) -> Optional[float]:
+        """
+        Taux de conversion en XOF retenu dans la déclaration.
+
+        ASYCUDA convertit au taux douanier du jour (taux_douane), pas au taux du RFCV (case 17) :
+        31287 -> 596,302 (RFCV 590,09) ; 28926 -> 573,9681 (RFCV 576,42).
+        Le XOF reste à 1. Sans taux douanier fourni, repli sur le taux du RFCV.
+        """
+        if h.get("currency_code") == "XOF":
+            return 1.0
+        if self.taux_douane:
+            if h.get("exchange_rate") and abs(self.taux_douane - h["exchange_rate"]) > 1e-9:
+                logger.info(f"Taux douanier {self.taux_douane} retenu (taux RFCV {h['exchange_rate']})")
+            return self.taux_douane
+        return h.get("exchange_rate")
+
+    def _insurance_xof(self, fob: Optional[float], freight: Optional[float],
+                       attested: Optional[float], rate: Optional[float]) -> Optional[CurrencyAmount]:
+        """
+        Assurance globale en XOF.
+
+        insurance_mode='rfcv' : valeur attestée (case 21, devise du RFCV) × taux de change.
+        insurance_mode='formule', ou pas d'assurance attestée : ceiling(2500 + (FOB+FRET) × taux_douane × 0,15 %).
+        """
+        value = None
+        if self.insurance_mode == "rfcv" and attested and rate:
+            value = round(attested * rate)
+        elif fob and freight and self.taux_douane:
+            value = math.ceil(2500 + (fob + freight) * self.taux_douane * 0.0015)
+            if self.insurance_mode == "rfcv":
+                logger.warning("Assurance non attestée sur le RFCV : formule appliquée")
+        if value is None:
+            return None
+        return CurrencyAmount(amount_national=value, amount_foreign=value, currency_code='XOF',
+                              currency_name='Franc CFA', currency_rate=1.0)
+
+    def _finalize(self, rfcv_data: RFCVData) -> RFCVData:
+        """Étapes communes aux deux formats, après lecture des sections et des articles."""
         # Générer des articles supplémentaires si plus de VINs sont demandés que d'articles véhicule
         rfcv_data.items = self._add_additional_vin_items(rfcv_data.items)
 
@@ -164,7 +311,7 @@ class RFCVParser:
                         amount_foreign=fob_value,
                         amount_national=fob_value * rate_value if fob_value and rate_value else None,
                         currency_code=rfcv_data.financial.currency_code,
-                        currency_name='Pas de devise étrangère',
+                        currency_name=None,  # <null/> au niveau article, comme en production
                         currency_rate=rate_value
                     )
 
@@ -173,6 +320,10 @@ class RFCVParser:
         # proportionnellement à leur FOB en utilisant la méthode du reste le plus grand
         calculator = ProportionalCalculator()
         rfcv_data = calculator.apply_to_rfcv(rfcv_data)
+
+        # Champs calculés attendus par ASYCUDA (colis par article, CIF, valeur statistique,
+        # éléments de la valeur, totaux) — voir asycuda_enrichment
+        enrich_for_asycuda(rfcv_data)
 
         # NOTE: La répartition du nombre de colis est maintenant gérée par le regroupement d'articles
         # Le nombre de colis (section 24) est stocké comme quantité du premier article du premier groupe
@@ -959,165 +1110,141 @@ class RFCVParser:
                 break
 
         for match in re.finditer(item_pattern, section_text):
-            item = Item()
-
-            # Stocker le numéro de ligne RFCV (pour document 2500)
-            item.rfcv_line_number = int(match.group(1))
-
-            # Extraire la quantité et l'unité de mesure de l'article
-            quantity = self._parse_number(match.group(2))  # Ex: "36 000,00" -> 36000
-            unit_measure = match.group(3)  # Ex: "KG"
-
-            # Description brute
-            raw_description = match.group(6).strip()
-
-            # HS Code - extraction préalable pour analyse
-            hs_code_str = match.group(7)
-            # Remove dots from HS code (e.g., "2803.00.00.00" -> "2803000000")
-            hs_code_clean = hs_code_str.replace('.', '')
-
-            # DÉTECTION CHÂSSIS: Analyser si l'article nécessite un châssis
-            chassis_info = HSCodeAnalyzer.requires_chassis(hs_code_clean, raw_description)
-
-            chassis_number = None
-            goods_description_clean = raw_description
-            marks2_value = None
-
-            if chassis_info['required']:
-                # Mode génération de châssis activé
-                if self.chassis_config and self.chassis_config.get('generate_chassis'):
-                    # Incrémenter compteur et générer VIN
-                    self._chassis_counter += 1
-
-                    # Limiter la génération au nombre spécifié
-                    if self._chassis_counter <= self.chassis_config.get('quantity', 0):
-                        chassis_number = self._generate_chassis_for_article(
-                            article_number=self._chassis_counter,
-                            hs_code=hs_code_clean
-                        )
-
-                        if chassis_number:
-                            # Châssis VIN généré avec succès
-                            # Détecter et retirer l'ancien châssis de la description
-                            old_chassis = self._extract_chassis_number(raw_description)
-                            if old_chassis:
-                                goods_description_clean = raw_description.replace(old_chassis, '').strip()
-                                goods_description_clean = re.sub(r'\s+', ' ', goods_description_clean)
-                                logger.debug(
-                                    f"Article {match.group(1)}: Ancien châssis retiré de description - {old_chassis}"
-                                )
-                            else:
-                                goods_description_clean = raw_description
-
-                            marks2_value = f"CH: {chassis_number}"
-
-                            logger.info(
-                                f"Article {match.group(1)}: Châssis VIN généré #{self._chassis_counter} "
-                                f"({chassis_info['category']}) - {chassis_number}"
-                            )
-                        else:
-                            # Échec génération
-                            logger.error(
-                                f"Article {match.group(1)}: Échec génération châssis VIN #{self._chassis_counter}"
-                            )
-                            chassis_number = None
-                            marks2_value = None
-                    else:
-                        # Nombre maximal de châssis atteint
-                        logger.warning(
-                            f"Article {match.group(1)}: Nombre maximal de châssis atteint "
-                            f"({self.chassis_config.get('quantity')}), article sans châssis"
-                        )
-                        chassis_number = None
-                        marks2_value = None
-
-                else:
-                    # Mode normal: extraction depuis PDF (comportement actuel)
-                    chassis_number = self._extract_chassis_number(raw_description)
-
-                    if chassis_number:
-                        existing = self.registry.check_extracted(chassis_number)
-                        if existing and not self.force_reprocess:
-                            # Doublon : accumuler sans enregistrer
-                            self._chassis_duplicates.append({
-                                "chassis_number": chassis_number,
-                                "first_seen_date": existing["registered_at"],
-                                "first_filename": existing["filename"],
-                                "first_rfcv_number": existing["rfcv_number"],
-                            })
-                            logger.warning(
-                                f"Article {match.group(1)}: Châssis {chassis_number} déjà traité "
-                                f"(premier: {existing['registered_at']}, fichier: {existing['filename']})"
-                            )
-                        else:
-                            # Nouveau ou force_reprocess : différer l'enregistrement
-                            self._pending_registrations.append({
-                                "chassis_number": chassis_number,
-                                "filename": Path(self.pdf_path).name,
-                                "rfcv_number": self._rfcv_number,
-                            })
-
-                        # Châssis trouvé: nettoyer la description
-                        goods_description_clean = raw_description.replace(chassis_number, '').strip()
-                        goods_description_clean = re.sub(r'\s+', ' ', goods_description_clean)
-
-                        # Format ASYCUDA: "CH: XXXXX"
-                        marks2_value = f"CH: {chassis_number}"
-
-                        logger.info(
-                            f"Article {match.group(1)}: Châssis détecté ({chassis_info['category']}) "
-                            f"- {chassis_number}"
-                        )
-                    else:
-                        # ⚠️ Châssis attendu mais non trouvé
-                        logger.warning(
-                            f"Article {match.group(1)}: Code HS {hs_code_clean[:4]} nécessite un châssis "
-                            f"({chassis_info['category']}, confiance: {chassis_info['confidence']:.0%}) "
-                            f"mais aucun numéro détecté dans: {raw_description[:60]}..."
-                        )
-
-            # Description finale
-            item.goods_description = goods_description_clean
-
-            # Package info avec châssis si présent
-            item.packages = Package(
-                number_of_packages=None,  # Sera calculé après depuis total_packages (Section 24)
+            items.append(self._build_item(
+                line_number=int(match.group(1)),
+                raw_description=match.group(6).strip(),
+                hs_code_clean=match.group(7).replace('.', ''),  # "2803.00.00.00" -> "2803000000"
+                origin_code=match.group(5),
+                fob=self._parse_number(match.group(8)),
+                taxable=self._parse_number(match.group(9)),
                 kind_code=kind_code,
                 kind_name=kind_name,
-                marks1=commercial_description if commercial_description else goods_description_clean,
-                marks2=marks2_value,  # "CH: XXXXX" ou None
-                chassis_number=chassis_number  # Numéro brut pour référence
-            )
-            item.country_of_origin_code = match.group(5)
-
-            # Summary declaration sera ajouté après parsing (besoin du bill_of_lading)
-            item.tarification = Tarification(
-                hscode=HSCode(
-                    commodity_code=hs_code_clean[:8] if len(hs_code_clean) >= 8 else hs_code_clean,
-                    precision_1=hs_code_clean[8:10] if len(hs_code_clean) >= 10 else '00'
-                ),
-                extended_procedure='4000',
-                national_procedure='000',
-                supplementary_units=[],  # Null - ASYCUDA déterminera automatiquement selon code HS
-                item_price=self._parse_number(match.group(8))
-            )
-
-            # Valuation item
-            item.valuation_item = ValuationItem(
-                total_cost=self._parse_number(match.group(8)),
-                total_cif=self._parse_number(match.group(9))
-            )
-
-            # Taxation vide par défaut
-            item.taxation = Taxation(
-                item_taxes_amount=0.0,
-                item_taxes_guaranteed=0.0,
-                taxation_lines=[]
-            )
-
-            items.append(item)
+                commercial_description=commercial_description,
+            ))
 
         return items
+
+    def _build_item(
+        self,
+        line_number: int,
+        raw_description: str,
+        hs_code_clean: str,
+        origin_code: Optional[str],
+        fob: Optional[float],
+        taxable: Optional[float],
+        kind_code: str,
+        kind_name: str,
+        commercial_description: Optional[str] = None,
+        designation: Optional[str] = None,
+    ) -> Item:
+        """
+        Construit un article à partir d'une ligne RFCV (commun aux deux formats).
+
+        Détecte le châssis selon le code SH, le contrôle dans le registre (doublons),
+        et remplit Marks2 / Free_text_1 au format ASYCUDA « CH: <VIN> ».
+
+        Args:
+            designation: désignation imposée (Description_of_goods et Marks1). Format 2026 :
+                « MOTORCYCLE-FENGHAO - VIN » -> « MOTORCYCLE », comme les déclarations de production.
+                Le châssis est toujours lu dans raw_description.
+        """
+        item = Item()
+        item.rfcv_line_number = line_number
+
+        chassis_info = HSCodeAnalyzer.requires_chassis(hs_code_clean, raw_description)
+        chassis_number = None
+        goods_description_clean = raw_description
+        marks2_value = None
+
+        if chassis_info['required']:
+            if self.chassis_config and self.chassis_config.get('generate_chassis'):
+                self._chassis_counter += 1
+                if self._chassis_counter <= self.chassis_config.get('quantity', 0):
+                    chassis_number = self._generate_chassis_for_article(
+                        article_number=self._chassis_counter,
+                        hs_code=hs_code_clean
+                    )
+                    if chassis_number:
+                        old_chassis = self._extract_chassis_number(raw_description)
+                        if old_chassis:
+                            goods_description_clean = re.sub(
+                                r'\s+', ' ', raw_description.replace(old_chassis, '')).strip()
+                            logger.debug(f"Article {line_number}: Ancien châssis retiré de description - {old_chassis}")
+                        marks2_value = f"CH: {chassis_number}"
+                        logger.info(
+                            f"Article {line_number}: Châssis VIN généré #{self._chassis_counter} "
+                            f"({chassis_info['category']}) - {chassis_number}"
+                        )
+                    else:
+                        logger.error(f"Article {line_number}: Échec génération châssis VIN #{self._chassis_counter}")
+                else:
+                    logger.warning(
+                        f"Article {line_number}: Nombre maximal de châssis atteint "
+                        f"({self.chassis_config.get('quantity')}), article sans châssis"
+                    )
+            else:
+                # Mode normal : châssis lu dans la désignation du RFCV
+                chassis_number = self._extract_chassis_number(raw_description)
+                if chassis_number:
+                    existing = self.registry.check_extracted(chassis_number)
+                    if existing and not self.force_reprocess:
+                        self._chassis_duplicates.append({
+                            "chassis_number": chassis_number,
+                            "first_seen_date": existing["registered_at"],
+                            "first_filename": existing["filename"],
+                            "first_rfcv_number": existing["rfcv_number"],
+                        })
+                        logger.warning(
+                            f"Article {line_number}: Châssis {chassis_number} déjà traité "
+                            f"(premier: {existing['registered_at']}, fichier: {existing['filename']})"
+                        )
+                    else:
+                        self._pending_registrations.append({
+                            "chassis_number": chassis_number,
+                            "filename": Path(self.pdf_path).name,
+                            "rfcv_number": self._rfcv_number,
+                        })
+                    goods_description_clean = re.sub(
+                        r'\s+', ' ', raw_description.replace(chassis_number, '')).strip()
+                    marks2_value = f"CH: {chassis_number}"
+                    logger.info(
+                        f"Article {line_number}: Châssis détecté ({chassis_info['category']}) - {chassis_number}"
+                    )
+                else:
+                    logger.warning(
+                        f"Article {line_number}: Code HS {hs_code_clean[:4]} nécessite un châssis "
+                        f"({chassis_info['category']}, confiance: {chassis_info['confidence']:.0%}) "
+                        f"mais aucun numéro détecté dans: {raw_description[:60]}..."
+                    )
+
+        if designation:
+            goods_description_clean = designation
+        item.goods_description = goods_description_clean
+        item.packages = Package(
+            number_of_packages=None,  # Réparti ensuite (regroupement / enrichissement ASYCUDA)
+            kind_code=kind_code,
+            kind_name=kind_name,
+            marks1=commercial_description if commercial_description else goods_description_clean,
+            marks2=marks2_value,
+            chassis_number=chassis_number
+        )
+        # Free_text_1 (case 44 « Mentions ») : même châssis que Marks2
+        item.free_text_1 = marks2_value
+        item.country_of_origin_code = origin_code
+
+        item.tarification = Tarification(
+            hscode=HSCode(
+                commodity_code=hs_code_clean[:8] if len(hs_code_clean) >= 8 else hs_code_clean,
+                precision_1=hs_code_clean[8:10] if len(hs_code_clean) >= 10 else '00'
+            ),
+            extended_procedure='4000',
+            national_procedure='000',
+            supplementary_units=[],  # ASYCUDA détermine selon le code SH (sauf châssis : QA + 40)
+            item_price=fob
+        )
+        item.valuation_item = ValuationItem(total_cost=fob, total_cif=taxable)
+        item.taxation = Taxation(item_taxes_amount=0.0, item_taxes_guaranteed=0.0, taxation_lines=[])
+        return item
 
     def _extract_value_details(self) -> Optional[float]:
         """Extrait la valeur totale des détails"""
@@ -1254,84 +1381,50 @@ class RFCVParser:
 
     def _add_attached_documents(self, rfcv_data: RFCVData) -> None:
         """
-        Ajoute les documents attachés standards à chaque item
+        Ajoute les documents attachés standards à chaque article.
 
-        Documents standards ASYCUDA Côte d'Ivoire:
-        - Code 0007: FACTURE (No. Facture + Date) - TOUS LES ARTICLES
-        - Code 0014: JUSTIFICATION D'ASSURANCE - TOUS LES ARTICLES
-        - Code 2500: A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE - TOUS LES ARTICLES
-        - Code 2501: A.V./R.F.C.V. - ATTESTATION DE VERIFICATION (No. RFCV) - TOUS LES ARTICLES
-        - Code 6022: NUMERO DE CHASSIS (motos HS 8711) - ARTICLES AVEC CHASSIS
-        - Code 6122: NUMERO DE CHASSIS (autres véhicules) - ARTICLES AVEC CHASSIS
-        - Code 6603: NUMERO DU BORDEREAU DE SUIVI DE CARGAISON (BSC) - TOUS LES ARTICLES
-
-        Args:
-            rfcv_data: Données RFCV complètes avec identification et financial
+        Règles relevées sur les déclarations réelles (export ASYCUDA 28926, XML de
+        production 28923 / 28928), dans cet ordre :
+        - 0007 FACTURE : n° facture + date facture
+        - 0014 JUSTIFICATION D'ASSURANCE : « VD »
+        - 6603 BORDEREAU DE SUIVI DE CARGAISON : « VD »
+        - 2500 A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE : n° de ligne RFCV
+        - 2501 A.V./R.F.C.V. - ATTESTATION DE VERIFICATION : n° RFCV
+        - 6610 NUMERO FDI : n° FDI + date FDI (from_rule = 0), premier article uniquement
+        - 6022/6122 NUMERO DE CHASSIS : VIN brut (articles avec châssis)
         """
-        # Récupérer les références depuis identification, financial et transport
-        rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
-        invoice_number = rfcv_data.financial.invoice_number if rfcv_data.financial else None
-        invoice_date = rfcv_data.financial.invoice_date if rfcv_data.financial else None
-        bsc_number = rfcv_data.transport.bill_of_lading if rfcv_data.transport else None
+        ident = rfcv_data.identification
+        fin = rfcv_data.financial
+        rfcv_number = ident.rfcv_number if ident else None
+        fdi_number = ident.fdi_number if ident else None
+        fdi_date = ident.fdi_date if ident else None
+        invoice_number = fin.invoice_number if fin else None
+        invoice_date = fin.invoice_date if fin else None
 
-        for item in rfcv_data.items:
-            # Code 0007: FACTURE - tous les articles
+        for index, item in enumerate(rfcv_data.items):
+            docs = item.attached_documents
             if invoice_number:
-                item.attached_documents.append(AttachedDocument(
-                    code='0007',
-                    name='FACTURE',
-                    reference=invoice_number,
-                    from_rule=1,
-                    document_date=invoice_date
-                ))
-
-            # Code 0014: JUSTIFICATION D'ASSURANCE - tous les articles (pas de référence spécifique)
-            item.attached_documents.append(AttachedDocument(
-                code='0014',
-                name="JUSTIFICATION D'ASSURANCE AUPRES D'UNE COMPAGNIE AGREEE EN COTE D'IV.",
-                reference=None,
-                from_rule=1
-            ))
-
-            # Code 6603: BORDEREAU DE SUIVI DE CARGAISON (BSC) - tous les articles
-            if bsc_number:
-                item.attached_documents.append(AttachedDocument(
-                    code='6603',
-                    name='NUMERO DU BORDEREAU DE SUIVI DE CARGAISON',
-                    reference=bsc_number,
-                    from_rule=1
-                ))
-
-            # Code 2500: NUMERO DE LIGNE ARTICLE - tous les articles
+                docs.append(AttachedDocument(code='0007', name='FACTURE', reference=invoice_number,
+                                             from_rule=1, document_date=invoice_date))
+            docs.append(AttachedDocument(
+                code='0014', name="JUSTIFICATION D'ASSURANCE AUPRES D'UNE COMPAGNIE AGREEE EN COTE D'IV.",
+                reference='VD', from_rule=1))
+            docs.append(AttachedDocument(code='6603', name='NUMERO DU BORDEREAU DE SUIVI DE CARGAISON',
+                                         reference='VD', from_rule=1))
             if item.rfcv_line_number is not None:
-                item.attached_documents.append(AttachedDocument(
-                    code='2500',
-                    name='A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE',
-                    reference=str(item.rfcv_line_number),
-                    from_rule=1
-                ))
-
-            # Code 2501: ATTESTATION DE VERIFICATION (RFCV) - tous les articles
+                docs.append(AttachedDocument(code='2500', name='A.V./R.F.C.V. - NUMERO DE LIGNE ARTICLE',
+                                             reference=str(item.rfcv_line_number), from_rule=1))
             if rfcv_number:
-                item.attached_documents.append(AttachedDocument(
-                    code='2501',
-                    name="A.V./R.F.C.V. - ATTESTATION DE VERIFICATION",
-                    reference=rfcv_number,
-                    from_rule=1
-                ))
-
-            # Code 6022/6122: NUMERO DE CHASSIS - articles avec châssis uniquement
+                docs.append(AttachedDocument(code='2501', name='A.V./R.F.C.V. - ATTESTATION DE VERIFICATION',
+                                             reference=rfcv_number, from_rule=1))
+            if fdi_number and index == 0:
+                docs.append(AttachedDocument(code='6610', name='NUMERO  FDI', reference=fdi_number,
+                                             from_rule=0, document_date=fdi_date))
             if item.packages and item.packages.chassis_number:
                 hs_code = item.tarification.hscode.commodity_code if item.tarification and item.tarification.hscode else None
-                description = item.goods_description or ''
-                doc_code = HSCodeAnalyzer.get_chassis_document_code(hs_code, description)
-
-                item.attached_documents.append(AttachedDocument(
-                    code=doc_code,
-                    name='NUMERO DE CHASSIS',
-                    reference=item.packages.chassis_number,
-                    from_rule=1
-                ))
+                doc_code = HSCodeAnalyzer.get_chassis_document_code(hs_code, item.goods_description or '')
+                docs.append(AttachedDocument(code=doc_code, name='NUMERO DE CHASSIS',
+                                             reference=item.packages.chassis_number, from_rule=1))
 
     def _add_supplementary_units_for_chassis(self, rfcv_data: RFCVData) -> None:
         """

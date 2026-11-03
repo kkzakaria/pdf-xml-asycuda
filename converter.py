@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
+from company_profile import apply_profile, load_profile
 from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
 
@@ -23,7 +24,12 @@ def convert_pdf_to_xml(
     verbose: bool = False,
     taux_douane: float = None,
     rapport_paiement: str = None,
-    chassis_config: dict = None
+    chassis_config: dict = None,
+    insurance_mode: str = "formule",
+    profile=None,
+    dossier: str = None,
+    manifeste: str = None,
+    nationalite_transport: str = None
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -74,9 +80,15 @@ def convert_pdf_to_xml(
             pdf_path,
             taux_douane=taux_douane,
             rapport_paiement=rapport_paiement,
-            chassis_config=chassis_config
+            chassis_config=chassis_config,
+            insurance_mode=insurance_mode
         )
         rfcv_data = parser.parse()
+
+        # Constantes société (profil) et données du dossier, absentes du RFCV
+        if profile or dossier or manifeste or nationalite_transport:
+            apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
+                          nationalite_transport=nationalite_transport)
 
         if verbose:
             print(f"  ✓ Extraction réussie")
@@ -203,6 +215,26 @@ Exemples d'utilisation:
         default=None,
         help='Taux de change douanier pour calcul assurance (format: 573.1390, avec 4 décimales)'
     )
+
+    parser.add_argument(
+        '--assurance-rfcv',
+        action='store_true',
+        help="Reprendre l'assurance attestée sur le RFCV (case 21 × taux douanier) au lieu de la "
+             "formule ceiling(2500 + (FOB+FRET) × taux × 0,15 %%) (défaut)"
+    )
+
+    profile_group = parser.add_argument_group(
+        'Profil société et dossier',
+        'Valeurs absentes du RFCV : bureau, déclarant, banque, compte, emplacement, manifeste'
+    )
+    profile_group.add_argument('--profil', default=None,
+                               help='Fichier profil société (clé=valeur), ex. profils/karta-transit.ini')
+    profile_group.add_argument('--dossier', default=None,
+                               help='N° de dossier : référence déclarant = préfixe du profil + n° (ex. 31287 -> KARTA31287)')
+    profile_group.add_argument('--manifeste', default=None,
+                               help='Référence du manifeste (ex. "CIAB1 2026 7065")')
+    profile_group.add_argument('--nationalite-transport', default=None,
+                               help='Nationalité du moyen de transport, code pays (ex. LR)')
 
     parser.add_argument(
         '--rapport-paiement',
@@ -332,6 +364,21 @@ Exemples d'utilisation:
             # Le nombre sera ajusté automatiquement par BatchProcessor
             chassis_configs_list = [chassis_config]  # Un seul élément, sera répliqué si nécessaire
 
+        # Profil société et assurance : communs à tous les fichiers. Les données de dossier
+        # (n°, manifeste, nationalité) sont propres à chaque fichier : non applicables en batch CLI.
+        if args.dossier or args.manifeste or args.nationalite_transport:
+            print("Erreur: --dossier, --manifeste et --nationalite-transport sont propres à un fichier ; "
+                  "en batch, utilisez l'API (listes par fichier) ou convertissez fichier par fichier.",
+                  file=sys.stderr)
+            sys.exit(1)
+        batch_profile = None
+        if args.profil:
+            try:
+                batch_profile = load_profile(args.profil)
+            except (OSError, ValueError) as e:
+                print(f"Erreur profil société : {e}", file=sys.stderr)
+                sys.exit(1)
+
         # Créer la configuration batch
         config = BatchConfig(
             input_paths=input_paths,
@@ -342,7 +389,10 @@ Exemples d'utilisation:
             continue_on_error=True,
             verbose=args.verbose,
             progress_bar=not args.no_progress,
-            chassis_configs=chassis_configs_list
+            chassis_configs=chassis_configs_list,
+            taux_douane=args.taux_douane,
+            profile=batch_profile,
+            insurance_mode="rfcv" if args.assurance_rfcv else "formule",
         )
 
         # Exécuter le traitement batch
@@ -386,6 +436,14 @@ Exemples d'utilisation:
             print("Exemple: --taux-douane 573.1390", file=sys.stderr)
             sys.exit(1)
 
+        profile = None
+        if args.profil:
+            try:
+                profile = load_profile(args.profil)
+            except (OSError, ValueError) as e:
+                print(f"Erreur profil société : {e}", file=sys.stderr)
+                sys.exit(1)
+
         pdf_file = args.pdf_files[0]
         success = convert_pdf_to_xml(
             pdf_file,
@@ -393,7 +451,12 @@ Exemples d'utilisation:
             args.verbose,
             taux_douane=args.taux_douane,
             rapport_paiement=args.rapport_paiement,
-            chassis_config=chassis_config
+            chassis_config=chassis_config,
+            insurance_mode="rfcv" if args.assurance_rfcv else "formule",
+            profile=profile,
+            dossier=args.dossier,
+            manifeste=args.manifeste,
+            nationalite_transport=args.nationalite_transport
         )
         sys.exit(0 if success else 1)
 

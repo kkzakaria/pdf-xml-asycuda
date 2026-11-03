@@ -19,6 +19,7 @@ except ImportError:
 
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
+from company_profile import apply_profile
 from metrics import ConversionMetrics, MetricsCollector
 
 
@@ -46,6 +47,14 @@ class BatchConfig:
     progress_bar: bool = True
     taux_douanes: List[float] = field(default_factory=list)  # Taux douaniers par fichier
     chassis_configs: List[Optional[Dict[str, Any]]] = field(default_factory=list)  # Configs chassis par fichier
+    # Communs à tous les fichiers
+    taux_douane: Optional[float] = None          # Taux douanier par défaut (si taux_douanes ne couvre pas le fichier)
+    profile: Optional[Any] = None                # CompanyProfile (company_profile.py)
+    insurance_mode: str = "formule"              # 'formule' ou 'rfcv'
+    # Données de dossier, une par fichier (même ordre que input_paths)
+    dossiers: List[Optional[str]] = field(default_factory=list)
+    manifestes: List[Optional[str]] = field(default_factory=list)
+    nationalites_transport: List[Optional[str]] = field(default_factory=list)
 
     def __post_init__(self):
         """Validation de la configuration"""
@@ -69,6 +78,10 @@ class BatchProcessor:
         self.config = config
         self.results: List[BatchResult] = []
         self.collector = MetricsCollector()
+        # Position de chaque fichier dans input_paths (pour les listes par fichier)
+        self._input_index: Dict[Path, int] = {}
+        for i, input_path in enumerate(config.input_paths):
+            self._input_index.setdefault(Path(input_path).resolve(), i)
 
     def find_pdf_files(self) -> List[Path]:
         """
@@ -105,8 +118,41 @@ class BatchProcessor:
 
         return pdf_files
 
+    def _file_options(self, pdf_file: Path) -> Dict[str, Any]:
+        """
+        Paramètres propres à un fichier.
+
+        Les listes par fichier (taux_douanes, chassis_configs, dossiers...) suivent l'ordre de
+        config.input_paths. find_pdf_files() trie les fichiers : l'association se fait donc par
+        chemin, pas par position dans la liste triée (sinon un taux ou un n° de dossier pourrait
+        être appliqué au mauvais fichier).
+        """
+        index = self._input_index.get(Path(pdf_file).resolve())
+        cfg = self.config
+
+        def pick(values: List[Any], broadcast: bool = False) -> Any:
+            if not values:
+                return None
+            if broadcast and len(values) == 1:
+                return values[0]  # une seule valeur : appliquée à tous les fichiers (CLI)
+            return values[index] if index is not None and index < len(values) else None
+
+        taux = pick(cfg.taux_douanes, broadcast=True)
+        return {
+            "taux_douane": taux if taux is not None else cfg.taux_douane,
+            "chassis_config": pick(cfg.chassis_configs, broadcast=True),
+            "profile": cfg.profile,
+            "insurance_mode": cfg.insurance_mode,
+            "dossier": pick(cfg.dossiers),
+            "manifeste": pick(cfg.manifestes),
+            "nationalite_transport": pick(cfg.nationalites_transport),
+        }
+
     @staticmethod
-    def _process_single_file(pdf_path: Path, output_dir: str, verbose: bool = False, taux_douane: Optional[float] = None, chassis_config: Optional[Dict[str, Any]] = None) -> BatchResult:
+    def _process_single_file(pdf_path: Path, output_dir: str, verbose: bool = False, taux_douane: Optional[float] = None,
+                             chassis_config: Optional[Dict[str, Any]] = None, profile: Optional[Any] = None,
+                             insurance_mode: str = "formule", dossier: Optional[str] = None,
+                             manifeste: Optional[str] = None, nationalite_transport: Optional[str] = None) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -116,6 +162,9 @@ class BatchProcessor:
             verbose: Mode verbeux
             taux_douane: Taux de change douanier pour calcul assurance (optionnel)
             chassis_config: Configuration pour génération automatique châssis VIN (optionnel)
+            profile: Profil société (optionnel)
+            insurance_mode: 'formule' ou 'rfcv'
+            dossier, manifeste, nationalite_transport: données du dossier (optionnel)
 
         Returns:
             Résultat du traitement
@@ -138,8 +187,12 @@ class BatchProcessor:
             # ne protège pas contre les doublons inter-processus. En mode batch, la détection
             # de doublons est best-effort (SQLite sérialisera les écritures, mais deux workers
             # peuvent passer le check_extracted simultanément sur le même châssis).
-            parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config)
+            parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config,
+                                insurance_mode=insurance_mode)
             rfcv_data = parser.parse()
+            if profile or dossier or manifeste or nationalite_transport:
+                apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
+                              nationalite_transport=nationalite_transport)
 
             # Générer le XML
             generator = XMLGenerator(rfcv_data)
@@ -188,18 +241,12 @@ class BatchProcessor:
         if TQDM_AVAILABLE and self.config.progress_bar:
             iterator = tqdm(pdf_files, desc="Processing PDFs", unit="file")
 
-        for i, pdf_file in enumerate(iterator):
-            # Récupérer le taux douanier pour ce fichier (si disponible)
-            taux_douane = self.config.taux_douanes[i] if i < len(self.config.taux_douanes) else None
-            # Récupérer la config chassis pour ce fichier (si disponible)
-            chassis_config = self.config.chassis_configs[i] if i < len(self.config.chassis_configs) else None
-
+        for pdf_file in iterator:
             result = self._process_single_file(
                 pdf_file,
                 self.config.output_dir,
                 self.config.verbose,
-                taux_douane=taux_douane,
-                chassis_config=chassis_config
+                **self._file_options(pdf_file)
             )
             results.append(result)
 
@@ -230,10 +277,9 @@ class BatchProcessor:
                     pdf_file,
                     self.config.output_dir,
                     self.config.verbose,
-                    taux_douane=self.config.taux_douanes[i] if i < len(self.config.taux_douanes) else None,
-                    chassis_config=self.config.chassis_configs[i] if i < len(self.config.chassis_configs) else None
+                    **self._file_options(pdf_file)
                 ): pdf_file
-                for i, pdf_file in enumerate(pdf_files)
+                for pdf_file in pdf_files
             }
 
             # Créer la barre de progression si disponible

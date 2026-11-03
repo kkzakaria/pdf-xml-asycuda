@@ -8,6 +8,7 @@ from typing import Optional, List
 from datetime import datetime
 from models import RFCVData, Item, Trader, CurrencyAmount
 from hs_code_rules import HSCodeAnalyzer
+from asycuda_enrichment import to_asycuda_date
 
 
 class XMLGenerator:
@@ -167,7 +168,8 @@ class XMLGenerator:
 
         forms = ET.SubElement(prop_elem, 'Forms')
         self._add_simple_element(forms, 'Number_of_the_form', str(prop.form_number) if prop and prop.form_number else '1')
-        self._add_simple_element(forms, 'Total_number_of_forms', str(prop.total_forms) if prop and prop.total_forms else '1')
+        self._add_simple_element(forms, 'Total_number_of_forms', str(prop.total_forms) if prop and prop.total_forms
+                                 else str(self._total_forms(len(self.data.items))))
 
         nbers = ET.SubElement(prop_elem, 'Nbers')
         self._add_simple_element(nbers, 'Number_of_loading_lists')
@@ -196,12 +198,11 @@ class XMLGenerator:
         self._add_simple_element(type_elem, 'Declaration_gen_procedure_code', ident.declaration_procedure_code if ident else '4')
         self._add_element(type_elem, 'Type_of_transit_document')
 
-        self._add_element(ident_elem, 'Manifest_reference_number', None)  # Null - non utilisé en Côte d'Ivoire
+        # Manifeste : donnée du dossier (paramètre --manifeste), <null/> sinon
+        self._add_element(ident_elem, 'Manifest_reference_number', ident.manifest_reference if ident else None)
 
         # P3.5: Ajouter les nouveaux champs PRIORITÉ 3
-        # Date RFCV (section 5)
-        if ident and ident.rfcv_date:
-            self._add_simple_element(ident_elem, 'RFCV_date', self._convert_date_to_asycuda_format(ident.rfcv_date))
+        # (RFCV_date retiré : balise absente des déclarations ASYCUDA réelles et de production)
 
         # No. FDI/DAI (section 7)
         if ident and ident.fdi_number:
@@ -211,9 +212,9 @@ class XMLGenerator:
         if ident and ident.fdi_date:
             self._add_simple_element(ident_elem, 'FDI_date', self._convert_date_to_asycuda_format(ident.fdi_date))
 
-        # Type de livraison (section 6: TOT/PART)
-        if ident and ident.delivery_type:
-            self._add_simple_element(ident_elem, 'Delivery_type', ident.delivery_type)
+        # Type de livraison (section 6: TOT/PART) ; TOT si la case est vide, comme en production
+        self._add_simple_element(ident_elem, 'Delivery_type',
+                                 ident.delivery_type if ident and ident.delivery_type else 'TOT')
 
         registration = ET.SubElement(ident_elem, 'Registration')
         self._add_element(registration, 'Serial_number')
@@ -245,7 +246,8 @@ class XMLGenerator:
         consignee_elem = ET.SubElement(traders, 'Consignee')
         cons = self.data.consignee
         self._add_simple_element(consignee_elem, 'Consignee_code', cons.code if cons and cons.code else '')
-        consignee_name = f"{cons.name}\n{cons.address}" if cons and cons.name else ""
+        # Nom seul, comme les déclarations de production (l'adresse est connue d'ASYCUDA par le code)
+        consignee_name = cons.name if cons and cons.name else ""
         self._add_simple_element(consignee_elem, 'Consignee_name', consignee_name)
 
         # Financial
@@ -331,14 +333,15 @@ class XMLGenerator:
         self._add_simple_element(border_office, 'Name', trans.border_office_name if trans else 'ABIDJAN-PORT')
 
         loading = ET.SubElement(transport_elem, 'Place_of_loading')
-        # Mis à null - non utilisé en Côte d'Ivoire
-        self._add_element(loading, 'Code', None)
-        self._add_element(loading, 'Name', None)
+        # Lieu de chargement (UN/LOCODE + nom) quand le RFCV le porte
+        self._add_element(loading, 'Code', trans.loading_place_code if trans else None)
+        self._add_element(loading, 'Name', trans.loading_place_name if trans else None)
         self._add_element(loading, 'Country')
 
         # P1.6: Location_of_goods - mis à null pour laisser ASYCUDA déterminer la valeur
         # Note: ASYCUDA remplace automatiquement par "D001" si une valeur est fournie
-        self._add_element(transport_elem, 'Location_of_goods', None)
+        # Emplacement des marchandises : profil société (ex. AIRE), <null/> sinon
+        self._add_element(transport_elem, 'Location_of_goods', trans.goods_location if trans else None)
 
     def _build_financial(self):
         """Construit la section Financial"""
@@ -427,8 +430,7 @@ class XMLGenerator:
         weight = ET.SubElement(valuation_elem, 'Weight')
         # Gross_weight à null - ASYCUDA calcule automatiquement depuis les Gross_weight_itm des articles
         self._add_simple_element(weight, 'Gross_weight', '')
-        # Net_weight à null - ASYCUDA calcule automatiquement depuis les Net_weight_itm des articles
-        self._add_simple_element(weight, 'Net_weight', '')
+        # (Net_weight retiré : la déclaration ASYCUDA ne porte que Gross_weight à ce niveau)
 
         self._add_simple_element(valuation_elem, 'Total_cost', str(val.total_cost) if val and val.total_cost else '')
         self._add_simple_element(valuation_elem, 'Total_CIF', str(val.total_cif) if val and val.total_cif else '')
@@ -436,21 +438,50 @@ class XMLGenerator:
         # Currency amounts
         # Gs_Invoice: Utilise section 19 (Total Valeur FOB attestée) - valeur de la facture commerciale
         self._add_currency_amount(valuation_elem, 'Gs_Invoice', val.invoice if val else None, allow_null=True)
-        # Gs_external_freight à null - ASYCUDA calcule automatiquement depuis les item_external_freight des articles
-        self._add_currency_amount(valuation_elem, 'Gs_external_freight', None, allow_null=True)
-        # Gs_internal_freight à null - Le fret RFCV concerne uniquement le fret étranger (external)
-        self._add_currency_amount(valuation_elem, 'Gs_internal_freight', None, allow_null=True)
-        # Gs_insurance à null - ASYCUDA calcule automatiquement depuis les item_insurance des articles
-        self._add_currency_amount(valuation_elem, 'Gs_insurance', None, allow_null=True)
-        # Gs_other_cost à null - Non utilisé dans les RFCV
-        self._add_currency_amount(valuation_elem, 'Gs_other_cost', None, allow_null=True)
-        # Gs_deduction à null - Non utilisé dans les RFCV
-        self._add_currency_amount(valuation_elem, 'Gs_deduction', None, allow_null=True)
+        # Gs_external_freight / Gs_insurance : montant national global (forme des déclarations réelles)
+        self._add_global_cost(valuation_elem, 'Gs_external_freight', val.external_freight if val else None)
+        # Gs_internal_freight / other_cost / deduction : non portés par le RFCV -> bloc à zéro
+        self._add_zero_cost(valuation_elem, 'Gs_internal_freight')
+        self._add_global_cost(valuation_elem, 'Gs_insurance', val.insurance if val else None)
+        self._add_zero_cost(valuation_elem, 'Gs_other_cost')
+        self._add_zero_cost(valuation_elem, 'Gs_deduction')
 
         total = ET.SubElement(valuation_elem, 'Total')
         # Total_invoice: Valeur FOB totale (section 19) en devise étrangère
         self._add_element(total, 'Total_invoice', str(val.total_invoice) if val and val.total_invoice else None)
         self._add_simple_element(total, 'Total_weight', str(val.total_weight) if val and val.total_weight else '')
+
+    @staticmethod
+    def _format_weight(value: Optional[float]) -> str:
+        if value is None:
+            return ''
+        return str(int(value)) if float(value).is_integer() else str(value)
+
+    @staticmethod
+    def _total_forms(n_items: int) -> int:
+        """Nombre de formulaires du DAU : 1 article sur le premier, 3 par formulaire suivant (215 -> 73)."""
+        return 1 + -(-max(n_items - 1, 0) // 3)
+
+    def _add_zero_cost(self, parent: ET.Element, tag: str):
+        """Coût nul : forme utilisée par ASYCUDA pour fret interne, autres coûts, déductions."""
+        elem = ET.SubElement(parent, tag)
+        self._add_simple_element(elem, 'Amount_national_currency', '0.0')
+        self._add_simple_element(elem, 'Amount_foreign_currency', '0')
+        self._add_element(elem, 'Currency_code', None)
+        self._add_simple_element(elem, 'Currency_name', 'Pas de devise étrangère')
+        self._add_simple_element(elem, 'Currency_rate', '0')
+
+    def _add_global_cost(self, parent: ET.Element, tag: str, currency: Optional[CurrencyAmount]):
+        """Coût global en monnaie nationale (Gs_external_freight, Gs_insurance) ; <null/> si absent."""
+        if not currency or currency.amount_national is None:
+            self._add_currency_amount(parent, tag, None, allow_null=True)
+            return
+        elem = ET.SubElement(parent, tag)
+        self._add_simple_element(elem, 'Amount_national_currency', str(float(currency.amount_national)))
+        self._add_simple_element(elem, 'Amount_foreign_currency', '0')
+        self._add_simple_element(elem, 'Currency_code')
+        self._add_simple_element(elem, 'Currency_name', 'Pas de devise étrangère')
+        self._add_simple_element(elem, 'Currency_rate', '0.0')
 
     def _add_currency_amount(self, parent: ET.Element, tag: str, currency: Optional[CurrencyAmount], allow_null: bool = False):
         """Ajoute un élément de type montant avec devise
@@ -471,7 +502,8 @@ class XMLGenerator:
             self._add_simple_element(elem, 'Amount_national_currency', str(currency.amount_national) if currency.amount_national else '0.0')
             self._add_simple_element(elem, 'Amount_foreign_currency', str(currency.amount_foreign) if currency.amount_foreign else '0.0')
             self._add_element(elem, 'Currency_code', currency.currency_code)
-            self._add_simple_element(elem, 'Currency_name', currency.currency_name if currency.currency_name else 'Pas de devise étrangère')
+            # Libellé absent (<null/>) pour les montants d'article en devise, comme en production
+            self._add_element(elem, 'Currency_name', currency.currency_name)
             # Format avec 4 décimales pour conformité ASYCUDA (ex: 566.6700)
             rate_str = f'{currency.currency_rate:.4f}' if currency.currency_rate else '0.0'
             self._add_simple_element(elem, 'Currency_rate', rate_str)
@@ -535,10 +567,16 @@ class XMLGenerator:
                 doc_elem = ET.SubElement(item_elem, 'Attached_documents')
                 self._add_simple_element(doc_elem, 'Attached_document_code', doc.code if doc.code else '')
                 self._add_simple_element(doc_elem, 'Attached_document_name', doc.name if doc.name else '')
-                # Ajouter reference uniquement pour les documents châssis (6022/6122)
+                reference = doc.reference
                 if doc.code in ('6022', '6122') and item.packages and item.packages.chassis_number:
-                    self._add_simple_element(doc_elem, 'Attached_document_reference', item.packages.chassis_number)
-                self._add_simple_element(doc_elem, 'Attached_document_from_rule', str(doc.from_rule) if doc.from_rule else '1')
+                    reference = item.packages.chassis_number  # VIN brut, sans « CH: »
+                if reference:
+                    self._add_simple_element(doc_elem, 'Attached_document_reference', reference)
+                self._add_simple_element(doc_elem, 'Attached_document_from_rule',
+                                         str(doc.from_rule) if doc.from_rule is not None else '1')
+                if doc.document_date:
+                    # Format ASYCUDA M/J/AA (ex. 7/27/26), comme dans les déclarations réelles
+                    self._add_simple_element(doc_elem, 'Attached_document_date', to_asycuda_date(doc.document_date))
         else:
             # Fallback: si aucun document attaché, créer un bloc vide
             doc_elem = ET.SubElement(item_elem, 'Attached_documents')
@@ -551,7 +589,7 @@ class XMLGenerator:
             packages = ET.SubElement(item_elem, 'Packages')
             pkg = item.packages
             # Convertir en entier pour Number_of_packages (ex: 1.0 -> 1)
-            num_packages = str(int(pkg.number_of_packages)) if pkg.number_of_packages else ''
+            num_packages = str(int(pkg.number_of_packages)) if pkg.number_of_packages is not None else ''
             self._add_simple_element(packages, 'Number_of_packages', num_packages)
             self._add_simple_element(packages, 'Marks1_of_packages', pkg.marks1 if pkg.marks1 else '')
             self._add_element(packages, 'Marks2_of_packages', pkg.marks2)
@@ -605,7 +643,7 @@ class XMLGenerator:
 
             self._add_simple_element(tarif_elem, 'Item_price', str(tarif.item_price) if tarif.item_price else '')
             self._add_simple_element(tarif_elem, 'Valuation_method_code', tarif.valuation_method if tarif.valuation_method else '02')
-            self._add_simple_element(tarif_elem, 'Value_item', '')
+            self._add_simple_element(tarif_elem, 'Value_item', tarif.value_item or '')
 
             # Attached_doc_item: liste des codes de documents attachés séparés par espaces
             if item.attached_documents:
@@ -627,13 +665,12 @@ class XMLGenerator:
         prev_doc = ET.SubElement(item_elem, 'Previous_doc')
         # Pour les articles avec châssis: code d'appurement 40, unité 1
         # Sinon: null (ASYCUDA gère automatiquement)
-        has_chassis = item.packages and item.packages.chassis_number
-        if has_chassis:
-            self._add_simple_element(prev_doc, 'Summary_declaration', '40')
-            self._add_simple_element(prev_doc, 'Summary_declaration_sl', '1')
+        # Summary_declaration = n° de connaissement / CMR (case 40), comme dans les déclarations réelles
+        if item.summary_declaration:
+            self._add_simple_element(prev_doc, 'Summary_declaration', item.summary_declaration)
         else:
             self._add_element(prev_doc, 'Summary_declaration', None)
-            self._add_element(prev_doc, 'Summary_declaration_sl')
+        self._add_element(prev_doc, 'Summary_declaration_sl', None)
         self._add_element(prev_doc, 'Previous_document_reference', None)
         self._add_element(prev_doc, 'Previous_warehouse_code')
 
@@ -679,8 +716,9 @@ class XMLGenerator:
             val_item = item.valuation_item
 
             weight = ET.SubElement(val_item_elem, 'Weight_itm')
-            self._add_simple_element(weight, 'Gross_weight_itm', str(val_item.gross_weight) if val_item.gross_weight else '')
-            self._add_simple_element(weight, 'Net_weight_itm', str(val_item.net_weight) if val_item.net_weight else '')
+            # Poids entiers (« 191 ») comme dans les déclarations ; 0 est une valeur légitime
+            self._add_simple_element(weight, 'Gross_weight_itm', self._format_weight(val_item.gross_weight))
+            self._add_simple_element(weight, 'Net_weight_itm', self._format_weight(val_item.net_weight))
 
             self._add_simple_element(val_item_elem, 'Total_cost_itm', str(val_item.total_cost) if val_item.total_cost else '')
             self._add_simple_element(val_item_elem, 'Total_CIF_itm', str(val_item.total_cif) if val_item.total_cif else '')
@@ -692,13 +730,11 @@ class XMLGenerator:
             self._add_currency_amount(val_item_elem, 'Item_Invoice', val_item.invoice)
             # item_external_freight - calculé proportionnellement depuis le fret étranger RFCV
             self._add_currency_amount(val_item_elem, 'item_external_freight', val_item.external_freight, allow_null=True)
-            # item_internal_freight à null - Le fret RFCV concerne uniquement le fret étranger (external)
-            self._add_currency_amount(val_item_elem, 'item_internal_freight', None, allow_null=True)
+            # item_internal_freight / other_cost / deduction : bloc à zéro (forme des déclarations réelles)
+            self._add_zero_cost(val_item_elem, 'item_internal_freight')
             self._add_currency_amount(val_item_elem, 'item_insurance', val_item.insurance, allow_null=True)
-            # item_other_cost à null - Non utilisé dans les RFCV
-            self._add_currency_amount(val_item_elem, 'item_other_cost', None, allow_null=True)
-            # item_deduction à null - Non utilisé dans les RFCV
-            self._add_currency_amount(val_item_elem, 'item_deduction', None, allow_null=True)
+            self._add_zero_cost(val_item_elem, 'item_other_cost')
+            self._add_zero_cost(val_item_elem, 'item_deduction')
 
             market = ET.SubElement(val_item_elem, 'Market_valuer')
             self._add_simple_element(market, 'Rate')

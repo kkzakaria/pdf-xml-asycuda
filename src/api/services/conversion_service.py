@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from rfcv_parser import RFCVParser
+from company_profile import apply_profile
 from xml_generator import XMLGenerator
 from metrics import MetricsCollector
 from chassis_registry import DuplicateChassisError
@@ -34,7 +35,12 @@ class ConversionService:
         taux_douane: float = None,
         rapport_paiement: str = None,
         chassis_config: Optional[Dict[str, Any]] = None,
-        force_reprocess: bool = False
+        force_reprocess: bool = False,
+        profile=None,
+        insurance_mode: str = "formule",
+        dossier: Optional[str] = None,
+        manifeste: Optional[str] = None,
+        nationalite_transport: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Convertit un PDF RFCV en XML ASYCUDA
@@ -47,6 +53,9 @@ class ConversionService:
             rapport_paiement: Numéro de rapport de paiement/quittance Trésor (optionnel)
             chassis_config: Configuration pour génération automatique châssis VIN (optionnel)
             force_reprocess (bool): Si True, ignore les doublons de châssis et force le retraitement.
+            profile: Profil société (CompanyProfile) : bureau, déclarant, banque, compte, emplacement
+            insurance_mode: 'formule' (défaut) ou 'rfcv' (assurance attestée)
+            dossier, manifeste, nationalite_transport: données du dossier absentes du RFCV
 
         Returns:
             Dictionnaire avec résultats et métriques
@@ -75,8 +84,13 @@ class ConversionService:
                 if rapport_paiement:
                     logger.debug("  Rapport de paiement: %s", rapport_paiement)
 
-            parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement, chassis_config=chassis_config, force_reprocess=force_reprocess)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement,
+                                chassis_config=chassis_config, force_reprocess=force_reprocess,
+                                insurance_mode=insurance_mode)
             rfcv_data = parser.parse()
+            if profile or dossier or manifeste or nationalite_transport:
+                apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
+                              nationalite_transport=nationalite_transport)
 
             # Générer le XML
             if verbose:

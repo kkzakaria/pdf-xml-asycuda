@@ -18,7 +18,7 @@ from .core.rate_limit import limiter, rate_limit_exceeded_handler
 from .core.logging_config import configure_logging
 from .core.request_logging import RequestLoggingMiddleware
 from slowapi.errors import RateLimitExceeded
-from .routes import convert, batch, files, health, chassis, stats
+from .routes import convert, batch, files, health, chassis, stats, profiles
 
 # Configuration centralisée du logging
 configure_logging(settings)
@@ -241,6 +241,7 @@ app.include_router(files.router)
 app.include_router(health.router)
 app.include_router(chassis.router)
 app.include_router(stats.router)
+app.include_router(profiles.router)
 
 
 # Route racine

@@ -73,6 +73,7 @@ class TransportInfo:
     discharge_location: Optional[str] = None    # Lieu déchargement (ex: CIABJ)
     fcl_count: Optional[int] = None             # Nombre conteneurs complets
     lcl_count: Optional[int] = None             # Nombre conteneurs partiels
+    goods_location: Optional[str] = None        # Emplacement des marchandises (profil société, ex. AIRE)
 
 
 @dataclass
@@ -194,6 +195,7 @@ class Tarification:
     supplementary_units: List[SupplementaryUnit] = field(default_factory=list)
     item_price: Optional[float] = None
     valuation_method: Optional[str] = None
+    value_item: Optional[str] = None  # Case 44 « Éléments de valeur » : "fret+0+assurance+0-0"
 
 
 @dataclass

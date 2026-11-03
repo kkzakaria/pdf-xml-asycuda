@@ -56,6 +56,7 @@ WORKDIR /app
 # Copy application code
 COPY --chown=appuser:appuser src/ /app/src/
 COPY --chown=appuser:appuser run_api.py /app/
+COPY --chown=appuser:appuser profils/ /app/profils/
 COPY --chown=appuser:appuser .env.example /app/
 
 # Create necessary directories with proper permissions

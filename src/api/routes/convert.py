@@ -22,6 +22,7 @@ from ..services.storage_service import storage_service
 from ..services.job_service import job_service
 from ..services.usage_stats_service import get_usage_stats
 from ..core.dependencies import validate_upload_file
+from ..core.declaration_options import DeclarationOptions, declaration_options
 from ..core.security import verify_api_key
 from ..core.rate_limit import limiter, RateLimits
 
@@ -102,6 +103,7 @@ async def convert_pdf(
     rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."),
     chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."),
     force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
+    options: DeclarationOptions = Depends(declaration_options),
 ):
     """
     Conversion synchrone PDF → XML
@@ -161,6 +163,7 @@ async def convert_pdf(
             rapport_paiement=rapport_paiement,
             chassis_config=chassis_config_dict,
             force_reprocess=force_reprocess,
+            **options.service_kwargs(),
         )
 
         if not result['success']:
@@ -230,7 +233,7 @@ async def convert_pdf(
         )
 
 
-async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float, rapport_paiement: Optional[str] = None, chassis_config: Optional[dict] = None, force_reprocess: bool = False):
+async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux_douane: float, rapport_paiement: Optional[str] = None, chassis_config: Optional[dict] = None, force_reprocess: bool = False, options: Optional[DeclarationOptions] = None):
     """Tâche de conversion asynchrone (background)"""
 
     # Mettre à jour le status à PROCESSING
@@ -251,6 +254,7 @@ async def _async_convert_task(job_id: str, pdf_path: str, output_path: str, taux
             rapport_paiement=rapport_paiement,
             chassis_config=chassis_config,
             force_reprocess=force_reprocess,
+            **(options or DeclarationOptions()).service_kwargs(),
         )
     except DuplicateChassisError as e:
         _track_conversion(success=False, is_async=True)
@@ -337,6 +341,7 @@ async def convert_pdf_async(
     rapport_paiement: Optional[str] = Form(None, description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J). Optionnel - généré après paiement des taxes."),
     chassis_config: Optional[str] = Form(None, description="Configuration JSON pour génération automatique de châssis VIN. Format: {\"generate_chassis\": true, \"quantity\": 180, \"wmi\": \"LZS\", \"vds\": \"HCKZS\", \"year\": 2025, \"plant_code\": \"S\"}. Optionnel."),
     force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
+    options: DeclarationOptions = Depends(declaration_options),
 ):
     """
     Conversion asynchrone PDF → XML
@@ -404,6 +409,7 @@ async def convert_pdf_async(
             rapport_paiement=rapport_paiement,
             chassis_config=chassis_config_dict,
             force_reprocess=force_reprocess,
+            options=options,
         )
 
         return ConvertAsyncResponse(
@@ -589,6 +595,7 @@ async def convert_with_payment(
     taux_douane: float = Form(..., description="Taux de change douanier (ex: 573.1390)", gt=0),
     rapport_paiement: str = Form(..., description="Numéro de rapport de paiement/quittance Trésor Public (ex: 25P2003J)", min_length=1),
     force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
+    options: DeclarationOptions = Depends(declaration_options),
 ):
     """
     Conversion avec rapport de paiement (quittance Trésor)
@@ -615,6 +622,7 @@ async def convert_with_payment(
             rapport_paiement=rapport_paiement,
             chassis_config=None,
             force_reprocess=force_reprocess,
+            **options.service_kwargs(),
         )
 
         if not result['success']:
@@ -752,6 +760,7 @@ async def convert_with_chassis(
     vds: str = Form(default="HCKZS", description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)", min_length=5, max_length=5),
     plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1),
     force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
+    options: DeclarationOptions = Depends(declaration_options),
 ):
     """
     Conversion avec génération automatique de châssis VIN ISO 3779
@@ -793,6 +802,7 @@ async def convert_with_chassis(
             rapport_paiement=None,
             chassis_config=chassis_config_dict,
             force_reprocess=force_reprocess,
+            **options.service_kwargs(),
         )
 
         if not result['success']:
@@ -910,6 +920,7 @@ async def convert_complete(
     vds: str = Form(default="HCKZS", description="Vehicle Descriptor Section - 5 caractères (défaut: HCKZS)", min_length=5, max_length=5),
     plant_code: str = Form(default="S", description="Code usine de fabrication - 1 caractère (défaut: S)", min_length=1, max_length=1),
     force_reprocess: bool = Form(False, description="Forcer le retraitement d'un châssis déjà connu"),
+    options: DeclarationOptions = Depends(declaration_options),
 ):
     """
     Conversion complète avec rapport de paiement ET génération de châssis
@@ -952,6 +963,7 @@ async def convert_complete(
             rapport_paiement=rapport_paiement,
             chassis_config=chassis_config_dict,
             force_reprocess=force_reprocess,
+            **options.service_kwargs(),
         )
 
         if not result['success']:

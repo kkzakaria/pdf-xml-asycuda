@@ -63,7 +63,12 @@ class BatchService:
         chassis_configs: List[Dict[str, Any]] = None,
         output_dir: str = "output",
         workers: int = 4,
-        verbose: bool = False
+        verbose: bool = False,
+        profile=None,
+        insurance_mode: str = "formule",
+        dossiers: List[str] = None,
+        manifestes: List[str] = None,
+        nationalites_transport: List[str] = None,
     ) -> Dict[str, Any]:
         """
         Traite une liste spécifique de fichiers PDF
@@ -75,6 +80,9 @@ class BatchService:
             output_dir: Dossier de sortie
             workers: Nombre de workers
             verbose: Mode verbeux
+            profile: Profil société commun (CompanyProfile, optionnel)
+            insurance_mode: 'formule' (défaut) ou 'rfcv'
+            dossiers, manifestes, nationalites_transport: une valeur par fichier (même ordre que pdf_files)
 
         Returns:
             Résultats du batch
@@ -90,7 +98,12 @@ class BatchService:
             verbose=verbose,
             progress_bar=False,  # Désactivé pour l'API
             taux_douanes=taux_douanes,  # Ajouter les taux
-            chassis_configs=chassis_configs or []  # Ajouter les configs chassis
+            chassis_configs=chassis_configs or [],  # Ajouter les configs chassis
+            profile=profile,
+            insurance_mode=insurance_mode,
+            dossiers=dossiers or [],
+            manifestes=manifestes or [],
+            nationalites_transport=nationalites_transport or [],
         )
 
         # Exécuter le batch
