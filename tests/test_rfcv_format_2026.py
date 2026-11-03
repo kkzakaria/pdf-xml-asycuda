@@ -268,3 +268,29 @@ class TestSamplePdf:
 
     def test_freight_national(self, data):
         assert data.valuation.external_freight.amount_national == 2305680.0  # 4 000 USD × 576,42
+
+
+# --------------------------------------------------------------- régressions (dossier rfcv, 03/11/2026)
+MIXED_LAYOUT_ITEMS = """26. Articles
+MOTO-HAOJUE -
+300 1.0 UNITE TG N 1 8711209900 43,617.12
+LC6JCK4P1T0073070
+301 1.0 UNITE TG N MOTO-SANYA - LK1PCJL1XT1031110 1 8711209900 43,617.12
+302 1.0 UNITE TG N MOTO-SANYA - LK1PCJL19T1031146 1 8711209900 43,617.12
+Sous -total P1 130,851.36 0.00
+"""
+
+
+class TestRegressions:
+    def test_mixed_layouts_do_not_share_vin(self):
+        # Une désignation sur la ligne de données ne récupère pas le VIN de l'article précédent
+        items, _, _ = fmt.parse_items(MIXED_LAYOUT_ITEMS)
+        assert [i["description"] for i in items] == [
+            "MOTO-HAOJUE - LC6JCK4P1T0073070",
+            "MOTO-SANYA - LK1PCJL1XT1031110",
+            "MOTO-SANYA - LK1PCJL19T1031146",
+        ]
+
+    def test_partial_delivery_rfcv_number(self):
+        text = MULTILINE_TEXT.replace("RCSA6099999 03/11/2026", "RCSA6099999-P1 03/11/2026")
+        assert fmt.parse_header(text)["rfcv_number"] == "RCSA6099999-P1"

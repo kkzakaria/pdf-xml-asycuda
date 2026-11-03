@@ -81,12 +81,16 @@ def enrich_for_asycuda(rfcv_data: RFCVData) -> RFCVData:
         total_cost += efr_nat + ins_nat
         total_cif += inv_nat + efr_nat + ins_nat
 
-    # Colis : uniquement quand tous les articles portent un châssis (sinon le regroupement
-    # par code SH a déjà placé le total sur le premier article)
+    # Colis (case 31) : Σ par article = total (case 6)
+    # - tous les articles avec châssis : répartition à parts égales
+    # - sinon, si le regroupement n'a rien placé : total sur le premier article, 0 ailleurs
     total_packages = rfcv_data.property.total_packages if rfcv_data.property else None
     if total_packages and all(i.packages and i.packages.chassis_number for i in items):
         for item, n in zip(items, distribute_evenly(int(total_packages), len(items))):
             item.packages.number_of_packages = float(n)
+    elif total_packages and all(i.packages and i.packages.number_of_packages is None for i in items):
+        for index, item in enumerate(items):
+            item.packages.number_of_packages = float(total_packages) if index == 0 else 0.0
 
     val = rfcv_data.valuation
     if val is not None and rate is not None:

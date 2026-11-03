@@ -125,6 +125,23 @@ class RFCVParser:
         rfcv_data.containers = self._parse_containers()
         rfcv_data.items = self._parse_items()
         rfcv_data.value_details = self._extract_value_details()
+        self._apply_customs_rate_legacy(rfcv_data)
+        if self.insurance_mode == "rfcv":
+            logger.warning("Assurance attestée non lue au format historique : formule appliquée")
+
+    def _apply_customs_rate_legacy(self, rfcv_data: RFCVData) -> None:
+        """Conversion en XOF au taux douanier (comme le format 2026), XOF à 1."""
+        fin, val = rfcv_data.financial, rfcv_data.valuation
+        if not fin:
+            return
+        rate = self._customs_rate({"currency_code": fin.currency_code, "exchange_rate": fin.exchange_rate})
+        if not rate:
+            return
+        fin.exchange_rate = rate
+        for amount in (val.invoice, val.external_freight) if val else ():
+            if amount and amount.amount_foreign is not None:
+                amount.currency_rate = rate
+                amount.amount_national = amount.amount_foreign * rate
 
     def _parse_format_2026(self, rfcv_data: RFCVData) -> None:
         """Format RFCV actuel : en-tête et articles lus par rfcv_format_2026."""
@@ -585,7 +602,7 @@ class RFCVParser:
         # P1.4: No. Connaissement (Bill of Lading) - chercher le numéro alphanumérique (6+ caractères)
         # Structure: Le BL est sur la 3ème ligne après "No. (LTA/Connaissement"
         # Exemples: 258614991 (numérique), COSU6426271870 (alphanumérique)
-        bl_number = self._extract_field(r'No\.\s*\(LTA/Connaissement/CMR\):.*?\n.*?\n([A-Z0-9]{6,})')
+        bl_number = self._extract_field(r'No\.\s*\(LTA/Connaissement/CMR\):.*?\n.*?\n([A-Z0-9][A-Z0-9-]{5,})')
         if bl_number:
             transport.bill_of_lading = bl_number
 
@@ -772,14 +789,16 @@ class RFCVParser:
         # TAUX_DOUANE: fourni par l'utilisateur (variable selon la douane)
         # Résultat: toujours en XOF avec taux 1.0
 
-        if fob and fret_str and self.taux_douane:
+        # RFCV en XOF : montants déjà en monnaie nationale, taux 1 (et non le taux USD fourni)
+        insurance_rate = 1.0 if currency == 'XOF' else self.taux_douane
+        if fob and fret_str and insurance_rate:
             fob_value = self._parse_number(fob)
             fret_value = self._parse_number(fret_str)
 
             if fob_value is not None and fret_value is not None and fob_value > 0 and fret_value > 0:
                 # Calcul : 2500 + (FOB + FRET) × TAUX × 0.0015
                 # Arrondi à l'entier supérieur (ceiling) pour avoir un montant entier
-                assurance_xof = math.ceil(2500 + (fob_value + fret_value) * self.taux_douane * 0.0015)
+                assurance_xof = math.ceil(2500 + (fob_value + fret_value) * insurance_rate * 0.0015)
 
                 valuation.insurance = CurrencyAmount(
                     amount_national=assurance_xof,
@@ -1090,7 +1109,9 @@ class RFCVParser:
         # Pattern pour extraire les articles
         # Format: N° Quantité UM UPO Origine Description Code_SH Valeur_FOB Valeur_taxable
         # Note: Les nombres peuvent contenir des espaces (ex: "2 000,00")
-        item_pattern = r'(\d+)\s+([\d\s]+,\d{2})\s+(\w+)\s+(\w+)\s+(\w+)\s+(.*?)\s+(\d{4}\.\d{2}\.\d{2}\.\d{2})\s+([\d\s]+,\d{2})\s+([\d\s]+,\d{2})'
+        # Ancré en début de ligne, sans traverser les sauts de ligne : sinon un chiffre finissant
+        # la ligne précédente (« (50 PCS/BOX,20 ») est pris pour le n° d'article
+        item_pattern = r'(?m)^(\d+) +([\d ]+,\d{2}) +(\w+) +(\w+) +(\w+) +(.*?) +(\d{4}\.\d{2}\.\d{2}\.\d{2}) +([\d ]+,\d{2}) +([\d ]+,\d{2})'
 
         # Extraire la description commerciale depuis la ligne précédant les données de l'article
         # La description est sur la ligne avant "1 36 000,00 KG N CN..."
@@ -1112,7 +1133,7 @@ class RFCVParser:
         for match in re.finditer(item_pattern, section_text):
             items.append(self._build_item(
                 line_number=int(match.group(1)),
-                raw_description=match.group(6).strip(),
+                raw_description=self._legacy_description(section_text, match, item_pattern),
                 hs_code_clean=match.group(7).replace('.', ''),  # "2803.00.00.00" -> "2803000000"
                 origin_code=match.group(5),
                 fob=self._parse_number(match.group(8)),
@@ -1123,6 +1144,20 @@ class RFCVParser:
             ))
 
         return items
+
+    @staticmethod
+    def _legacy_description(section_text: str, match: "re.Match", item_pattern: str) -> str:
+        """
+        Désignation d'un article au format historique. Une désignation longue commence sur la
+        ligne au-dessus des données :
+            PLASTIC DISPOSABLE LIGHTERS ART NO.DY-066(50 PCS/BOX,20
+            1 4 000,00 U N CN BOXES/CARTON) 9613.10.00.00 14 600,00 18 558,02
+        """
+        inline = match.group(6).strip()
+        before = section_text[:match.start()].rstrip("\n").rsplit("\n", 1)[-1].strip()
+        is_layout = (not before or re.match(item_pattern, before) or re.match(r"^(?:[A-Z] ){2,}", before)
+                     or before.startswith(("A Quantité", "Sous-total", "PAGE ", "Ce document", "26. Articles")))
+        return inline if is_layout else f"{before} {inline}".strip()
 
     def _build_item(
         self,

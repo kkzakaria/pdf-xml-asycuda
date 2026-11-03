@@ -146,6 +146,11 @@ def group_items_by_hs_code(items: List[Item], total_packages: Optional[float] = 
             else:
                 logger.debug(f"  Groupe HS {hs_code}: 1 article (quantité inchangée)")
 
+        # La ligne regroupée porte la valeur de tous les articles du groupe
+        # (sinon seul le FOB du premier article serait déclaré)
+        if num_items_in_group > 1:
+            _sum_group_values(representative, group_items)
+
         grouped_items.append(representative)
 
     # Étape 4 : Recombiner les deux listes
@@ -155,6 +160,23 @@ def group_items_by_hs_code(items: List[Item], total_packages: Optional[float] = 
     logger.info(f"Résultat regroupement : {len(items)} articles → {len(final_items)} articles finaux")
 
     return final_items
+
+
+def _sum_values(values: List[Optional[float]]) -> Optional[float]:
+    present = [v for v in values if v is not None]
+    return round(sum(present), 2) if present else None
+
+
+def _sum_group_values(representative: Item, group_items: List[Item]) -> None:
+    """Additionne FOB (item_price) et valeurs taxables / coûts du groupe sur l'article retenu."""
+    if representative.tarification:
+        representative.tarification.item_price = _sum_values(
+            [i.tarification.item_price if i.tarification else None for i in group_items])
+    if representative.valuation_item:
+        representative.valuation_item.total_cost = _sum_values(
+            [i.valuation_item.total_cost if i.valuation_item else None for i in group_items])
+        representative.valuation_item.total_cif = _sum_values(
+            [i.valuation_item.total_cif if i.valuation_item else None for i in group_items])
 
 
 def _has_chassis_number(item: Item) -> bool:
@@ -204,14 +226,13 @@ def _set_item_quantity(item: Item, quantity: float) -> None:
     """
     Modifie la quantité d'un article.
 
-    La quantité est stockée dans item.tarification.supplementary_units[0].quantity
+    La quantité (nombre de colis, case 31) est portée par Packages/Number_of_packages ;
+    les unités supplémentaires restent déterminées par ASYCUDA selon le code SH.
 
     Args:
         item: Article à modifier
         quantity: Nouvelle quantité (ex: nombre de colis)
     """
-    if not item.tarification:
-        return
-
-    # Supplementary_units mis à null - ASYCUDA déterminera automatiquement selon code HS
-    # La quantité est gérée au niveau des packages, pas des unités supplémentaires
+    if item.packages is None:
+        item.packages = Package()
+    item.packages.number_of_packages = float(quantity)

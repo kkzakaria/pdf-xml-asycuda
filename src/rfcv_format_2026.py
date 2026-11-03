@@ -61,6 +61,17 @@ def to_number(value: str | None) -> float | None:
     return float(value.replace(",", "").strip())
 
 
+def _loose_number(value: str | None) -> float | None:
+    """Nombre au format 1,234.56 ou, à défaut, 1234,56 ; None si illisible."""
+    if not value:
+        return None
+    if re.fullmatch(r"[\d,]+\.\d+", value):
+        return to_number(value)
+    if re.fullmatch(r"\d+,\d{1,2}", value):
+        return float(value.replace(",", "."))
+    return None
+
+
 def _find(pattern: str, text: str, group: int = 1, flags: int = 0) -> str | None:
     m = re.search(pattern, text, flags)
     return m.group(group).strip() if m else None
@@ -69,9 +80,9 @@ def _find(pattern: str, text: str, group: int = 1, flags: int = 0) -> str | None
 def parse_header(text: str) -> dict:
     """Cases 1 à 24 du RFCV. Les champs introuvables valent None."""
     h: dict = {}
-    h["rfcv_number"] = _find(r"(RCS[A-Z]?\d+) \d{2}/\d{2}/\d{4}", text)
-    h["rfcv_date"] = _find(r"RCS[A-Z]?\d+ (\d{2}/\d{2}/\d{4})", text)
-    h["delivery_type"] = _find(r"RCS[A-Z]?\d+ \d{2}/\d{2}/\d{4} (TOT|PART)", text)
+    h["rfcv_number"] = _find(r"(RCS[A-Z]?\d+(?:-P\d+)?) \d{2}/\d{2}/\d{4}", text)
+    h["rfcv_date"] = _find(r"RCS[A-Z]?\d+(?:-P\d+)? (\d{2}/\d{2}/\d{4})", text)
+    h["delivery_type"] = _find(r"RCS[A-Z]?\d+(?:-P\d+)? \d{2}/\d{2}/\d{4} (TOT|PART)", text)
     h["fdi_number"] = _find(r"7\. No FDI/DAI.*\n.*\n(\S+) \d{2}/\d{2}/\d{4}", text)
     h["fdi_date"] = _find(r"7\. No FDI/DAI.*\n.*\n\S+ (\d{2}/\d{2}/\d{4})", text)
 
@@ -96,10 +107,11 @@ def parse_header(text: str) -> dict:
     h["invoice_date"] = _find(r"13\. No Facture.*\n\S+ (\d{2}/\d{2}/\d{4})", text)
     h["incoterm"] = _find(r"13\. No Facture.*\n\S+ \d{2}/\d{2}/\d{4} ([A-Z]{3})", text)
 
-    cur = re.search(r"\s([A-Z]{3}) ([\d.,]+) ([\d,]+\.\d{2})\n3\. D", text)
+    # Total facture (case 18) parfois écrit « 52,00 » : seule la devise et le taux sont exploités
+    cur = re.search(r"\s([A-Z]{3}) ([\d.,]+) ([\d.,]+)\n3\. D", text)
     h["currency_code"] = cur.group(1) if cur else None
     h["exchange_rate"] = to_number(cur.group(2)) if cur else None
-    h["invoice_total"] = to_number(cur.group(3)) if cur else None
+    h["invoice_total"] = _loose_number(cur.group(3)) if cur else None
 
     h["fob"] = to_number(_find(r"19\. Total FOB 20\. Fret\n" + NUM, text))
     h["freight"] = to_number(_find(r"19\. Total FOB 20\. Fret\n[\d,.]+ " + NUM, text))
@@ -161,13 +173,25 @@ def parse_items(text: str) -> tuple[list[dict], dict[int, float], list[str]]:
         return (not s or ITEM_DATA.match(s) is not None or s.startswith(NOISE_PREFIXES)
                 or re.fullmatch(r"[A-Z](?: [A-Z]){0,11}", s) is not None or "Description des marchandises" in s)
 
+    consumed = set()  # lignes de désignation déjà attribuées à un article
     for i, line in enumerate(lines):
         m = ITEM_DATA.match(line.strip())
         if not m:
             continue
-        before = lines[i - 1].strip() if i > 0 and not is_noise(lines[i - 1]) else ""
-        after = lines[i + 1].strip() if i + 1 < len(lines) and not is_noise(lines[i + 1]) else ""
-        description = " ".join(p for p in (before, (m["desc"] or "").strip(), after) if p)
+        inline = (m["desc"] or "").strip()
+        if inline:
+            # Désignation sur la ligne de données : les lignes voisines appartiennent aux
+            # articles voisins (un même RFCV peut mélanger les deux mises en page)
+            description = inline
+        else:
+            parts = []
+            if i > 0 and i - 1 not in consumed and not is_noise(lines[i - 1]):
+                parts.append(lines[i - 1].strip())
+                consumed.add(i - 1)
+            if i + 1 < len(lines) and not is_noise(lines[i + 1]):
+                parts.append(lines[i + 1].strip())
+                consumed.add(i + 1)
+            description = " ".join(parts)
         items.append({
             "n": int(m["n"]), "qty": to_number(m["qty"]), "unit": m["unit"], "origin": m["origin"],
             "state": m["state"], "hs": m["hs"], "fob": to_number(m["fob"]),
