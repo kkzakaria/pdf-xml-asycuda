@@ -21,6 +21,7 @@ COUNTRY_CODES = {
     "Senegal": "SN", "Sénégal": "SN", "Inde": "IN", "India": "IN", "France": "FR",
     "Allemagne": "DE", "Germany": "DE", "Italie": "IT", "Espagne": "ES",
     "Turquie": "TR", "Turkey": "TR", "Japon": "JP", "Japan": "JP",
+    "Oman": "OM", "Hong-Kong": "HK", "Hong Kong": "HK",
 }
 
 # Mode de transport (libellé RFCV) -> code ASYCUDA (case 25)

@@ -58,12 +58,14 @@ def apply_profile(
     dossier: str | None = None,
     manifeste: str | None = None,
     nationalite_transport: str | None = None,
+    takikro: bool = False,
 ) -> RFCVData:
     """
     Complète la déclaration avec le profil société et les données du dossier.
 
     Le rapport de paiement passé au parser (rapport_paiement) reste prioritaire sur le
     compte du profil pour Financial/Deffered_payment_reference.
+    takikro=True applique en dernier les règles du passage terrestre de Takikro (TAKIKRO).
     """
     p = profile or CompanyProfile()
     ident, fin, trans = rfcv_data.identification, rfcv_data.financial, rfcv_data.transport
@@ -97,4 +99,35 @@ def apply_profile(
             trans.goods_location = p.emplacement
         if nationalite_transport:
             trans.vessel_nationality = nationalite_transport
+
+    if takikro:
+        apply_takikro(rfcv_data)
+    return rfcv_data
+
+
+# Dossier terrestre passant par le bureau frontière de Takikro (route Togo -> Ghana -> CI)
+TAKIKRO = {
+    "bureau_code": "CITKK",           # bureau de dédouanement (Fcx_Aa) et bureau d'entrée (Fcx_29a)
+    "summary_declaration": "ADM",     # case 40 (Fld_40) au lieu du n° de CMR
+    "pays_derniere_provenance": "GH",  # case 10 (Fcx_10)
+}
+
+
+def apply_takikro(rfcv_data: RFCVData) -> RFCVData:
+    """
+    Règles d'un dossier Takikro, prioritaires sur le profil société.
+
+    Les noms de bureau sont laissés vides : ASYCUDA les remplit depuis le code.
+    """
+    ident, trans, country = rfcv_data.identification, rfcv_data.transport, rfcv_data.country
+    if ident is not None:
+        ident.customs_office_code = TAKIKRO["bureau_code"]
+        ident.customs_office_name = None
+    if trans is not None:
+        trans.border_office_code = TAKIKRO["bureau_code"]
+        trans.border_office_name = None
+    if country is not None:
+        country.first_destination = TAKIKRO["pays_derniere_provenance"]
+    for item in rfcv_data.items:
+        item.summary_declaration = TAKIKRO["summary_declaration"]
     return rfcv_data

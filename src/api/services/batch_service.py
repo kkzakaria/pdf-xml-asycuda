@@ -66,6 +66,7 @@ class BatchService:
         verbose: bool = False,
         profile=None,
         insurance_mode: str = "formule",
+        takikro: bool = False,
         dossiers: List[str] = None,
         manifestes: List[str] = None,
         nationalites_transport: List[str] = None,
@@ -82,6 +83,7 @@ class BatchService:
             verbose: Mode verbeux
             profile: Profil société commun (CompanyProfile, optionnel)
             insurance_mode: 'formule' (défaut) ou 'rfcv'
+            takikro: dossiers terrestres de Takikro (commun à tous les fichiers)
             dossiers, manifestes, nationalites_transport: une valeur par fichier (même ordre que pdf_files)
 
         Returns:
@@ -101,6 +103,7 @@ class BatchService:
             chassis_configs=chassis_configs or [],  # Ajouter les configs chassis
             profile=profile,
             insurance_mode=insurance_mode,
+            takikro=takikro,
             dossiers=dossiers or [],
             manifestes=manifestes or [],
             nationalites_transport=nationalites_transport or [],

@@ -77,3 +77,20 @@ async def test_batch_rejects_dossier_count_mismatch(client):
     )
     assert response.status_code == 400
     assert "dossiers" in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not SAMPLE_PDF.exists(), reason="PDF d'exemple absent")
+async def test_convert_takikro(client):
+    response = await client.post(
+        "/api/v1/convert",
+        files={"file": (SAMPLE_PDF.name, SAMPLE_PDF.read_bytes(), "application/pdf")},
+        data={"taux_douane": "576.42", "profil": "karta-transit", "takikro": "true"},
+    )
+    assert response.status_code == 200, response.text
+    xml_path = next(Path(settings.output_dir).rglob(response.json()["output_file"]))
+    root = ET.parse(xml_path).getroot()
+    assert root.findtext("Identification/Office_segment/Customs_clearance_office_code") == "CITKK"
+    assert root.findtext("Transport/Border_office/Code") == "CITKK"
+    assert root.findtext("General_information/Country/Country_first_destination") == "GH"
+    assert root.findtext("Item/Previous_doc/Summary_declaration") == "ADM"

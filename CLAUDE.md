@@ -168,6 +168,10 @@ reference = `reference_prefixe` + n°), `--manifeste`, `--nationalite-transport`
 API: `profil=<name>` resolved server-side in `API_PROFILES_DIR` (never a client path).
 `rapport_paiement` keeps priority over the profile `compte`.
 
+Takikro road dossiers (`--takikro`, API `takikro=true`, `company_profile.TAKIKRO`), applied after the
+profile: offices `CITKK` (clearance + border, names left to ASYCUDA), `Summary_declaration` = `ADM`
+(box 40), `Country_first_destination` = `GH` (box 10).
+
 ### Chassis Detection (HS Codes 87xx)
 
 - **Code 6122**: Motos (HS 8711)

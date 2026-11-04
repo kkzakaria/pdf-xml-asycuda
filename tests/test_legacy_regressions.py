@@ -40,3 +40,10 @@ def test_item_pattern_anchored_and_description_continued():
     assert parser._legacy_description(ITEM_PATTERN_SECTION, matches[0], pattern) == (
         "PLASTIC DISPOSABLE LIGHTERS ART NO.DY-066(50 PCS/BOX,20 BOXES/CARTON)")
     assert parser._legacy_description(ITEM_PATTERN_SECTION, matches[1], pattern) == "LIGHTERS"
+
+
+def test_legacy_country_codes():
+    parser = RFCVParser.__new__(RFCVParser)
+    for provenance, code in [("Togo", "TG"), ("Oman", "OM"), ("Chine", "CN"), ("Somalie", None)]:
+        parser.text = f"9. Pays de provenance 10. Mode de Paiement\n{provenance} Paiement sur compte bancaire\n"
+        assert parser._parse_country().export_country_code == code, provenance

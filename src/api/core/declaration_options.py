@@ -25,6 +25,8 @@ INSURANCE_MODES = ("formule", "rfcv")
 
 PROFIL_DESCRIPTION = ("Nom du profil société du serveur (ex: karta-transit), voir GET /api/v1/profils. "
                       "Remplit bureau, déclarant, banque, compte, emplacement. Optionnel.")
+TAKIKRO_DESCRIPTION = ("Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, "
+                       "case 10 (dernière provenance) = GH")
 ASSURANCE_DESCRIPTION = ("Calcul de l'assurance : 'formule' (défaut, ceiling(2500 + (FOB+FRET) × taux × 0,15 %)) "
                          "ou 'rfcv' (assurance attestée en case 21 × taux douanier)")
 
@@ -73,10 +75,12 @@ class DeclarationOptions:
     dossier: str | None = None
     manifeste: str | None = None
     nationalite_transport: str | None = None
+    takikro: bool = False
 
     def service_kwargs(self) -> dict[str, Any]:
         return {"profile": self.profile, "insurance_mode": self.insurance_mode, "dossier": self.dossier,
-                "manifeste": self.manifeste, "nationalite_transport": self.nationalite_transport}
+                "manifeste": self.manifeste, "nationalite_transport": self.nationalite_transport,
+                "takikro": self.takikro}
 
 
 async def declaration_options(
@@ -85,6 +89,7 @@ async def declaration_options(
     manifeste: str | None = Form(None, description="Référence du manifeste (ex: CIAB1 2026 7065)"),
     nationalite_transport: str | None = Form(None, description="Nationalité du moyen de transport, code pays (ex: LR)"),
     assurance: str = Form("formule", description=ASSURANCE_DESCRIPTION),
+    takikro: bool = Form(False, description=TAKIKRO_DESCRIPTION),
 ) -> DeclarationOptions:
     return DeclarationOptions(
         profile=resolve_profile(profil),
@@ -92,6 +97,7 @@ async def declaration_options(
         dossier=dossier or None,
         manifeste=manifeste or None,
         nationalite_transport=nationalite_transport or None,
+        takikro=takikro,
     )
 
 
@@ -103,6 +109,7 @@ class BatchDeclarationOptions:
     dossiers: list[str | None] = field(default_factory=list)
     manifestes: list[str | None] = field(default_factory=list)
     nationalites_transport: list[str | None] = field(default_factory=list)
+    takikro: bool = False
 
     def check_lengths(self, n_files: int) -> None:
         for name in ("dossiers", "manifestes", "nationalites_transport"):
@@ -114,7 +121,8 @@ class BatchDeclarationOptions:
 
     def service_kwargs(self) -> dict[str, Any]:
         return {"profile": self.profile, "insurance_mode": self.insurance_mode, "dossiers": self.dossiers,
-                "manifestes": self.manifestes, "nationalites_transport": self.nationalites_transport}
+                "manifestes": self.manifestes, "nationalites_transport": self.nationalites_transport,
+                "takikro": self.takikro}
 
 
 def _json_list(raw: str | None, name: str) -> list[str | None]:
@@ -136,6 +144,7 @@ async def batch_declaration_options(
     manifestes: str | None = Form(None, description='Liste JSON des manifestes, un par fichier ou null'),
     nationalites_transport: str | None = Form(None, description='Liste JSON des nationalités du transport, un par fichier ou null'),
     assurance: str = Form("formule", description=ASSURANCE_DESCRIPTION + " Commun à tous les fichiers."),
+    takikro: bool = Form(False, description=TAKIKRO_DESCRIPTION + " Commun à tous les fichiers."),
 ) -> BatchDeclarationOptions:
     return BatchDeclarationOptions(
         profile=resolve_profile(profil),
@@ -143,4 +152,5 @@ async def batch_declaration_options(
         dossiers=_json_list(dossiers, "dossiers"),
         manifestes=_json_list(manifestes, "manifestes"),
         nationalites_transport=_json_list(nationalites_transport, "nationalites_transport"),
+        takikro=takikro,
     )

@@ -490,6 +490,21 @@ emplacement=AIRE
 - **API** : les profils sont des fichiers du serveur (`API_PROFILES_DIR`), choisis par leur nom (`profil=karta-transit`). Le client n'envoie ni fichier ni chemin.
 - **Batch CLI** : `--profil` s'applique à tous les fichiers ; `--dossier`, `--manifeste` et `--nationalite-transport` sont refusés (une valeur par fichier : utiliser l'API batch).
 
+### Dossiers terrestres de Takikro (`--takikro`)
+
+Les RFCV routiers passant par le bureau frontière de Takikro (Togo → Ghana → Côte d'Ivoire) ont leurs propres valeurs, appliquées par-dessus le profil société :
+
+| Champ | Valeur |
+|---|---|
+| Bureau de dédouanement (`Fcx_Aa`) et bureau d'entrée (`Fcx_29a`) | `CITKK` (noms laissés à ASYCUDA) |
+| Case 40 (`Fld_40`, `Summary_declaration`) | `ADM` au lieu du n° de CMR |
+| Case 10, pays de dernière provenance (`Fcx_10`) | `GH` |
+
+```bash
+python converter.py rfcv.pdf --taux-douane 1 --profil profils/karta-transit.ini --takikro
+```
+API : champ `takikro=true` (conversion unitaire et batch).
+
 ## 🧾 Champs ASYCUDA calculés
 
 Règles relevées sur des déclarations réelles (production 28923, 28928, 31287 ; export ASYCUDA 28926) :

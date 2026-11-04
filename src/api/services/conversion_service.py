@@ -41,6 +41,7 @@ class ConversionService:
         dossier: Optional[str] = None,
         manifeste: Optional[str] = None,
         nationalite_transport: Optional[str] = None,
+        takikro: bool = False,
     ) -> Dict[str, Any]:
         """
         Convertit un PDF RFCV en XML ASYCUDA
@@ -56,6 +57,7 @@ class ConversionService:
             profile: Profil société (CompanyProfile) : bureau, déclarant, banque, compte, emplacement
             insurance_mode: 'formule' (défaut) ou 'rfcv' (assurance attestée)
             dossier, manifeste, nationalite_transport: données du dossier absentes du RFCV
+            takikro: dossier terrestre de Takikro (bureaux CITKK, case 40 = ADM, case 10 = GH)
 
         Returns:
             Dictionnaire avec résultats et métriques
@@ -88,9 +90,9 @@ class ConversionService:
                                 chassis_config=chassis_config, force_reprocess=force_reprocess,
                                 insurance_mode=insurance_mode)
             rfcv_data = parser.parse()
-            if profile or dossier or manifeste or nationalite_transport:
+            if profile or dossier or manifeste or nationalite_transport or takikro:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                              nationalite_transport=nationalite_transport)
+                              nationalite_transport=nationalite_transport, takikro=takikro)
 
             # Générer le XML
             if verbose:

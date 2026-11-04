@@ -36,13 +36,14 @@ def test_common_values_applied_to_all_files(tmp_path):
     files = make_files(tmp_path, "x.pdf", "y.pdf")
     profile = CompanyProfile(bureau_code="CIAB6")
     proc = BatchProcessor(BatchConfig(
-        input_paths=files, taux_douane=596.302, profile=profile, insurance_mode="rfcv",
+        input_paths=files, taux_douane=596.302, profile=profile, insurance_mode="rfcv", takikro=True,
         chassis_configs=[{"generate_chassis": False}], progress_bar=False))
     for f in files:
         opts = proc._file_options(Path(f))
         assert opts["taux_douane"] == 596.302
         assert opts["profile"] is profile
         assert opts["insurance_mode"] == "rfcv"
+        assert opts["takikro"] is True
         assert opts["chassis_config"] == {"generate_chassis": False}  # valeur unique répliquée
         assert opts["dossier"] is None  # jamais répliqué
 

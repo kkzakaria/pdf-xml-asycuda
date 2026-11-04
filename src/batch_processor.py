@@ -51,6 +51,7 @@ class BatchConfig:
     taux_douane: Optional[float] = None          # Taux douanier par défaut (si taux_douanes ne couvre pas le fichier)
     profile: Optional[Any] = None                # CompanyProfile (company_profile.py)
     insurance_mode: str = "formule"              # 'formule' ou 'rfcv'
+    takikro: bool = False                        # dossiers terrestres de Takikro (company_profile.TAKIKRO)
     # Données de dossier, une par fichier (même ordre que input_paths)
     dossiers: List[Optional[str]] = field(default_factory=list)
     manifestes: List[Optional[str]] = field(default_factory=list)
@@ -143,6 +144,7 @@ class BatchProcessor:
             "chassis_config": pick(cfg.chassis_configs, broadcast=True),
             "profile": cfg.profile,
             "insurance_mode": cfg.insurance_mode,
+            "takikro": cfg.takikro,
             "dossier": pick(cfg.dossiers),
             "manifeste": pick(cfg.manifestes),
             "nationalite_transport": pick(cfg.nationalites_transport),
@@ -152,7 +154,8 @@ class BatchProcessor:
     def _process_single_file(pdf_path: Path, output_dir: str, verbose: bool = False, taux_douane: Optional[float] = None,
                              chassis_config: Optional[Dict[str, Any]] = None, profile: Optional[Any] = None,
                              insurance_mode: str = "formule", dossier: Optional[str] = None,
-                             manifeste: Optional[str] = None, nationalite_transport: Optional[str] = None) -> BatchResult:
+                             manifeste: Optional[str] = None, nationalite_transport: Optional[str] = None,
+                             takikro: bool = False) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -165,6 +168,7 @@ class BatchProcessor:
             profile: Profil société (optionnel)
             insurance_mode: 'formule' ou 'rfcv'
             dossier, manifeste, nationalite_transport: données du dossier (optionnel)
+            takikro: dossier terrestre de Takikro
 
         Returns:
             Résultat du traitement
@@ -190,9 +194,9 @@ class BatchProcessor:
             parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config,
                                 insurance_mode=insurance_mode)
             rfcv_data = parser.parse()
-            if profile or dossier or manifeste or nationalite_transport:
+            if profile or dossier or manifeste or nationalite_transport or takikro:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                              nationalite_transport=nationalite_transport)
+                              nationalite_transport=nationalite_transport, takikro=takikro)
 
             # Générer le XML
             generator = XMLGenerator(rfcv_data)

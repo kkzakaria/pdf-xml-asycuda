@@ -37,6 +37,7 @@ class RFCVParser:
         force_reprocess: bool = False,
         registry: Optional[ChassisRegistry] = None,
         insurance_mode: str = "formule",
+        fob_revise: Optional[float] = None,
     ):
         """
         Initialise le parser
@@ -57,6 +58,10 @@ class RFCVParser:
         if insurance_mode not in ("rfcv", "formule"):
             raise ValueError(f"insurance_mode invalide : {insurance_mode!r} (attendu 'rfcv' ou 'formule')")
         self.insurance_mode = insurance_mode
+        # FOB total révisé (revalorisation) : remplace la case 19, réparti au prorata des articles
+        if fob_revise is not None and fob_revise <= 0:
+            raise ValueError(f"fob_revise doit être > 0 : {fob_revise!r}")
+        self.fob_revise = fob_revise
         self.is_format_2026 = False
         self.pdf_path = pdf_path
         self.taux_douane = taux_douane
@@ -270,8 +275,48 @@ class RFCVParser:
         return CurrencyAmount(amount_national=value, amount_foreign=value, currency_code='XOF',
                               currency_name='Franc CFA', currency_rate=1.0)
 
+    def _apply_fob_revision(self, rfcv_data: RFCVData) -> None:
+        """
+        Remplace le FOB attesté par le FOB révisé (devise du RFCV).
+
+        Le total est réparti sur les articles au prorata de leur FOB RFCV, au centime, par la
+        méthode du plus grand reste (Σ articles = total révisé). L'assurance par formule est
+        recalculée sur le FOB révisé ; fret, poids et colis sont inchangés.
+        """
+        items = [i for i in rfcv_data.items if i.tarification and i.tarification.item_price is not None]
+        fob_rfcv = sum(i.tarification.item_price for i in items)
+        if not items or fob_rfcv <= 0:
+            logger.warning("FOB révisé ignoré : aucun FOB d'article à répartir")
+            return
+        cents = ProportionalCalculator().distribute_proportionally(
+            total_amount=round(self.fob_revise * 100),
+            item_fobs=[i.tarification.item_price for i in items],
+            fob_total=fob_rfcv)
+        for item, c in zip(items, cents):
+            item.tarification.item_price = c / 100
+            if item.valuation_item:
+                item.valuation_item.total_cost = c / 100
+        logger.info(f"FOB révisé : {fob_rfcv:,.2f} -> {self.fob_revise:,.2f} ({len(items)} articles)")
+
+        val, fin = rfcv_data.valuation, rfcv_data.financial
+        if val is None:
+            return
+        rate = fin.exchange_rate if fin and fin.exchange_rate else None
+        if val.invoice:
+            val.invoice.amount_foreign = self.fob_revise
+            val.invoice.amount_national = self.fob_revise * rate if rate else val.invoice.amount_national
+        val.total_invoice = self.fob_revise
+        freight = val.external_freight.amount_foreign if val.external_freight else None
+        if self.insurance_mode == "formule" and freight and rate:
+            value = math.ceil(2500 + (self.fob_revise + freight) * rate * 0.0015)
+            val.insurance = CurrencyAmount(amount_national=value, amount_foreign=value, currency_code='XOF',
+                                           currency_name='Franc CFA', currency_rate=1.0)
+
     def _finalize(self, rfcv_data: RFCVData) -> RFCVData:
         """Étapes communes aux deux formats, après lecture des sections et des articles."""
+        if self.fob_revise is not None:
+            self._apply_fob_revision(rfcv_data)
+
         # Générer des articles supplémentaires si plus de VINs sont demandés que d'articles véhicule
         rfcv_data.items = self._add_additional_vin_items(rfcv_data.items)
 
@@ -540,29 +585,17 @@ class RFCVParser:
             country.export_country_name = provenance
             country.origin_country_name = provenance
 
-            # P4.1: Mapper nom pays → code ISO (enrichir selon besoins)
-            country_codes = {
-                'Chine': 'CN',
-                'China': 'CN',
-                'Emirats Arabes Unis': 'AE',
-                'United Arab Emirates': 'AE',
-                'UAE': 'AE',
-                'France': 'FR',
-                'Allemagne': 'DE',
-                'Germany': 'DE',
-                'Italie': 'IT',
-                'Italy': 'IT',
-                'Espagne': 'ES',
-                'Spain': 'ES',
-                'Turquie': 'TR',
-                'Turkey': 'TR'
-            }
+            # P4.1: Mapper nom pays → code ISO (table commune aux deux formats, dont Togo)
+            country_codes = {**fmt2026.COUNTRY_CODES, 'UAE': 'AE'}
 
-            for country_name, code in country_codes.items():
-                if country_name.lower() in provenance.lower():
-                    country.export_country_code = code
-                    country.first_destination = code
-                    break
+            # Correspondance exacte d'abord (« Mali » ne doit pas être reconnu dans « Somalie »)
+            code = next((c for name, c in country_codes.items() if name.lower() == provenance.lower()), None)
+            if code is None:
+                code = next((c for name, c in country_codes.items()
+                             if re.search(rf"\b{re.escape(name)}\b", provenance, re.IGNORECASE)), None)
+            if code:
+                country.export_country_code = code
+                country.first_destination = code
 
         # Pays de destination (Côte d'Ivoire)
         country.destination_country_code = 'CI'

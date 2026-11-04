@@ -92,3 +92,44 @@ class TestApplyProfile:
         root = ET.fromstring(ET.tostring(gen.root))
         assert root.find("Identification/Manifest_reference_number/null") is not None
         assert root.find("Transport/Location_of_goods/null") is not None
+
+
+class TestTakikro:
+    def make_data(self):
+        from models import Country, Item, Package
+        d = make_data()
+        d.identification.customs_office_code = "CIAB1"
+        d.transport.border_office_code = "CIAB1"
+        d.transport.border_office_name = "ABIDJAN-PORT"
+        d.transport.bill_of_lading = "28N-1366"
+        d.country = Country(first_destination="TG", export_country_code="TG")
+        d.items = [Item(summary_declaration="28N-1366", packages=Package()) for _ in range(2)]
+        return d
+
+    def test_rules_override_profile(self):
+        d = apply_profile(self.make_data(), load_profile(str(PROFILE_FILE)), takikro=True)
+        assert d.identification.customs_office_code == "CITKK"   # au lieu de CIAB6 du profil
+        assert d.identification.customs_office_name is None
+        assert d.transport.border_office_code == "CITKK"
+        assert d.transport.border_office_name is None
+        assert d.country.first_destination == "GH"
+        assert d.country.export_country_code == "TG"            # pays d'exportation inchangé
+        assert [i.summary_declaration for i in d.items] == ["ADM", "ADM"]
+        assert d.declarant.code == "00537M"                      # reste du profil conservé
+        assert d.transport.goods_location == "AIRE"
+
+    def test_not_applied_by_default(self):
+        d = apply_profile(self.make_data(), load_profile(str(PROFILE_FILE)))
+        assert d.identification.customs_office_code == "CIAB6"
+        assert d.country.first_destination == "TG"
+        assert d.items[0].summary_declaration == "28N-1366"
+
+    def test_xml_output(self):
+        d = apply_profile(self.make_data(), None, takikro=True)
+        gen = XMLGenerator(d)
+        gen.generate()
+        root = ET.fromstring(ET.tostring(gen.root))
+        assert root.findtext("Identification/Office_segment/Customs_clearance_office_code") == "CITKK"
+        assert root.findtext("Transport/Border_office/Code") == "CITKK"
+        assert root.findtext("General_information/Country/Country_first_destination") == "GH"
+        assert [i.findtext("Previous_doc/Summary_declaration") for i in root.findall("Item")] == ["ADM", "ADM"]

@@ -29,7 +29,9 @@ def convert_pdf_to_xml(
     profile=None,
     dossier: str = None,
     manifeste: str = None,
-    nationalite_transport: str = None
+    nationalite_transport: str = None,
+    takikro: bool = False,
+    fob_revise: float = None
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -81,14 +83,15 @@ def convert_pdf_to_xml(
             taux_douane=taux_douane,
             rapport_paiement=rapport_paiement,
             chassis_config=chassis_config,
-            insurance_mode=insurance_mode
+            insurance_mode=insurance_mode,
+            fob_revise=fob_revise
         )
         rfcv_data = parser.parse()
 
         # Constantes société (profil) et données du dossier, absentes du RFCV
-        if profile or dossier or manifeste or nationalite_transport:
+        if profile or dossier or manifeste or nationalite_transport or takikro:
             apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                          nationalite_transport=nationalite_transport)
+                          nationalite_transport=nationalite_transport, takikro=takikro)
 
         if verbose:
             print(f"  ✓ Extraction réussie")
@@ -235,6 +238,12 @@ Exemples d'utilisation:
                                help='Référence du manifeste (ex. "CIAB1 2026 7065")')
     profile_group.add_argument('--nationalite-transport', default=None,
                                help='Nationalité du moyen de transport, code pays (ex. LR)')
+    profile_group.add_argument('--fob-revise', type=float, default=None,
+                               help='FOB total révisé (devise du RFCV), réparti au prorata des articles ; '
+                                    "l'assurance par formule est recalculée. Un seul fichier.")
+    profile_group.add_argument('--takikro', action='store_true',
+                               help='Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, '
+                                    'case 10 (dernière provenance) = GH')
 
     parser.add_argument(
         '--rapport-paiement',
@@ -366,8 +375,8 @@ Exemples d'utilisation:
 
         # Profil société et assurance : communs à tous les fichiers. Les données de dossier
         # (n°, manifeste, nationalité) sont propres à chaque fichier : non applicables en batch CLI.
-        if args.dossier or args.manifeste or args.nationalite_transport:
-            print("Erreur: --dossier, --manifeste et --nationalite-transport sont propres à un fichier ; "
+        if args.dossier or args.manifeste or args.nationalite_transport or args.fob_revise:
+            print("Erreur: --dossier, --manifeste, --nationalite-transport et --fob-revise sont propres à un fichier ; "
                   "en batch, utilisez l'API (listes par fichier) ou convertissez fichier par fichier.",
                   file=sys.stderr)
             sys.exit(1)
@@ -393,6 +402,7 @@ Exemples d'utilisation:
             taux_douane=args.taux_douane,
             profile=batch_profile,
             insurance_mode="rfcv" if args.assurance_rfcv else "formule",
+            takikro=args.takikro,
         )
 
         # Exécuter le traitement batch
@@ -456,7 +466,9 @@ Exemples d'utilisation:
             profile=profile,
             dossier=args.dossier,
             manifeste=args.manifeste,
-            nationalite_transport=args.nationalite_transport
+            nationalite_transport=args.nationalite_transport,
+            takikro=args.takikro,
+            fob_revise=args.fob_revise
         )
         sys.exit(0 if success else 1)
 

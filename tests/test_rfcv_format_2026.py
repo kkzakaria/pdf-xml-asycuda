@@ -193,6 +193,17 @@ class TestPipelineWithChassis:
         assert d.valuation.insurance.amount_national == 2655
         assert d.value_details == 3000 + 2655
 
+    def test_fob_revision(self, registry, tmp_path):
+        # FOB RFCV 33 333,34 + 33 333,33 + 33 333,33 = 100 000 ; FOB révisé 150 000
+        d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=596.302, fob_revise=150000)
+        prices = [i.tarification.item_price for i in d.items]
+        assert round(sum(prices), 2) == 150000.0
+        assert prices == [50000.01, 50000.0, 49999.99]              # au prorata des FOB RFCV
+        assert d.valuation.invoice.amount_foreign == 150000
+        assert d.valuation.insurance.amount_national == 2500 + 230  # ceil(2500 + 153 000 × 1 × 0,0015)
+        assert sum(i.valuation_item.external_freight.amount_national for i in d.items) == 3000  # fret inchangé
+        assert d.valuation.total_cif == 150000 + 3000 + 2730
+
     def test_insurance_attested_option(self, registry, tmp_path):
         d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=1.0, insurance_mode="rfcv")
         assert d.valuation.insurance.amount_national == 150
