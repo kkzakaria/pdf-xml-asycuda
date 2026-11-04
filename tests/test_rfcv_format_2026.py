@@ -185,6 +185,14 @@ class TestPipelineWithChassis:
         assert data.valuation.insurance.amount_national == 2655
         assert sum(i.valuation_item.insurance.amount_national for i in data.items) == 2655
 
+    def test_insurance_formula_xof_ignores_usd_customs_rate(self, registry, tmp_path):
+        # RFCV en XOF : montants déjà en monnaie nationale, la formule utilise le taux 1 même si
+        # un taux douanier USD est fourni (champ obligatoire de l'API)
+        d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=596.302)
+        assert d.financial.exchange_rate == 1.0
+        assert d.valuation.insurance.amount_national == 2655
+        assert d.value_details == 3000 + 2655
+
     def test_insurance_attested_option(self, registry, tmp_path):
         d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=1.0, insurance_mode="rfcv")
         assert d.valuation.insurance.amount_national == 150

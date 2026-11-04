@@ -253,13 +253,16 @@ class RFCVParser:
         Assurance globale en XOF.
 
         insurance_mode='rfcv' : valeur attestée (case 21, devise du RFCV) × taux de change.
-        insurance_mode='formule', ou pas d'assurance attestée : ceiling(2500 + (FOB+FRET) × taux_douane × 0,15 %).
+        insurance_mode='formule', ou pas d'assurance attestée : ceiling(2500 + (FOB+FRET) × taux × 0,15 %).
+
+        `rate` est le taux de conversion retenu (_customs_rate) : 1 pour un RFCV en XOF, dont les
+        montants sont déjà en monnaie nationale, le taux douanier sinon.
         """
         value = None
         if self.insurance_mode == "rfcv" and attested and rate:
             value = round(attested * rate)
-        elif fob and freight and self.taux_douane:
-            value = math.ceil(2500 + (fob + freight) * self.taux_douane * 0.0015)
+        elif fob and freight and rate:
+            value = math.ceil(2500 + (fob + freight) * rate * 0.0015)
             if self.insurance_mode == "rfcv":
                 logger.warning("Assurance non attestée sur le RFCV : formule appliquée")
         if value is None:
