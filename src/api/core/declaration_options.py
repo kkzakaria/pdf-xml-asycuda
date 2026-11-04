@@ -26,7 +26,7 @@ INSURANCE_MODES = ("formule", "rfcv")
 PROFIL_DESCRIPTION = ("Nom du profil société du serveur (ex: karta-transit), voir GET /api/v1/profils. "
                       "Remplit bureau, déclarant, banque, compte, emplacement. Optionnel.")
 TAKIKRO_DESCRIPTION = ("Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, "
-                       "case 10 (dernière provenance) = GH")
+                       "case 10 (dernière provenance) = GH, case 18 nationalité = 99, case 31 colis = PK")
 ASSURANCE_DESCRIPTION = ("Calcul de l'assurance : 'formule' (défaut, ceiling(2500 + (FOB+FRET) × taux × 0,15 %)) "
                          "ou 'rfcv' (assurance attestée en case 21 × taux douanier)")
 

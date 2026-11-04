@@ -110,6 +110,9 @@ TAKIKRO = {
     "bureau_code": "CITKK",           # bureau de dédouanement (Fcx_Aa) et bureau d'entrée (Fcx_29a)
     "summary_declaration": "ADM",     # case 40 (Fld_40) au lieu du n° de CMR
     "pays_derniere_provenance": "GH",  # case 10 (Fcx_10)
+    "nationalite_transport": "99",    # case 18, nationalité du moyen de transport (Fcx_18b)
+    "colis_code": "PK",               # case 31, nature des colis (Fcx_31f)
+    "colis_nom": 'Colis ("package")',
 }
 
 
@@ -126,8 +129,12 @@ def apply_takikro(rfcv_data: RFCVData) -> RFCVData:
     if trans is not None:
         trans.border_office_code = TAKIKRO["bureau_code"]
         trans.border_office_name = None
+        trans.vessel_nationality = TAKIKRO["nationalite_transport"]
     if country is not None:
         country.first_destination = TAKIKRO["pays_derniere_provenance"]
     for item in rfcv_data.items:
         item.summary_declaration = TAKIKRO["summary_declaration"]
+        if item.packages is not None:
+            item.packages.kind_code = TAKIKRO["colis_code"]
+            item.packages.kind_name = TAKIKRO["colis_nom"]
     return rfcv_data

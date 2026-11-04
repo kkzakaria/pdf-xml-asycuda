@@ -103,7 +103,9 @@ class TestTakikro:
         d.transport.border_office_name = "ABIDJAN-PORT"
         d.transport.bill_of_lading = "28N-1366"
         d.country = Country(first_destination="TG", export_country_code="TG")
-        d.items = [Item(summary_declaration="28N-1366", packages=Package()) for _ in range(2)]
+        d.transport.vessel_nationality = "TG"
+        d.items = [Item(summary_declaration="28N-1366", packages=Package(kind_code="CT", kind_name="Carton"))
+                   for _ in range(2)]
         return d
 
     def test_rules_override_profile(self):
@@ -115,6 +117,8 @@ class TestTakikro:
         assert d.country.first_destination == "GH"
         assert d.country.export_country_code == "TG"            # pays d'exportation inchangé
         assert [i.summary_declaration for i in d.items] == ["ADM", "ADM"]
+        assert d.transport.vessel_nationality == "99"
+        assert [i.packages.kind_code for i in d.items] == ["PK", "PK"]
         assert d.declarant.code == "00537M"                      # reste du profil conservé
         assert d.transport.goods_location == "AIRE"
 
@@ -123,6 +127,8 @@ class TestTakikro:
         assert d.identification.customs_office_code == "CIAB6"
         assert d.country.first_destination == "TG"
         assert d.items[0].summary_declaration == "28N-1366"
+        assert d.transport.vessel_nationality == "TG"
+        assert d.items[0].packages.kind_code == "CT"
 
     def test_xml_output(self):
         d = apply_profile(self.make_data(), None, takikro=True)
@@ -133,3 +139,5 @@ class TestTakikro:
         assert root.findtext("Transport/Border_office/Code") == "CITKK"
         assert root.findtext("General_information/Country/Country_first_destination") == "GH"
         assert [i.findtext("Previous_doc/Summary_declaration") for i in root.findall("Item")] == ["ADM", "ADM"]
+        assert root.findtext("Transport/Means_of_transport/Departure_arrival_information/Nationality") == "99"
+        assert [i.findtext("Packages/Kind_of_packages_code") for i in root.findall("Item")] == ["PK", "PK"]

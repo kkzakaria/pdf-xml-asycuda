@@ -243,7 +243,7 @@ Exemples d'utilisation:
                                     "l'assurance par formule est recalculée. Un seul fichier.")
     profile_group.add_argument('--takikro', action='store_true',
                                help='Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, '
-                                    'case 10 (dernière provenance) = GH')
+                                    'case 10 (dernière provenance) = GH, case 18 nationalité = 99, case 31 colis = PK')
 
     parser.add_argument(
         '--rapport-paiement',

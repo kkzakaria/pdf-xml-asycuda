@@ -499,6 +499,8 @@ Les RFCV routiers passant par le bureau frontière de Takikro (Togo → Ghana �
 | Bureau de dédouanement (`Fcx_Aa`) et bureau d'entrée (`Fcx_29a`) | `CITKK` (noms laissés à ASYCUDA) |
 | Case 40 (`Fld_40`, `Summary_declaration`) | `ADM` au lieu du n° de CMR |
 | Case 10, pays de dernière provenance (`Fcx_10`) | `GH` |
+| Case 18, nationalité du moyen de transport (`Fcx_18b`, champ sans numéro après la case 18) | `99` |
+| Case 31, nature des colis (`Fcx_31f`) | `PK` au lieu de `CT` |
 
 ```bash
 python converter.py rfcv.pdf --taux-douane 1 --profil profils/karta-transit.ini --takikro

@@ -170,7 +170,8 @@ API: `profil=<name>` resolved server-side in `API_PROFILES_DIR` (never a client 
 
 Takikro road dossiers (`--takikro`, API `takikro=true`, `company_profile.TAKIKRO`), applied after the
 profile: offices `CITKK` (clearance + border, names left to ASYCUDA), `Summary_declaration` = `ADM`
-(box 40), `Country_first_destination` = `GH` (box 10).
+(box 40), `Country_first_destination` = `GH` (box 10), transport `Nationality` = `99` (box 18, `Fcx_18b`),
+item `Kind_of_packages_code` = `PK` (box 31).
 
 ### Chassis Detection (HS Codes 87xx)
 
