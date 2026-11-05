@@ -59,6 +59,7 @@ def apply_profile(
     manifeste: str | None = None,
     nationalite_transport: str | None = None,
     takikro: bool = False,
+    disp: bool = False,
 ) -> RFCVData:
     """
     Complète la déclaration avec le profil société et les données du dossier.
@@ -66,6 +67,7 @@ def apply_profile(
     Le rapport de paiement passé au parser (rapport_paiement) reste prioritaire sur le
     compte du profil pour Financial/Deffered_payment_reference.
     takikro=True applique en dernier les règles du passage terrestre de Takikro (TAKIKRO).
+    disp=True met le code banque (case 28) à DISP, dispense de domiciliation, à la place du profil.
     """
     p = profile or CompanyProfile()
     ident, fin, trans = rfcv_data.identification, rfcv_data.financial, rfcv_data.transport
@@ -91,6 +93,10 @@ def apply_profile(
         if p.banque_code:
             fin.bank = fin.bank or Bank()
             fin.bank.code = p.banque_code
+        if disp:
+            fin.bank = fin.bank or Bank()
+            fin.bank.code = DISP
+            fin.bank.name = None
         if p.compte and not fin.deferred_payment_ref:
             fin.deferred_payment_ref = p.compte
 
@@ -103,6 +109,10 @@ def apply_profile(
     if takikro:
         apply_takikro(rfcv_data)
     return rfcv_data
+
+
+# Case 28 : dispense de domiciliation bancaire (--disp)
+DISP = "DISP"
 
 
 # Dossier terrestre passant par le bureau frontière de Takikro (route Togo -> Ghana -> CI)

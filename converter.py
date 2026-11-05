@@ -31,6 +31,7 @@ def convert_pdf_to_xml(
     manifeste: str = None,
     nationalite_transport: str = None,
     takikro: bool = False,
+    disp: bool = False,
     fob_revise: float = None
 ) -> bool:
     """
@@ -89,9 +90,9 @@ def convert_pdf_to_xml(
         rfcv_data = parser.parse()
 
         # Constantes société (profil) et données du dossier, absentes du RFCV
-        if profile or dossier or manifeste or nationalite_transport or takikro:
+        if profile or dossier or manifeste or nationalite_transport or takikro or disp:
             apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                          nationalite_transport=nationalite_transport, takikro=takikro)
+                          nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)
 
         if verbose:
             print(f"  ✓ Extraction réussie")
@@ -244,6 +245,8 @@ Exemples d'utilisation:
     profile_group.add_argument('--takikro', action='store_true',
                                help='Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, '
                                     'case 10 (dernière provenance) = GH, case 18 nationalité = 99, case 31 colis = PK')
+    profile_group.add_argument('--disp', action='store_true',
+                               help='Case 28 : code banque DISP (dispense de domiciliation) au lieu de la banque du profil')
 
     parser.add_argument(
         '--rapport-paiement',
@@ -403,6 +406,7 @@ Exemples d'utilisation:
             profile=batch_profile,
             insurance_mode="rfcv" if args.assurance_rfcv else "formule",
             takikro=args.takikro,
+            disp=args.disp,
         )
 
         # Exécuter le traitement batch
@@ -468,6 +472,7 @@ Exemples d'utilisation:
             manifeste=args.manifeste,
             nationalite_transport=args.nationalite_transport,
             takikro=args.takikro,
+            disp=args.disp,
             fob_revise=args.fob_revise
         )
         sys.exit(0 if success else 1)

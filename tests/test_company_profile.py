@@ -141,3 +141,24 @@ class TestTakikro:
         assert [i.findtext("Previous_doc/Summary_declaration") for i in root.findall("Item")] == ["ADM", "ADM"]
         assert root.findtext("Transport/Means_of_transport/Departure_arrival_information/Nationality") == "99"
         assert [i.findtext("Packages/Kind_of_packages_code") for i in root.findall("Item")] == ["PK", "PK"]
+
+
+class TestDisp:
+    def test_disp_overrides_profile_bank(self):
+        d = apply_profile(make_data(), load_profile(str(PROFILE_FILE)), disp=True)
+        assert d.financial.bank.code == "DISP"                     # au lieu de BDU1 du profil
+        assert d.financial.deferred_payment_ref == "2600537M"      # reste du profil conservé
+
+    def test_without_profile(self):
+        d = apply_profile(make_data(), None, disp=True)
+        assert d.financial.bank.code == "DISP"
+
+    def test_not_applied_by_default(self):
+        d = apply_profile(make_data(), load_profile(str(PROFILE_FILE)))
+        assert d.financial.bank.code == "BDU1"
+
+    def test_xml_output(self):
+        gen = XMLGenerator(apply_profile(make_data(), None, disp=True))
+        gen.generate()
+        root = ET.fromstring(ET.tostring(gen.root))
+        assert root.findtext("Financial/Bank/Code") == "DISP"

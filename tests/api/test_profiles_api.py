@@ -94,3 +94,16 @@ async def test_convert_takikro(client):
     assert root.findtext("Transport/Border_office/Code") == "CITKK"
     assert root.findtext("General_information/Country/Country_first_destination") == "GH"
     assert root.findtext("Item/Previous_doc/Summary_declaration") == "ADM"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not SAMPLE_PDF.exists(), reason="PDF d'exemple absent")
+async def test_convert_disp(client):
+    response = await client.post(
+        "/api/v1/convert",
+        files={"file": (SAMPLE_PDF.name, SAMPLE_PDF.read_bytes(), "application/pdf")},
+        data={"taux_douane": "576.42", "profil": "karta-transit", "disp": "true"},
+    )
+    assert response.status_code == 200, response.text
+    xml_path = next(Path(settings.output_dir).rglob(response.json()["output_file"]))
+    assert ET.parse(xml_path).getroot().findtext("Financial/Bank/Code") == "DISP"

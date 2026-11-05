@@ -507,6 +507,15 @@ python converter.py rfcv.pdf --taux-douane 1 --profil profils/karta-transit.ini 
 ```
 API : champ `takikro=true` (conversion unitaire et batch).
 
+### Dispense de domiciliation (`--disp`)
+
+`--disp` met le code banque de la case 28 (`Fcx_28b`, `Financial/Bank/Code`) à `DISP` au lieu de la banque du profil (ex. `BDU1`). Le reste du profil est conservé ; se combine avec `--takikro`.
+
+```bash
+python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transit.ini --takikro --disp
+```
+API : champ `disp=true` (conversion unitaire et batch).
+
 ## 🧾 Champs ASYCUDA calculés
 
 Règles relevées sur des déclarations réelles (production 28923, 28928, 31287 ; export ASYCUDA 28926) :

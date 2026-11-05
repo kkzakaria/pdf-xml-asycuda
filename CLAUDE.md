@@ -173,6 +173,9 @@ profile: offices `CITKK` (clearance + border, names left to ASYCUDA), `Summary_d
 (box 40), `Country_first_destination` = `GH` (box 10), transport `Nationality` = `99` (box 18, `Fcx_18b`),
 item `Kind_of_packages_code` = `PK` (box 31).
 
+`--disp` (API `disp=true`): `Financial/Bank/Code` = `DISP` (box 28, dispense de domiciliation),
+overriding the profile `banque_code`.
+
 ### Chassis Detection (HS Codes 87xx)
 
 - **Code 6122**: Motos (HS 8711)
