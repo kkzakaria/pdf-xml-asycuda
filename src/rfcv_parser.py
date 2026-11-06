@@ -62,6 +62,8 @@ class RFCVParser:
         if fob_revise is not None and fob_revise <= 0:
             raise ValueError(f"fob_revise doit être > 0 : {fob_revise!r}")
         self.fob_revise = fob_revise
+        # Vrai si l'assurance retenue vient de la formule (à recalculer après un FOB révisé)
+        self._insurance_from_formula = False
         self.is_format_2026 = False
         self.pdf_path = pdf_path
         self.taux_douane = taux_douane
@@ -268,6 +270,7 @@ class RFCVParser:
             value = round(attested * rate)
         elif fob and freight and rate:
             value = math.ceil(2500 + (fob + freight) * rate * 0.0015)
+            self._insurance_from_formula = True
             if self.insurance_mode == "rfcv":
                 logger.warning("Assurance non attestée sur le RFCV : formule appliquée")
         if value is None:
@@ -281,7 +284,8 @@ class RFCVParser:
 
         Le total est réparti sur les articles au prorata de leur FOB RFCV, au centime, par la
         méthode du plus grand reste (Σ articles = total révisé). L'assurance par formule est
-        recalculée sur le FOB révisé ; fret, poids et colis sont inchangés.
+        recalculée sur le FOB révisé (y compris en mode 'rfcv' quand la formule a servi de repli) ;
+        une assurance attestée (case 21) est conservée. Fret, poids et colis sont inchangés.
         """
         items = [i for i in rfcv_data.items if i.tarification and i.tarification.item_price is not None]
         fob_rfcv = sum(i.tarification.item_price for i in items)
@@ -307,7 +311,7 @@ class RFCVParser:
             val.invoice.amount_national = self.fob_revise * rate if rate else val.invoice.amount_national
         val.total_invoice = self.fob_revise
         freight = val.external_freight.amount_foreign if val.external_freight else None
-        if self.insurance_mode == "formule" and freight and rate:
+        if self._insurance_from_formula and freight and rate:
             value = math.ceil(2500 + (self.fob_revise + freight) * rate * 0.0015)
             val.insurance = CurrencyAmount(amount_national=value, amount_foreign=value, currency_code='XOF',
                                            currency_name='Franc CFA', currency_rate=1.0)
@@ -835,6 +839,7 @@ class RFCVParser:
                 # Calcul : 2500 + (FOB + FRET) × TAUX × 0.0015
                 # Arrondi à l'entier supérieur (ceiling) pour avoir un montant entier
                 assurance_xof = math.ceil(2500 + (fob_value + fret_value) * insurance_rate * 0.0015)
+                self._insurance_from_formula = True
 
                 valuation.insurance = CurrencyAmount(
                     amount_national=assurance_xof,

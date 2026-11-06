@@ -204,6 +204,16 @@ class TestPipelineWithChassis:
         assert sum(i.valuation_item.external_freight.amount_national for i in d.items) == 3000  # fret inchangé
         assert d.valuation.total_cif == 150000 + 3000 + 2730
 
+    def test_fob_revision_keeps_attested_insurance(self, registry, tmp_path):
+        d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=1.0, insurance_mode="rfcv", fob_revise=150000)
+        assert d.valuation.insurance.amount_national == 150          # case 21 attestée, inchangée
+
+    def test_fob_revision_recomputes_formula_fallback_in_rfcv_mode(self, registry, tmp_path):
+        # mode 'rfcv' sans assurance attestée : repli sur la formule, recalculée sur le FOB révisé
+        text = MULTILINE_TEXT.replace("Transport 150.00 0.00 103,150.00", "Transport 0.00 0.00 103,000.00")
+        d = parse_text(text, registry, tmp_path, taux_douane=1.0, insurance_mode="rfcv", fob_revise=150000)
+        assert d.valuation.insurance.amount_national == 2500 + 230   # ceil(2500 + 153 000 × 1 × 0,0015)
+
     def test_insurance_attested_option(self, registry, tmp_path):
         d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=1.0, insurance_mode="rfcv")
         assert d.valuation.insurance.amount_national == 150
