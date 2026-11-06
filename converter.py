@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
 from company_profile import apply_profile, load_profile
+from corps_generator import write_corps
 from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
 
@@ -32,7 +33,8 @@ def convert_pdf_to_xml(
     nationalite_transport: str = None,
     takikro: bool = False,
     disp: bool = False,
-    fob_revise: float = None
+    fob_revise: float = None,
+    corps: bool = False
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -116,6 +118,13 @@ def convert_pdf_to_xml(
 
         print(f"✓ Conversion terminée avec succès!")
         print(f"  Fichier XML généré: {output_path}")
+
+        # Corps SYDAM (corps_<nom>.txt à côté du XML)
+        if corps:
+            corps_path, corps_result = write_corps(output_path)
+            print(f"  Corps SYDAM généré: {corps_path}")
+            if verbose:
+                print("  " + corps_result.summary().replace("\n", "\n  "))
 
         return True
 
@@ -245,6 +254,9 @@ Exemples d'utilisation:
     profile_group.add_argument('--takikro', action='store_true',
                                help='Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, '
                                     'case 10 (dernière provenance) = GH, case 18 nationalité = 99, case 31 colis = PK')
+    parser.add_argument('--corps', action='store_true',
+                        help='Génère aussi le corps SYDAM (corps_<nom>.txt à côté du XML), '
+                             "fichier d'écriture de l'agent SYDAM")
     profile_group.add_argument('--disp', action='store_true',
                                help='Case 28 : code banque DISP (dispense de domiciliation) au lieu de la banque du profil')
 
@@ -407,6 +419,7 @@ Exemples d'utilisation:
             insurance_mode="rfcv" if args.assurance_rfcv else "formule",
             takikro=args.takikro,
             disp=args.disp,
+            corps=args.corps,
         )
 
         # Exécuter le traitement batch
@@ -473,7 +486,8 @@ Exemples d'utilisation:
             nationalite_transport=args.nationalite_transport,
             takikro=args.takikro,
             disp=args.disp,
-            fob_revise=args.fob_revise
+            fob_revise=args.fob_revise,
+            corps=args.corps
         )
         sys.exit(0 if success else 1)
 

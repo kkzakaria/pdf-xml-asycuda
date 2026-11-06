@@ -107,3 +107,39 @@ async def test_convert_disp(client):
     assert response.status_code == 200, response.text
     xml_path = next(Path(settings.output_dir).rglob(response.json()["output_file"]))
     assert ET.parse(xml_path).getroot().findtext("Financial/Bank/Code") == "DISP"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not SAMPLE_PDF.exists(), reason="PDF d'exemple absent")
+async def test_corps_of_converted_xml(client):
+    response = await client.post(
+        "/api/v1/convert",
+        files={"file": (SAMPLE_PDF.name, SAMPLE_PDF.read_bytes(), "application/pdf")},
+        data={"taux_douane": "576.42", "profil": "karta-transit", "disp": "true"},
+    )
+    assert response.status_code == 200, response.text
+    output_file = response.json()["output_file"]
+    corps = await client.get(f"/api/v1/corps/{Path(output_file).stem}")
+    assert corps.status_code == 200, corps.text
+    assert corps.headers["content-type"].startswith("text/plain")
+    assert f'corps_{Path(output_file).stem}.txt' in corps.headers["content-disposition"]
+    assert "Fcx_28b=DISP" in corps.text.splitlines()
+    assert int(corps.headers["x-corps-items"]) >= 1
+
+    # même XML envoyé : même corps (hors en-tête qui cite le nom du fichier)
+    xml_path = next(Path(settings.output_dir).rglob(output_file))
+    upload = await client.post("/api/v1/corps", files={"file": (output_file, xml_path.read_bytes(), "application/xml")})
+    assert upload.status_code == 200, upload.text
+    assert upload.text == corps.text
+
+
+@pytest.mark.asyncio
+async def test_corps_errors(client):
+    assert (await client.get("/api/v1/corps/inexistant")).status_code == 404
+    assert (await client.get("/api/v1/corps/..%2Fsecret")).status_code in (400, 404)
+    bad = await client.post("/api/v1/corps", files={"file": ("x.txt", b"<ASYCUDA/>", "text/plain")})
+    assert bad.status_code == 400
+    other = await client.post("/api/v1/corps", files={"file": ("x.xml", b"<Autre/>", "application/xml")})
+    assert other.status_code == 422
+    bomb = (b'<?xml version="1.0"?><!DOCTYPE a [<!ENTITY e "x"><!ENTITY f "&e;&e;">]><ASYCUDA>&f;</ASYCUDA>')
+    assert (await client.post("/api/v1/corps", files={"file": ("b.xml", bomb, "application/xml")})).status_code == 422
