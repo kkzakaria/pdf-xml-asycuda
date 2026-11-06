@@ -516,6 +516,35 @@ python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transi
 ```
 API : champ `disp=true` (conversion unitaire et batch).
 
+## 📝 Corps SYDAM (`--corps`)
+
+Le corps (`corps.txt`) est le fichier que l'agent SYDAM écrit dans la déclaration du client
+SYDAMWorld (`Ctrl+Shift+W`) : une ligne `Champ=valeur` pour le segment général
+(ex. `Fcx_28b=DISP`), `ITEM.<n>.Champ=valeur` par article (ex. `ITEM.3.Fld_42=54393.0`).
+Il est produit depuis le XML ASYCUDA (`src/corps_generator.py`, repris de sydam-api).
+
+```bash
+# XML + corps_<nom>.txt à côté du XML (fichier unique ou batch)
+python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transit.ini --takikro --corps
+
+# corps d'un XML existant (produit ici ou exporté du client ASYCUDA)
+python src/corps_generator.py DECLARATION.xml -o corps.txt
+```
+
+Ne sont pas écrits : les libellés qu'ASYCUDA remplit depuis un code (noms de bureau, de banque,
+de colis) et les champs calculés à la liquidation. Le `--profil` de `corps_generator.py` est un
+fichier de constantes du corps (`Fld_30=AIRE`...), utilisées seulement si le XML n'a pas la
+valeur : ce n'est pas le profil société de `converter.py`.
+
+API :
+
+| Route | Rôle |
+|---|---|
+| `GET /api/v1/corps/{file_id}` | corps d'un XML converti (`file_id` = `output_file` de la conversion) |
+| `POST /api/v1/corps` (champ `file`, `.xml`) | corps d'un XML envoyé, lu par `defusedxml` |
+
+Réponse `text/plain` (`corps_<nom>.txt`), en-têtes `X-Corps-Items` et `X-Corps-Missing`.
+
 ## 🧾 Champs ASYCUDA calculés
 
 Règles relevées sur des déclarations réelles (production 28923, 28928, 31287 ; export ASYCUDA 28926) :

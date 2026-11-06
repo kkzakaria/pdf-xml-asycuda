@@ -20,6 +20,7 @@ except ImportError:
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
 from company_profile import apply_profile
+from corps_generator import write_corps
 from metrics import ConversionMetrics, MetricsCollector
 
 
@@ -53,6 +54,7 @@ class BatchConfig:
     insurance_mode: str = "formule"              # 'formule' ou 'rfcv'
     takikro: bool = False                        # dossiers terrestres de Takikro (company_profile.TAKIKRO)
     disp: bool = False                           # case 28 : banque DISP (dispense de domiciliation)
+    corps: bool = False                          # corps SYDAM corps_<nom>.txt à côté de chaque XML
     # Données de dossier, une par fichier (même ordre que input_paths)
     dossiers: List[Optional[str]] = field(default_factory=list)
     manifestes: List[Optional[str]] = field(default_factory=list)
@@ -147,6 +149,7 @@ class BatchProcessor:
             "insurance_mode": cfg.insurance_mode,
             "takikro": cfg.takikro,
             "disp": cfg.disp,
+            "corps": cfg.corps,
             "dossier": pick(cfg.dossiers),
             "manifeste": pick(cfg.manifestes),
             "nationalite_transport": pick(cfg.nationalites_transport),
@@ -157,7 +160,7 @@ class BatchProcessor:
                              chassis_config: Optional[Dict[str, Any]] = None, profile: Optional[Any] = None,
                              insurance_mode: str = "formule", dossier: Optional[str] = None,
                              manifeste: Optional[str] = None, nationalite_transport: Optional[str] = None,
-                             takikro: bool = False, disp: bool = False) -> BatchResult:
+                             takikro: bool = False, disp: bool = False, corps: bool = False) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -172,6 +175,7 @@ class BatchProcessor:
             dossier, manifeste, nationalite_transport: données du dossier (optionnel)
             takikro: dossier terrestre de Takikro
             disp: case 28 = DISP (dispense de domiciliation)
+            corps: générer aussi le corps SYDAM à côté du XML
 
         Returns:
             Résultat du traitement
@@ -205,6 +209,8 @@ class BatchProcessor:
             generator = XMLGenerator(rfcv_data)
             generator.generate()
             generator.save(str(output_file), pretty_print=True)
+            if corps:
+                write_corps(output_file)
 
             # Collecter les métriques
             collector = MetricsCollector()

@@ -4,8 +4,8 @@ pdfplumber>=0.10.0
 # Data Processing
 pandas>=2.0.0
 
-# XML Processing (built-in)
-# xml.etree.ElementTree is part of Python standard library
+# XML Processing (xml.etree.ElementTree, standard library)
+defusedxml>=0.7.1  # lecture sûre des XML reçus (corps SYDAM)
 
 # CLI and Utilities
 python-dateutil>=2.8.0

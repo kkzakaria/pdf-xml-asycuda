@@ -83,6 +83,7 @@ ruff check src/ --output-format=github
 | `src/rfcv_format_2026.py` | Pure-text reader for the current RFCV format (header + items) |
 | `src/asycuda_enrichment.py` | Computed ASYCUDA fields after proportional split (CIF, packages, `Value_item`, totals) |
 | `src/company_profile.py` | Company profile (`profils/*.ini`) + dossier data applied to `RFCVData` |
+| `src/corps_generator.py` | ASYCUDA XML -> SYDAM agent `corps.txt` (`--corps`, `/api/v1/corps`), from sydam-api |
 | `src/hs_code_rules.py` | HS codes requiring chassis (8701-8716), document code logic |
 | `src/item_grouper.py` | Groups articles by HS code for customs declarations |
 | `src/proportional_calculator.py` | Distributes values proportionally using Largest Remainder Method |
@@ -103,7 +104,7 @@ src/api/
 │   ├── background.py    # TaskManager for async jobs
 │   ├── dependencies.py  # Startup tasks
 │   └── declaration_options.py # Form fields profil/dossier/manifeste/assurance (Depends)
-├── routes/              # Routers: convert, batch, files, health, chassis, stats, profiles
+├── routes/              # Routers: convert, batch, files, health, chassis, stats, profiles, corps
 │   └── chassis.py       # VIN generation endpoints (standalone)
 ├── services/            # Business logic wrappers (never bypass)
 │   └── chassis_service.py # VIN generation service
@@ -127,6 +128,8 @@ src/api/
 | `/api/v1/chassis/generate/json` | POST | Generate VINs (JSON body) |
 | `/api/v1/chassis/sequences` | GET | VIN sequences status |
 | `/api/v1/profils` | GET | Available company profiles |
+| `/api/v1/corps/{file_id}` | GET | SYDAM corps of a converted XML (text/plain) |
+| `/api/v1/corps` | POST | SYDAM corps of an uploaded XML (defusedxml) |
 
 Documentation at `/docs` (Swagger) and `/redoc`.
 
@@ -175,6 +178,9 @@ item `Kind_of_packages_code` = `PK` (box 31).
 
 `--disp` (API `disp=true`): `Financial/Bank/Code` = `DISP` (box 28, dispense de domiciliation),
 overriding the profile `banque_code`.
+
+`--corps` (CLI single + batch): also writes `corps_<xml stem>.txt` next to the XML. Corps output must
+stay byte-identical to sydam-api `tools/xml_to_corps.py` for the same XML (field map in `GENERAL`/`ITEM`).
 
 ### Chassis Detection (HS Codes 87xx)
 
