@@ -15,6 +15,9 @@ Ce convertisseur automatise l'extraction de données structurées depuis les doc
 
 ### Extraction et Conversion
 - ✅ **Extraction automatique** des données RFCV depuis PDF
+- ✅ **Deux formats RFCV** : format historique (`1 234,56`) et format actuel 2026 (`1,234.56`, article sur trois lignes avec VIN), détectés automatiquement
+- ✅ **Conversion au taux douanier** : les montants en XOF utilisent `taux_douane`, comme ASYCUDA
+- ✅ **Profil société** : bureau, déclarant, banque, compte et emplacement complétés depuis un fichier profil
 - ✅ **Génération XML ASYCUDA** conforme au schéma officiel
 - ✅ **Validation complète** des données extraites
 - ✅ **Système de métriques** pour évaluer la qualité de conversion
@@ -159,6 +162,11 @@ L'API sera disponible sur `http://localhost:8000`
 - `GET /api/v1/metrics` - Métriques système globales
 - `GET /api/v1/metrics/{job_id}` - Métriques d'un job spécifique
 
+**Profils société**
+- `GET /api/v1/profils` - Profils disponibles sur le serveur (champ `profil` des conversions)
+
+Les routes de conversion (`/convert`, `/convert/async`, `/convert/with-payment`, `/convert/with-chassis`, `/convert/complete`) acceptent aussi les champs optionnels `profil`, `dossier`, `manifeste`, `nationalite_transport` et `assurance` (`formule` ou `rfcv`). Le batch accepte `profil` et `assurance` (communs) ainsi que `dossiers`, `manifestes` et `nationalites_transport` (listes JSON, une valeur par fichier ou `null`). Voir [Profil société](#-profil-société-et-données-du-dossier).
+
 **Chassis/VIN** (Génération indépendante)
 - `POST /api/v1/chassis/generate` - Génère N VINs ISO 3779 (form-data)
 - `POST /api/v1/chassis/generate/json` - Génère N VINs ISO 3779 (JSON body)
@@ -289,6 +297,7 @@ Variables disponibles:
 - `API_DEFAULT_WORKERS` - Workers par défaut (défaut: 4)
 - `API_MAX_WORKERS` - Workers maximum (défaut: 8)
 - `API_JOB_EXPIRY_HOURS` - Expiration des jobs (défaut: 24h)
+- `API_PROFILES_DIR` - Dossier des profils société `*.ini` (défaut: profils)
 
 ### CLI - Conversion d'un seul fichier
 
@@ -306,6 +315,14 @@ python converter.py input.pdf --taux-douane 573.1390 -o output/custom.xml
 
 # Mode verbeux
 python converter.py input.pdf --taux-douane 573.1390 -v
+
+# Avec profil société et données du dossier (XML complet, prêt pour ASYCUDA / SYDAM)
+python converter.py input.pdf --taux-douane 596.302 \
+    --profil profils/karta-transit.ini \
+    --dossier 31287 --manifeste "CIAB1 2026 7065" --nationalite-transport LR
+
+# Assurance attestée sur le RFCV (case 21) au lieu de la formule
+python converter.py input.pdf --taux-douane 596.302 --assurance-rfcv
 ```
 
 ### Traitement par lot (Batch)
@@ -402,7 +419,10 @@ pdf-xml-asycuda/
 ├── src/
 │   ├── models.py            # Modèles de données (15+ dataclasses)
 │   ├── pdf_extractor.py     # Extraction PDF avec pdfplumber
-│   ├── rfcv_parser.py       # Parsing des données RFCV
+│   ├── rfcv_parser.py       # Parsing des données RFCV (détection du format)
+│   ├── rfcv_format_2026.py  # Lecture du format RFCV actuel
+│   ├── asycuda_enrichment.py # Champs calculés ASYCUDA (CIF, colis, Value_item...)
+│   ├── company_profile.py   # Profil société (bureau, déclarant, banque...)
 │   ├── xml_generator.py     # Génération XML ASYCUDA
 │   ├── metrics.py           # Système de métriques
 │   ├── batch_processor.py   # Traitement par lot parallèle
@@ -418,6 +438,7 @@ pdf-xml-asycuda/
 │   └── test_converter.py    # Tests automatisés
 ├── scripts/
 │   └── generate_report.py   # Générateur de rapports
+├── profils/                 # Profils société (*.ini)
 ├── converter.py             # CLI principal (batch-enabled)
 ├── run_api.py              # 🆕 Script de démarrage API
 ├── .env.example            # 🆕 Exemple configuration API
@@ -436,9 +457,85 @@ pdf-xml-asycuda/
 - **Items** : Articles avec codes SH, quantités, valeurs
 - **Containers** : Liste des conteneurs avec types et identifiants
 
+## 🏢 Profil société et données du dossier
+
+Le RFCV ne porte pas les valeurs propres à la société qui déclare. Elles viennent d'un **fichier profil** (`clé=valeur`), et les données propres au dossier de paramètres.
+
+```ini
+# profils/karta-transit.ini
+bureau_code=CIAB6
+bureau_nom=ABJ GUICHET UNIQUE
+declarant_code=00537M
+declarant_nom=KARTA Transit
+declarant_adresse=Abidjan, Treichville avenue 21 rue 68 - 05 BP 1256 Abidjan 05
+declarant_representant=KOFFI ANIS NAOMI
+reference_prefixe=KARTA        # référence déclarant = KARTA + n° de dossier
+banque_code=BDU1
+compte=2600537M
+emplacement=AIRE
+```
+
+| Source | Champ XML |
+|---|---|
+| `bureau_code` / `bureau_nom` | `Identification/Office_segment` |
+| `declarant_*` | `Declarant` (code, nom + adresse, représentant) |
+| `reference_prefixe` + `--dossier` | `Declarant/Reference/Number` (ex. `KARTA31287`) |
+| `banque_code` | `Financial/Bank/Code` |
+| `compte` | `Financial/Deffered_payment_reference` (`--rapport-paiement` reste prioritaire) |
+| `emplacement` | `Transport/Location_of_goods` |
+| `--manifeste` | `Identification/Manifest_reference_number` |
+| `--nationalite-transport` | `Transport/.../Departure_arrival_information/Nationality` |
+
+- Format : `#` pour commenter (aussi en fin de ligne), `\n` pour un saut de ligne. Une clé inconnue est refusée.
+- **API** : les profils sont des fichiers du serveur (`API_PROFILES_DIR`), choisis par leur nom (`profil=karta-transit`). Le client n'envoie ni fichier ni chemin.
+- **Batch CLI** : `--profil` s'applique à tous les fichiers ; `--dossier`, `--manifeste` et `--nationalite-transport` sont refusés (une valeur par fichier : utiliser l'API batch).
+
+### Dossiers terrestres de Takikro (`--takikro`)
+
+Les RFCV routiers passant par le bureau frontière de Takikro (Togo → Ghana → Côte d'Ivoire) ont leurs propres valeurs, appliquées par-dessus le profil société :
+
+| Champ | Valeur |
+|---|---|
+| Bureau de dédouanement (`Fcx_Aa`) et bureau d'entrée (`Fcx_29a`) | `CITKK` (noms laissés à ASYCUDA) |
+| Case 40 (`Fld_40`, `Summary_declaration`) | `ADM` au lieu du n° de CMR |
+| Case 10, pays de dernière provenance (`Fcx_10`) | `GH` |
+| Case 18, nationalité du moyen de transport (`Fcx_18b`, champ sans numéro après la case 18) | `99` |
+| Case 31, nature des colis (`Fcx_31f`) | `PK` au lieu de `CT` |
+
+```bash
+python converter.py rfcv.pdf --taux-douane 1 --profil profils/karta-transit.ini --takikro
+```
+API : champ `takikro=true` (conversion unitaire et batch).
+
+### Dispense de domiciliation (`--disp`)
+
+`--disp` met le code banque de la case 28 (`Fcx_28b`, `Financial/Bank/Code`) à `DISP` au lieu de la banque du profil (ex. `BDU1`). Le reste du profil est conservé ; se combine avec `--takikro`.
+
+```bash
+python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transit.ini --takikro --disp
+```
+API : champ `disp=true` (conversion unitaire et batch).
+
+## 🧾 Champs ASYCUDA calculés
+
+Règles relevées sur des déclarations réelles (production 28923, 28928, 31287 ; export ASYCUDA 28926) :
+
+| Champ | Règle |
+|---|---|
+| Conversion en XOF | taux douanier `taux_douane` (et non le taux du RFCV, case 17) |
+| `Summary_declaration` | n° de connaissement / CMR |
+| `Free_text_1`, `Marks2_of_packages` | `CH: <VIN>` (VIN lu dans le RFCV) |
+| `Number_of_packages` | colis répartis à parts égales sur les articles avec châssis, reste aux premiers |
+| `Total_cost_itm` | fret + assurance de l'article |
+| `Total_CIF_itm` = `Statistical_value` | FOB + fret + assurance |
+| `Value_item` | `fret+0+assurance+0-0` (ex. `83,012+0+491+0-0`) |
+| `Value_details` = `Total_cost` | Σ (fret + assurance) |
+| Documents joints | `0007` facture, `0014` et `6603` = `VD`, `2500` n° de ligne, `2501` n° RFCV, `6610` FDI (premier article), `6122` châssis ; dates au format `M/J/AA` |
+| `Total_number_of_forms` | 1 + ⌈(articles − 1) / 3⌉ |
+
 ## 💰 Calcul de l'Assurance
 
-Le système calcule automatiquement l'assurance (section 21) selon la formule douanière officielle.
+Par défaut, le système calcule l'assurance selon la formule douanière ci-dessous, comme les déclarations de production. L'option `--assurance-rfcv` (API : `assurance=rfcv`) reprend à la place l'**assurance attestée sur le RFCV** (case 21), convertie au taux douanier.
 
 ### Formule de calcul
 

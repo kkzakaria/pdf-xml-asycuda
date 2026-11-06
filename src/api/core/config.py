@@ -84,6 +84,7 @@ Pour obtenir une clé, contactez l'administrateur du service.
     output_dir: str = "output"
     max_upload_size: int = 50 * 1024 * 1024  # 50MB
     allowed_extensions: List[str] = [".pdf"]
+    profiles_dir: str = "profils"  # Profils société (*.ini), choisis par nom dans les requêtes
 
     # Job Management
     job_expiry_hours: int = 24
