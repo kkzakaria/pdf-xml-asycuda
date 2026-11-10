@@ -17,6 +17,7 @@ from company_profile import apply_profile, load_profile
 from corps_generator import write_corps
 from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
+from chassis_registry import DuplicateChassisError
 
 
 def convert_pdf_to_xml(
@@ -128,6 +129,13 @@ def convert_pdf_to_xml(
 
         return True
 
+    except DuplicateChassisError as e:
+        origins = sorted({d.get("first_rfcv_number") or d.get("first_filename") or "?" for d in e.duplicates})
+        print(f"Erreur : {len(e.duplicates)} châssis déjà traité(s), RFCV d'origine : {', '.join(origins)}.",
+              file=sys.stderr)
+        print("  Si ce RFCV a été annulé : python registre.py annuler <RFCV> --motif \"...\""
+              " (détail d'un châssis : python registre.py chercher <VIN>)", file=sys.stderr)
+        return False
     except Exception as e:
         print(f"Erreur lors de la conversion: {e}", file=sys.stderr)
         if verbose:

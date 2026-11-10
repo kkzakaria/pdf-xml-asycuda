@@ -516,6 +516,32 @@ python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transi
 ```
 API : champ `disp=true` (conversion unitaire et batch).
 
+## ♻️ RFCV annulé : libérer ses châssis
+
+Chaque conversion enregistre les châssis du RFCV (`data/chassis_registry.db`) : un second RFCV qui
+reprend les mêmes châssis est refusé (doublon, HTTP 409). Quand la société d'inspection annule un
+RFCV (par exemple éclaté en plusieurs RFCV), on l'annule aussi dans le registre : ses châssis
+passent dans l'historique des annulations, avec le motif et la date, et le nouveau RFCV passe.
+
+```bash
+python registre.py annuler RCSA6014576 --motif "Annulé par la société d'inspection, éclaté en 6014621 et ..."
+python registre.py annuler 6014576 --motif "..." --chassis VIN1 VIN2   # seulement ces châssis
+python registre.py annulations --rfcv 6014576 --details               # historique
+python registre.py chercher LC6PCJK20T0B14898                         # état d'un châssis
+python registre.py restaurer RCSA6014576                              # annulation faite par erreur
+```
+
+Le n° RFCV s'écrit avec ou sans préfixe (`RCSA6014576` ou `6014576`). Lors d'un refus pour
+doublon, la conversion indique le RFCV d'origine des châssis.
+
+API :
+
+| Route | Rôle |
+|---|---|
+| `POST /api/v1/chassis/registry/annulations` (`{"rfcv_number", "motif", "chassis_numbers"?}`) | annuler un RFCV |
+| `GET /api/v1/chassis/registry/annulations?rfcv_number=` | historique des annulations |
+| `POST /api/v1/chassis/registry/annulations/{rfcv_number}/restaurer` | restaurer (conflits signalés) |
+
 ## 📝 Corps SYDAM (`--corps`)
 
 Le corps (`corps.txt`) est le fichier que l'agent SYDAM écrit dans la déclaration du client

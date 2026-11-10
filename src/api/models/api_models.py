@@ -533,3 +533,37 @@ class ChassisDeleteResponse(BaseModel):
     """Confirmation de suppression"""
     success: bool
     deleted: str
+
+
+class RFCVCancelRequest(BaseModel):
+    """Annulation d'un RFCV (annulé par la société d'inspection, éclaté…)"""
+    rfcv_number: str = Field(..., min_length=1, description="N° RFCV (RCSA6014576 ou 6014576)")
+    motif: str = Field(..., min_length=1, description="Motif de l'annulation, conservé dans l'historique")
+    chassis_numbers: Optional[List[str]] = Field(None, description="Limiter l'annulation à ces châssis du RFCV")
+
+
+class RFCVCancelResponse(BaseModel):
+    """Châssis libérés par l'annulation"""
+    rfcv_number: str
+    count: int
+    cancelled: List[str]
+
+
+class RFCVRestoreResponse(BaseModel):
+    """Châssis remis dans le registre ; conflicts : repris entre-temps par un autre RFCV"""
+    rfcv_number: str
+    restored: List[str]
+    conflicts: List[str]
+
+
+class CancelledChassisEntry(ChassisRegistryEntry):
+    """Entrée de l'historique des annulations"""
+    cancelled_at: str
+    reason: str
+    restored_at: Optional[str] = None
+
+
+class CancelledChassisResponse(BaseModel):
+    """Historique des annulations"""
+    total: int
+    entries: List[CancelledChassisEntry]

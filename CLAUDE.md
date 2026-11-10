@@ -260,6 +260,12 @@ conversion of the same RFCV raises `DuplicateChassisError` (HTTP 409) unless `fo
 In tests and experiments, pass `registry=ChassisRegistry(tmp_path / "registry.db")` to
 `RFCVParser` instead of using the repository database.
 
+Cancelled RFCVs (cancelled by the inspection company, e.g. split into several RFCVs): `registre.py
+annuler <RFCV> --motif "..."` (API `POST /api/v1/chassis/registry/annulations`) moves the RFCV's
+extracted chassis into `cancelled_chassis` (reason and date kept), so the replacement RFCV is no
+longer refused as a duplicate. `restaurer` undoes it (chassis re-registered since are reported as
+conflicts). RFCV numbers are matched with `normalize_rfcv` (`RCSA6014576` = `6014576`).
+
 ## Key Patterns
 
 ### Path Handling
