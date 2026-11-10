@@ -25,6 +25,11 @@ from ..models.api_models import (
     ChassisRegistryResponse,
     ChassisEntryDetailResponse,
     ChassisDeleteResponse,
+    RFCVCancelRequest,
+    RFCVCancelResponse,
+    RFCVRestoreResponse,
+    CancelledChassisEntry,
+    CancelledChassisResponse,
 )
 from ..services.chassis_service import chassis_service
 from ..services.usage_stats_service import get_usage_stats
@@ -270,6 +275,54 @@ async def list_generated_chassis():
         total=len(entries),
         entries=[ChassisRegistryEntry(**e) for e in entries]
     )
+
+
+@router.post(
+    "/registry/annulations",
+    response_model=RFCVCancelResponse,
+    summary="Annuler un RFCV",
+    description=("Annule un RFCV (annulé par la société d'inspection, éclaté en plusieurs RFCV…) : ses châssis "
+                 "passent dans l'historique des annulations, avec le motif, et un nouveau RFCV peut les reprendre "
+                 "sans être refusé en doublon (409). `chassis_numbers` limite l'annulation à ces châssis."),
+    dependencies=[Depends(verify_api_key)]
+)
+async def cancel_rfcv(body: RFCVCancelRequest):
+    try:
+        cancelled = get_registry().cancel_rfcv(body.rfcv_number, body.motif, body.chassis_numbers)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    if not cancelled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Aucun châssis enregistré pour le RFCV {body.rfcv_number}")
+    return RFCVCancelResponse(rfcv_number=body.rfcv_number, count=len(cancelled), cancelled=cancelled)
+
+
+@router.get(
+    "/registry/annulations",
+    response_model=CancelledChassisResponse,
+    summary="Historique des annulations",
+    description="Châssis des RFCV annulés (le plus récent d'abord), filtrables par `rfcv_number`.",
+    dependencies=[Depends(verify_api_key)]
+)
+async def list_cancelled_chassis(rfcv_number: Optional[str] = None):
+    rows = get_registry().get_cancelled(rfcv_number=rfcv_number)
+    return CancelledChassisResponse(total=len(rows), entries=[CancelledChassisEntry(**r) for r in rows])
+
+
+@router.post(
+    "/registry/annulations/{rfcv_number}/restaurer",
+    response_model=RFCVRestoreResponse,
+    summary="Restaurer un RFCV annulé",
+    description=("Annule une annulation faite par erreur : les châssis du RFCV reviennent dans le registre, "
+                 "sauf ceux repris entre-temps par un autre RFCV (`conflicts`)."),
+    dependencies=[Depends(verify_api_key)]
+)
+async def restore_rfcv(rfcv_number: str):
+    r = get_registry().restore_rfcv(rfcv_number)
+    if not r["restored"] and not r["conflicts"]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Aucune annulation en cours pour le RFCV {rfcv_number}")
+    return RFCVRestoreResponse(rfcv_number=rfcv_number, **r)
 
 
 @router.get(

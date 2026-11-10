@@ -219,7 +219,8 @@ async def convert_pdf(
                 "error": "duplicate_chassis",
                 "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
                 "duplicates": e.duplicates,
-                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+                "hint": ("Si le RFCV d'origine a été annulé : POST /api/v1/chassis/registry/annulations ; "
+                         "sinon relancer avec force_reprocess=true pour forcer le retraitement"),
             }
         )
     except HTTPException:
@@ -669,7 +670,8 @@ async def convert_with_payment(
                 "error": "duplicate_chassis",
                 "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
                 "duplicates": e.duplicates,
-                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+                "hint": ("Si le RFCV d'origine a été annulé : POST /api/v1/chassis/registry/annulations ; "
+                         "sinon relancer avec force_reprocess=true pour forcer le retraitement"),
             }
         )
     except HTTPException:
@@ -849,7 +851,8 @@ async def convert_with_chassis(
                 "error": "duplicate_chassis",
                 "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
                 "duplicates": e.duplicates,
-                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+                "hint": ("Si le RFCV d'origine a été annulé : POST /api/v1/chassis/registry/annulations ; "
+                         "sinon relancer avec force_reprocess=true pour forcer le retraitement"),
             }
         )
     except HTTPException:
@@ -1010,7 +1013,8 @@ async def convert_complete(
                 "error": "duplicate_chassis",
                 "detail": f"{len(e.duplicates)} châssis déjà traité(s) dans ce RFCV",
                 "duplicates": e.duplicates,
-                "hint": "Relancer avec force_reprocess=true pour forcer le retraitement",
+                "hint": ("Si le RFCV d'origine a été annulé : POST /api/v1/chassis/registry/annulations ; "
+                         "sinon relancer avec force_reprocess=true pour forcer le retraitement"),
             }
         )
     except HTTPException:
