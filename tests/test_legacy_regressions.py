@@ -47,3 +47,25 @@ def test_legacy_country_codes():
     for provenance, code in [("Togo", "TG"), ("Oman", "OM"), ("Chine", "CN"), ("Somalie", None)]:
         parser.text = f"9. Pays de provenance 10. Mode de Paiement\n{provenance} Paiement sur compte bancaire\n"
         assert parser._parse_country().export_country_code == code, provenance
+
+
+def test_legacy_packages_with_unlisted_kind():
+    """Case 24 « 94 TRICYCLES » (FCVR RCS26160595) : nature hors liste, total des colis tout de même lu."""
+    parser = RFCVParser.__new__(RFCVParser)
+    parser.text = (
+        "No. (Maison Airway Bill/HBL): No. (Vol/Voyage/Transport routier):\n"
+        "24. Colisage, nombre et désignation des marchandises\n"
+        "TG 6681 BF\n"
+        "94 TRICYCLES\n"
+        "Date de (LTA/Connaissement/CMR): Transporteur ID:\n"
+        "03/11/2026 AMOUSSOU ADIVION GASTON\n"
+    )
+    prop = parser._parse_property()
+    assert prop.total_packages == 94 and prop.package_type == "TRICYCLES"
+    # nature connue : toujours prioritaire
+    parser.text = parser.text.replace("94 TRICYCLES", "216 CARTONS")
+    prop = parser._parse_property()
+    assert prop.total_packages == 216 and prop.package_type == "CARTONS"
+    # aucune ligne « nombre MOT » dans la case 24 : rien inventé
+    parser.text = "24. Colisage, nombre et désignation des marchandises\nTG 6681 BF\nDate de\n"
+    assert parser._parse_property().total_packages is None

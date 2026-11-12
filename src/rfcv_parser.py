@@ -432,6 +432,15 @@ class RFCVParser:
         packages_match = self._extract_field(r'(\d+)\s+(?:CARTONS|PACKAGES|COLIS|PALETTES|PIECES)', re.IGNORECASE)
         if packages_match:
             prop.total_packages = int(packages_match)
+        else:
+            # Repli : nature de colis hors liste (« 94 TRICYCLES », « 12 MOTOS »…) : première ligne
+            # « <nombre> <MOT> » du bloc de la case 24, avant « Date de »
+            block = re.search(r'24\.\s*Colisage[^\n]*\n(.*?)(?:\nDate de|\n26\.)', self.text, re.DOTALL)
+            if block:
+                m = re.search(r'^\s*(\d+)\s+([A-ZÀ-Ü][A-ZÀ-Ü /-]*)\s*$', block.group(1), re.MULTILINE)
+                if m:
+                    prop.total_packages = int(m.group(1))
+                    prop.package_type = prop.package_type or m.group(2).strip()
 
         # P3.4: Type de colisage - Section 24
         # Structure: "24. Colisage, nombre et désignation des marchandises\n...\n<nombre> <TYPE>"
