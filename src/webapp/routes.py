@@ -13,6 +13,7 @@ import math
 import sys
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -50,8 +51,31 @@ ASSURANCE_LIBELLES = {"formule": "Formule (par défaut)", "rfcv": "Attestée par
                       "imposee": "Imposée"}
 FICHIERS = {"xml": "application/xml", "corps": "text/plain; charset=utf-8", "pdf": "application/pdf"}
 
-# Toutes les routes de la webapp exigent un utilisateur (garde Access ou mode développement).
-router = APIRouter(include_in_schema=False, dependencies=[Depends(current_user)])
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def same_origin(request: Request) -> None:
+    """
+    Protection CSRF : le cookie Access (CF_Authorization) part avec toute requête du
+    navigateur, y compris depuis un autre site. Une requête qui modifie l'état est refusée
+    si le navigateur la dit inter-sites (Sec-Fetch-Site) ou si son Origin n'est pas l'hôte
+    de la requête. Sans aucun des deux en-têtes (curl, tests), elle est acceptée.
+    """
+    if request.method in SAFE_METHODS:
+        return
+    refus = HTTPException(status_code=403, detail="Requête refusée : envoyée depuis un autre site")
+    if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
+        raise refus
+    origin = request.headers.get("origin")
+    if origin is not None:
+        host = request.headers.get("host", "").lower()
+        if not host or urlsplit(origin.strip()).netloc.lower() != host:
+            raise refus
+
+
+# Toutes les routes de la webapp exigent un utilisateur (garde Access ou mode développement)
+# et, pour les requêtes qui modifient l'état, la même origine.
+router = APIRouter(include_in_schema=False, dependencies=[Depends(current_user), Depends(same_origin)])
 
 
 # ------------------------------------------------------------------ dépendances

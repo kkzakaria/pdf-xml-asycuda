@@ -14,6 +14,7 @@ from test_rfcv_format_2026 import MULTILINE_TEXT  # noqa: E402
 from api.main import app  # noqa: E402
 from chassis_registry import ChassisRegistry  # noqa: E402
 from webapp.auth import current_user  # noqa: E402
+from webapp.routes import same_origin  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 
@@ -269,7 +270,8 @@ async def test_every_webapp_route_requires_user():
             continue
         dependant = getattr(route, "dependant", None)
         assert dependant is not None, f"route sans dépendances : {path}"
-        assert current_user in {d.call for d in dependant.dependencies}, path
+        calls = {d.call for d in dependant.dependencies}
+        assert current_user in calls and same_origin in calls, path
         checked.add((path, tuple(sorted(route.methods))))
     assert len(checked) >= 8
     assert ("/dossiers/{dossier_id}/fichiers/{n}/{kind}", ("GET",)) in checked
@@ -284,3 +286,32 @@ async def test_static_and_layout(client, as_user):
     assert "Génération XML &amp; corps" in r.text or "Génération XML & corps" in r.text
     assert "Connecté : op@karta.ci" in r.text and 'href="/chassis"' not in r.text
     assert "https://" not in re.sub(r"<a [^>]*>", "", r.text)              # aucun script externe
+
+
+# ------------------------------------------------------------------ CSRF
+async def test_cross_site_post_rejected(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await generate(client, d)
+    r = await client.post(f"/dossiers/{d}/declarer", headers={"Sec-Fetch-Site": "cross-site"})
+    assert r.status_code == 403 and "autre site" in r.text
+    r = await client.post(f"/dossiers/{d}/declarer", headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403
+    r = await client.post(f"/dossiers/{d}/declarer", headers={"Origin": "null"})
+    assert r.status_code == 403
+    r = await client.post("/nouveau", headers={"Origin": "https://evil.example"},
+                          files=[("fichiers", ("x.pdf", pdf_bytes(OTHER_TEXT), "application/pdf"))])
+    assert r.status_code == 403
+    assert "Brouillon" in (await client.get(f"/dossiers/{d}")).text          # rien déclaré
+    # GET non concerné, même depuis un autre site
+    r = await client.get(f"/dossiers/{d}", headers={"Sec-Fetch-Site": "cross-site",
+                                                    "Origin": "https://evil.example"})
+    assert r.status_code == 200
+    # même origine : accepté
+    r = await client.post(f"/dossiers/{d}/declarer", headers={"Origin": "http://test",
+                                                              "Sec-Fetch-Site": "same-origin"})
+    assert r.status_code == 303
+
+
+async def test_api_routes_not_subject_to_origin_check(client, as_user):
+    r = await client.get("/api", headers={"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"})
+    assert r.status_code == 200
