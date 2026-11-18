@@ -22,7 +22,7 @@ async def test_health_check(client):
 @pytest.mark.asyncio
 async def test_root_endpoint(client):
     """Test de l'endpoint racine"""
-    response = await client.get("/")
+    response = await client.get("/api")
 
     assert response.status_code == 200
     data = response.json()
