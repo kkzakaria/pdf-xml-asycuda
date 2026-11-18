@@ -4,7 +4,17 @@ Application interne de génération (`https://generation.karta-transit.ci`), ser
 
 ## 1. VM ou LXC Debian avec Docker
 
-1. Sur Proxmox, créer une VM (ou un LXC avec `nesting=1` et `keyctl=1`) Debian 12, 2 vCPU, 2 Go de RAM, 20 Go de disque.
+1. Sur Proxmox, créer une VM Debian 12 avec les caractéristiques suivantes :
+
+   | Élément | Recommandé | Minimum |
+   |---|---|---|
+   | Type | VM | LXC avec `nesting=1` et `keyctl=1` |
+   | Processeur | 2 vCPU | 2 vCPU |
+   | Mémoire | 4 Go | 2 Go |
+   | Disque | 50 Go (extensible) | 20 Go |
+   | Réseau | sortie HTTPS vers Internet, aucun port entrant | |
+
+   Pourquoi : l'application tourne en un seul processus (un vCPU sert aux générations, l'autre au système, à Docker et au tunnel ; plus de vCPU n'accélère pas une génération). Une génération de 300 motos prend environ 20 s de calcul et 300 Mo de mémoire : 4 Go laissent plusieurs collègues générer en même temps. Un dossier occupe environ 15 Mo (PDF 0,25 Mo, XML 2,3 Mo et corps 0,2 Mo par génération, environ trois générations, doublées par le miroir de sauvegarde), soit environ 1,5 Go par mois pour 100 dossiers : 50 Go donnent environ deux ans et demi de marge après le système et Docker (environ 6 Go). Une VM fait tourner Docker sans réglage particulier ; un LXC demande l'imbrication et isole moins.
 2. Installer Docker Engine et le plugin Compose en suivant https://docs.docker.com/engine/install/debian/ puis vérifier : `docker compose version`.
 3. Récupérer le dépôt (branche de production) : `git clone <url-du-dépôt> /opt/generation && cd /opt/generation/deploy/serveur`.
 4. Créer le dossier des données : `mkdir -p data`. Il est monté dans le conteneur sur `/app/data` et contient `webapp/webapp.db`, `webapp/dossiers/`, `chassis_registry.db` et `sauvegardes/` (voir §6 pour l'espace disque et la copie hors serveur). Le conteneur tourne avec l'UID 1000 : `chown -R 1000:1000 data`.
@@ -75,7 +85,7 @@ Sans `BACKUP_REMOTE`, seule la copie locale est faite. Le script peut aussi tour
 
 La destination distante n'est jamais purgée par le script (pas de `--delete`) : sa rétention se règle sur le NAS.
 
-Espace disque : `data/` et `data/sauvegardes/` grossissent avec le nombre de dossiers (PDF et générations, plus le miroir qui en double la taille, plus 30 copies de chaque base). Surveiller le disque de 20 Go avec `df -h /opt/generation` (par exemple chaque mois) et agrandir le disque Proxmox avant 80 % d'occupation.
+Espace disque : `data/` et `data/sauvegardes/` grossissent avec le nombre de dossiers (PDF et générations, plus le miroir qui en double la taille, plus 30 copies de chaque base). Compter environ 15 Mo par dossier (1,5 Go par mois pour 100 dossiers). Surveiller le disque avec `df -h /opt/generation` (par exemple chaque mois) et agrandir le disque Proxmox avant 80 % d'occupation.
 
 ## 7. Arrêt de l'instance Render
 
