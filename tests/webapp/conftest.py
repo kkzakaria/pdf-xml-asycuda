@@ -15,8 +15,11 @@ from httpx import ASGITransport, AsyncClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
+import chassis_registry  # noqa: E402
 from api.main import app  # noqa: E402
 from webapp import auth, config  # noqa: E402
+
+REPO_REGISTRY = (Path(__file__).parent.parent.parent / "data" / "chassis_registry.db").resolve()
 
 TEAM_DOMAIN = "groupekarta.cloudflareaccess.com"
 AUD = "aud-tag-de-test"
@@ -42,6 +45,20 @@ def make_token(rsa_key):
     return _make
 
 
+@pytest.fixture(autouse=True)
+def guard_repo_registry(monkeypatch):
+    """Garde : aucun test webapp n'ouvre le registre des châssis du dépôt (data/chassis_registry.db)."""
+    original = chassis_registry.ChassisRegistry.__init__
+
+    def guarded(self, db_path=None):
+        target = Path(db_path or chassis_registry._DB_DEFAULT).resolve()
+        if target == REPO_REGISTRY:
+            raise AssertionError(f"Test webapp sur le registre du dépôt : {target}")
+        original(self, db_path)
+
+    monkeypatch.setattr(chassis_registry.ChassisRegistry, "__init__", guarded)
+
+
 @pytest.fixture
 def webapp_settings(tmp_path, rsa_key, monkeypatch):
     """Installe des réglages webapp de test ; renvoie une fonction pour les remplacer."""
@@ -49,7 +66,7 @@ def webapp_settings(tmp_path, rsa_key, monkeypatch):
 
     def _install(**overrides):
         values = {"access_aud": AUD, "admins": [], "dev_user": None,
-                  "data_dir": tmp_path / "webapp"}
+                  "data_dir": tmp_path / "webapp", "registry_path": tmp_path / "r.db"}
         values.update(overrides)
         s = config.WebappSettings(**values)
         monkeypatch.setattr(config, "settings", s)

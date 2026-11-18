@@ -18,6 +18,7 @@ import shutil
 import sqlite3
 import sys
 import threading
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -38,7 +39,9 @@ from .config import WebappSettings  # noqa: E402
 logger = logging.getLogger(__name__)
 
 RFCV_NUMBER = re.compile(r"RCS[A-Z]?\d+(?:-P\d+)?")
-FIGES = ("declare", "annule")
+FIGES = ("declare", "annule", "abandonne")
+FIGE_LIBELLES = {"declare": "déclaré", "annule": "annulé", "abandonne": "abandonné"}
+GEN_DIR_ESSAIS = 20
 
 # Déclarations sérialisées : contrôle du registre puis écriture sans entrelacement.
 _declare_lock = threading.Lock()
@@ -49,7 +52,7 @@ class DossierIntrouvable(LookupError):
 
 
 class DossierFige(Exception):
-    """Dossier déclaré ou annulé : ni régénéré ni redéclaré."""
+    """Dossier déclaré, annulé ou abandonné : ni régénéré ni redéclaré."""
 
 
 class DeclarationRefusee(Exception):
@@ -116,33 +119,45 @@ class DossierService:
 
     # -------------------------------------------------------------- création
     def create(self, user: User, filename: str, content: bytes) -> int:
-        """Nouveau dossier en brouillon ; le n° RFCV est lu dans le PDF si possible."""
+        """
+        Nouveau dossier en brouillon ; le n° RFCV est lu dans le PDF si possible.
+
+        Le PDF est d'abord écrit dans data_dir/depots-en-cours/ et lu hors de toute transaction
+        (la lecture peut être longue) ; l'écriture en base puis le déplacement du dossier sous
+        dossiers/<id>/ se font ensuite dans une transaction courte.
+        """
         if not content or not content.lstrip()[:5].startswith(b"%PDF"):
             raise ValueError(f"« {filename} » n'est pas un fichier PDF")
         safe = _safe_filename(filename)
-        now = db.now_iso()
+        staging = Path(self.settings.data_dir) / "depots-en-cours" / uuid.uuid4().hex
         folder = None
         try:
-            cur = self.conn.execute(
-                "INSERT INTO dossiers (filename, pdf_path, created_by, created_at) VALUES (?, '', ?, ?)",
-                (safe, user.email, now))
-            dossier_id = cur.lastrowid
-            folder = self._root / str(dossier_id)
-            self._set_aside_orphan(folder)
-            folder.mkdir(parents=True, exist_ok=False)
-            pdf_path = folder / safe
-            pdf_path.write_bytes(content)
-            rfcv_number = self._read_rfcv_number(pdf_path)
-            self.conn.execute("UPDATE dossiers SET pdf_path = ?, rfcv_number = ? WHERE id = ?",
-                              (str(pdf_path), rfcv_number, dossier_id))
-            self._event(dossier_id, user.email, "creation", f"{safe} ({rfcv_number or 'n° RFCV illisible'})")
-            self.conn.commit()
-        except BaseException:
-            self.conn.rollback()
-            # l'id sera réattribué : ne pas laisser de dossier sur le disque
-            if folder is not None and folder.exists():
-                shutil.rmtree(folder, ignore_errors=True)
-            raise
+            staging.mkdir(parents=True)
+            (staging / safe).write_bytes(content)
+            rfcv_number = self._read_rfcv_number(staging / safe)
+            try:
+                cur = self.conn.execute(
+                    "INSERT INTO dossiers (filename, pdf_path, rfcv_number, created_by, created_at) "
+                    "VALUES (?, '', ?, ?, ?)", (safe, rfcv_number, user.email, db.now_iso()))
+                dossier_id = cur.lastrowid
+                target = self._root / str(dossier_id)
+                self._set_aside_orphan(target)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                staging.rename(target)
+                folder = target
+                pdf_path = folder / safe
+                self.conn.execute("UPDATE dossiers SET pdf_path = ? WHERE id = ?", (str(pdf_path), dossier_id))
+                self._event(dossier_id, user.email, "creation", f"{safe} ({rfcv_number or 'n° RFCV illisible'})")
+                self.conn.commit()
+            except BaseException:
+                self.conn.rollback()
+                # l'id sera réattribué : ne pas laisser de dossier sur le disque
+                if folder is not None and folder.exists():
+                    shutil.rmtree(folder, ignore_errors=True)
+                raise
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
         return dossier_id
 
     @staticmethod
@@ -222,32 +237,63 @@ class DossierService:
         n_disk = max((int(p.name[4:]) for p in folder.glob("gen-*") if p.name[4:].isdigit()), default=0)
         return max(n_db, n_disk) + 1
 
+    @staticmethod
+    def _fige_message(dossier_id: int, status: str, suffix: str) -> str:
+        return f"Dossier {dossier_id} {FIGE_LIBELLES.get(status, status)} : {suffix}"
+
+    def _new_generation_dir(self, dossier_id: int, folder: Path) -> tuple[int, Path]:
+        """n et dossier gen-<n> créé ; un dossier pris par une génération concurrente est sauté."""
+        for _ in range(GEN_DIR_ESSAIS):
+            n = self._next_n(dossier_id, folder)
+            out_dir = folder / f"gen-{n}"
+            try:
+                out_dir.mkdir(parents=True, exist_ok=False)
+                return n, out_dir
+            except FileExistsError:
+                continue
+        raise RuntimeError("aucun dossier de génération disponible (générations simultanées)")
+
+    def _record_failure(self, user: User, dossier_id: int, action: str, message: str) -> None:
+        self.conn.execute("UPDATE dossiers SET error = ? WHERE id = ?", (message, dossier_id))
+        self._event(dossier_id, user.email, action, message)
+        self.conn.commit()
+
     def generate(self, user: User, dossier_id: int, settings: GenerationSettings) -> Optional[int]:
         """
         Nouvelle génération (n° renvoyé). Échec du moteur : message dans dossiers.error, None
-        renvoyé, aucune exception. Dossier déclaré ou annulé : DossierFige.
+        renvoyé, aucune exception. Dossier déclaré, annulé ou abandonné : DossierFige.
+
+        Le moteur tourne hors transaction ; le statut est relu dans la transaction d'écriture :
+        un dossier déclaré ou abandonné pendant la génération ne la reçoit pas (fichiers
+        retirés, message dans dossiers.error, None renvoyé).
         """
         dossier = self.get(dossier_id)
         if dossier["status"] in FIGES:
-            raise DossierFige(f"Dossier {dossier_id} {'déclaré' if dossier['status'] == 'declare' else 'annulé'} : "
-                              "il ne peut plus être régénéré")
+            raise DossierFige(self._fige_message(dossier_id, dossier["status"], "il ne peut plus être régénéré"))
         folder = self._root / str(dossier_id)
-        n = self._next_n(dossier_id, folder)
-        out_dir = folder / f"gen-{n}"
         stem = Path(dossier["filename"]).stem
-        out_dir.mkdir(parents=True, exist_ok=False)
+        out_dir = None
         try:
+            n, out_dir = self._new_generation_dir(dossier_id, folder)
             result = generate_drafts(Path(dossier["pdf_path"]), settings, out_dir, stem, self.registry,
                                      other_drafts=self._other_drafts(dossier_id), known_hs=self._known_hs())
         except Exception as exc:
             logger.exception("Génération du dossier %s", dossier_id)
-            shutil.rmtree(out_dir, ignore_errors=True)  # créé par cet appel : sorties partielles
-            message = f"Échec de la génération : {exc}"
-            self.conn.execute("UPDATE dossiers SET error = ? WHERE id = ?", (message, dossier_id))
-            self._event(dossier_id, user.email, "generation_echec", message)
-            self.conn.commit()
+            if out_dir is not None:
+                shutil.rmtree(out_dir, ignore_errors=True)  # créé par cet appel : sorties partielles
+            self._record_failure(user, dossier_id, "generation_echec", f"Échec de la génération : {exc}")
             return None
         try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            current = self.conn.execute("SELECT status FROM dossiers WHERE id = ?", (dossier_id,)).fetchone()[0]
+            if current in FIGES:
+                self.conn.rollback()
+                shutil.rmtree(out_dir, ignore_errors=True)
+                self._record_failure(
+                    user, dossier_id, "generation_abandonnee",
+                    self._fige_message(dossier_id, current, f"génération {n} abandonnée, le dossier a "
+                                       "changé d'état pendant la génération"))
+                return None
             self.conn.execute(
                 "INSERT INTO generations (dossier_id, n, settings_json, summary_json, xml_path, corps_path, "
                 "created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -276,10 +322,14 @@ class DossierService:
     def _declare(self, user: User, dossier_id: int) -> None:
         dossier = self.get(dossier_id)
         if dossier["status"] in FIGES:
-            raise DossierFige(f"Dossier {dossier_id} déjà {'déclaré' if dossier['status'] == 'declare' else 'annulé'}")
+            raise DossierFige(self._fige_message(dossier_id, dossier["status"], "il ne peut pas être déclaré"))
         summary = self.latest_summary(dossier_id)
         if summary is None:
             self._refuse(user, dossier_id, "Aucune génération : générer le dossier avant de le déclarer")
+        if dossier["error"]:
+            self._refuse(user, dossier_id, "La dernière génération a échoué : régénérer le dossier avant "
+                         "de le déclarer")
+        declared_n = self.generations(dossier_id)[0]["n"]
         rfcv_number = dossier["rfcv_number"] or summary.rfcv_number
         # Un RFCV = une déclaration : un autre dossier du même RFCV déjà déclaré bloque.
         if normalize_rfcv(rfcv_number):
@@ -320,12 +370,13 @@ class DossierService:
                 written.append(vin)
             now = db.now_iso()
             self.conn.execute("UPDATE dossiers SET status = 'declare', declared_by = ?, declared_at = ?, "
-                              "error = NULL WHERE id = ?", (user.email, now, dossier_id))
+                              "declared_n = ?, error = NULL WHERE id = ?",
+                              (user.email, now, declared_n, dossier_id))
             if summary.designation:
                 self.conn.executemany("INSERT OR IGNORE INTO hs_known (designation, hs_code) VALUES (?, ?)",
                                       [(summary.designation, code) for code in summary.codes_sh])
             self._event(dossier_id, user.email, "declaration",
-                        f"{len(written)} châssis enregistré(s), RFCV {rfcv_number or '?'}")
+                        f"génération {declared_n}, {len(written)} châssis enregistré(s), RFCV {rfcv_number or '?'}")
             self.conn.commit()
         except BaseException as exc:
             self.conn.rollback()
@@ -355,10 +406,52 @@ class DossierService:
             if entry and _same_rfcv(entry.get("rfcv_number"), rfcv_number):
                 self.registry.delete(vin)
                 removed.append(vin)
-        self.conn.execute("UPDATE dossiers SET status = 'brouillon', declared_by = NULL, declared_at = NULL "
-                          "WHERE id = ?", (dossier_id,))
+        self.conn.execute("UPDATE dossiers SET status = 'brouillon', declared_by = NULL, declared_at = NULL, "
+                          "declared_n = NULL, error = NULL WHERE id = ?", (dossier_id,))
         self._event(dossier_id, admin.email, "retour_brouillon", f"{len(removed)} châssis retiré(s) du registre")
         self.conn.commit()
+
+    # -------------------------------------------------------------- abandon
+    def abandon(self, user: User, dossier_id: int) -> None:
+        """
+        Brouillon abandonné (dépôt erroné ou en double) : par son auteur ou un administrateur.
+        Il reste dans la liste et la recherche mais n'alerte plus les autres dossiers.
+        """
+        dossier = self.get(dossier_id)
+        if user.email != dossier["created_by"] and not getattr(user, "is_admin", False):
+            raise PermissionError("Seul l'auteur du dossier ou un administrateur peut l'abandonner")
+        if dossier["status"] != "brouillon":
+            raise DossierFige(self._fige_message(dossier_id, dossier["status"],
+                                                 "seul un brouillon peut être abandonné"))
+        cur = self.conn.execute("UPDATE dossiers SET status = 'abandonne' WHERE id = ? AND status = 'brouillon'",
+                                (dossier_id,))
+        if not cur.rowcount:            # déclaré entre-temps
+            self.conn.rollback()
+            raise DossierFige(f"Dossier {dossier_id} : son état a changé, il n'est plus en brouillon")
+        self._event(dossier_id, user.email, "abandon", "brouillon abandonné")
+        self.conn.commit()
+
+    def reopen(self, admin: User, dossier_id: int) -> None:
+        """Administrateur : dossier abandonné -> brouillon."""
+        self._require_admin(admin)
+        dossier = self.get(dossier_id)
+        if dossier["status"] != "abandonne":
+            raise ValueError(f"Dossier {dossier_id} non abandonné : rien à rouvrir")
+        self.conn.execute("UPDATE dossiers SET status = 'brouillon' WHERE id = ?", (dossier_id,))
+        self._event(dossier_id, admin.email, "reouverture", "remis en brouillon")
+        self.conn.commit()
+
+    # -------------------------------------------------------------- historique
+    def events(self, dossier_id: int) -> list[dict]:
+        """Qui a fait quoi sur ce dossier, le plus récent d'abord."""
+        return [dict(r) for r in self.conn.execute(
+            "SELECT at, email, action, detail FROM events WHERE dossier_id = ? ORDER BY id DESC", (dossier_id,))]
+
+    def recent_events(self, limit: int = 50) -> list[dict]:
+        """Actions hors dossier (annulation et restauration de RFCV, codes SH), les plus récentes d'abord."""
+        return [dict(r) for r in self.conn.execute(
+            "SELECT at, email, action, detail FROM events WHERE dossier_id IS NULL ORDER BY id DESC LIMIT ?",
+            (limit,))]
 
     # -------------------------------------------------------------- administration des châssis
     @staticmethod
@@ -375,21 +468,35 @@ class DossierService:
         RFCV annulé par la société d'inspection : ses châssis quittent le registre actif et les
         dossiers déclarés de ce RFCV passent « annule ». ValueError (message français) si le
         motif est vide ou si le RFCV n'a aucun châssis enregistré (aucun changement d'état).
+
+        Reprise : si le registre a déjà annulé ce RFCV (base SQLite non validée lors d'une
+        tentative précédente) et que des dossiers de ce RFCV sont encore « declare », ils passent
+        « annule » (liste rendue vide).
         """
         self._require_admin(admin)
-        if not (motif or "").strip():
+        motif = (motif or "").strip()
+        if not motif:
             raise ValueError("Motif d'annulation obligatoire")
         if not normalize_rfcv(rfcv_number):
             raise ValueError("Numéro RFCV obligatoire")
-        cancelled = self.registry.cancel_rfcv(rfcv_number, motif.strip())
+        cancelled = self.registry.cancel_rfcv(rfcv_number, motif)
+        dossiers = self._dossiers_of_rfcv(rfcv_number, "declare")
         if not cancelled:
-            raise ValueError("aucun châssis enregistré pour ce RFCV")
-        for r in self._dossiers_of_rfcv(rfcv_number, "declare"):
-            self.conn.execute("UPDATE dossiers SET status = 'annule' WHERE id = ?", (r["id"],))
-            self._event(r["id"], admin.email, "rfcv_annule", f"RFCV annulé : {motif.strip()}")
-        self._event(None, admin.email, "rfcv_annule",
-                    f"{rfcv_number.strip()} : {len(cancelled)} châssis ({motif.strip()})")
-        self.conn.commit()
+            pending = [r for r in self.registry.get_cancelled(rfcv_number=rfcv_number) if r["restored_at"] is None]
+            if not (pending and dossiers):
+                raise ValueError("aucun châssis enregistré pour ce RFCV")
+            logger.warning("RFCV %s déjà annulé dans le registre : reprise des dossiers %s",
+                           rfcv_number, [r["id"] for r in dossiers])
+        try:
+            for r in dossiers:
+                self.conn.execute("UPDATE dossiers SET status = 'annule' WHERE id = ?", (r["id"],))
+                self._event(r["id"], admin.email, "rfcv_annule", f"RFCV annulé : {motif}")
+            detail = f"{len(cancelled)} châssis" if cancelled else "reprise, châssis déjà annulés"
+            self._event(None, admin.email, "rfcv_annule", f"{rfcv_number.strip()} : {detail} ({motif})")
+            self.conn.commit()
+        except BaseException:
+            self.conn.rollback()
+            raise
         return cancelled
 
     def restore_rfcv(self, admin: User, rfcv_number: str) -> dict:
@@ -397,25 +504,40 @@ class DossierService:
         Annule l'annulation d'un RFCV. Les dossiers « annule » de ce RFCV repassent « declare »
         sauf si l'un de leurs VIN est en conflit (repris par un autre RFCV). Rend
         {"restored", "conflicts", "dossiers_restaures", "dossiers_en_conflit"}.
+
+        Reprise : si le registre a déjà restauré ce RFCV (base SQLite non validée), les dossiers
+        « annule » dont tous les VIN sont de nouveau actifs sous ce RFCV repassent « declare ».
         """
         self._require_admin(admin)
         result = self.registry.restore_rfcv(rfcv_number)
-        if not result["restored"] and not result["conflicts"]:
-            raise ValueError("aucun châssis annulé à restaurer pour ce RFCV")
+        candidates = self._dossiers_of_rfcv(rfcv_number, "annule")
         conflicts = set(result["conflicts"])
+        repair = not result["restored"] and not conflicts
         back, stuck = [], []
-        for r in self._dossiers_of_rfcv(rfcv_number, "annule"):
+        for r in candidates:
             summary = self.latest_summary(r["id"])
             vins = {v.upper() for v in (summary.vins if summary else [])}
-            if vins & conflicts:
+            if repair:
+                entries = [self.registry.check_extracted(v) for v in vins]
+                if not vins or not all(e and _same_rfcv(e.get("rfcv_number"), rfcv_number) for e in entries):
+                    continue
+            elif vins & conflicts:
                 stuck.append(r["id"])
                 continue
-            self.conn.execute("UPDATE dossiers SET status = 'declare' WHERE id = ?", (r["id"],))
-            self._event(r["id"], admin.email, "rfcv_restaure", "annulation du RFCV levée")
             back.append(r["id"])
-        self._event(None, admin.email, "rfcv_restaure",
-                    f"{rfcv_number.strip()} : {len(result['restored'])} restauré(s), {len(conflicts)} en conflit")
-        self.conn.commit()
+        if repair and not back:
+            raise ValueError("aucun châssis annulé à restaurer pour ce RFCV")
+        try:
+            for dossier_id in back:
+                self.conn.execute("UPDATE dossiers SET status = 'declare' WHERE id = ?", (dossier_id,))
+                self._event(dossier_id, admin.email, "rfcv_restaure", "annulation du RFCV levée")
+            detail = (f"{len(result['restored'])} restauré(s), {len(conflicts)} en conflit" if not repair
+                      else "reprise, châssis déjà restaurés")
+            self._event(None, admin.email, "rfcv_restaure", f"{rfcv_number.strip()} : {detail}")
+            self.conn.commit()
+        except BaseException:
+            self.conn.rollback()
+            raise
         return {**result, "dossiers_restaures": back, "dossiers_en_conflit": stuck}
 
     def hs_known(self) -> list[tuple[str, str]]:

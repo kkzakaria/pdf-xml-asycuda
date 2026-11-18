@@ -372,3 +372,214 @@ def test_one_rfcv_one_declaration(svc, fake_pdf, registry):
     assert status(svc, b) == "declare"
     assert {e["chassis_number"] for e in registry.get_all_extracted()} == set(VINS)
     assert {e["filename"] for e in registry.get_all_extracted()} == {"a-bis.pdf"}
+
+
+# ------------------------------------------------------------------ revue finale
+def _other_writer_can_write(svc):
+    """Un autre écrivain obtient le verrou d'écriture immédiatement (aucune attente)."""
+    other = sqlite3.connect(svc.settings.db_path, timeout=0)
+    try:
+        other.execute("BEGIN IMMEDIATE")
+        other.rollback()
+        return True
+    except sqlite3.OperationalError:
+        return False
+    finally:
+        other.close()
+
+
+def test_create_reads_pdf_outside_write_transaction(svc, fake_pdf, monkeypatch):
+    import webapp.dossiers as dossiers_mod
+    original = dossiers_mod._pdf_text
+    seen = []
+
+    def spy(path):
+        seen.append((svc.conn.in_transaction, _other_writer_can_write(svc)))
+        return original(path)
+
+    monkeypatch.setattr(dossiers_mod, "_pdf_text", spy)
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    assert seen == [(False, True)]
+    row = svc.get(d)
+    assert row["rfcv_number"] == "RCSA6099999"
+    assert Path(row["pdf_path"]).read_bytes() == pdf_bytes(MULTILINE_TEXT)
+    assert Path(row["pdf_path"]).parent.name == str(d)
+    staging = Path(svc.settings.data_dir) / "depots-en-cours"
+    assert not staging.exists() or list(staging.iterdir()) == []
+
+
+def test_generate_retries_when_generation_folder_taken(svc, fake_pdf, monkeypatch):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    original = svc._next_n
+    calls = []
+
+    def racing(dossier_id, folder):
+        n = original(dossier_id, folder)
+        if not calls:                    # une requête concurrente prend gen-1 juste après
+            (folder / f"gen-{n}").mkdir(parents=True)
+        calls.append(n)
+        return n
+
+    monkeypatch.setattr(svc, "_next_n", racing)
+    assert gen(svc, d) == 2
+    assert calls == [1, 2]
+
+
+def test_generation_discarded_if_declared_meanwhile(svc, fake_pdf, tmp_path, monkeypatch):
+    import webapp.dossiers as dossiers_mod
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    assert gen(svc, d) == 1
+    original = dossiers_mod.generate_drafts
+
+    def slow(*args, **kwargs):
+        result = original(*args, **kwargs)
+        other = sqlite3.connect(svc.settings.db_path)     # déclaration concurrente
+        other.execute("UPDATE dossiers SET status = 'declare' WHERE id = ?", (d,))
+        other.commit()
+        other.close()
+        return result
+
+    monkeypatch.setattr(dossiers_mod, "generate_drafts", slow)
+    assert gen(svc, d) is None
+    assert [g["n"] for g in svc.generations(d)] == [1]
+    assert not (tmp_path / "webapp" / "dossiers" / str(d) / "gen-2").exists()
+    assert "déclaré" in svc.get(d)["error"]
+    assert "generation_abandonnee" in actions(svc, d)
+
+
+def test_declare_records_declared_n_and_revert_clears_it(svc, fake_pdf):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    gen(svc, d)
+    gen(svc, d)
+    svc.declare(OP, d)
+    assert svc.get(d)["declared_n"] == 2
+    svc.revert_to_draft(ADMIN, d)
+    assert svc.get(d)["declared_n"] is None
+
+
+def test_declare_refused_after_failed_generation(svc, fake_pdf):
+    from generation import Amount
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    gen(svc, d)
+    assert gen(svc, d, assurance_mode="imposee", assurance=None) is None
+    with pytest.raises(DeclarationRefusee, match="dernière génération a échoué"):
+        svc.declare(OP, d)
+    assert status(svc, d) == "brouillon"
+    assert gen(svc, d, assurance_mode="imposee", assurance=Amount(93, True)) == 2
+    svc.declare(OP, d)
+
+
+# ------------------------------------------------------------------ abandon
+def test_abandon_by_creator_or_admin_only_from_draft(svc, fake_pdf):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    with pytest.raises(PermissionError):
+        svc.abandon(User("autre@karta.ci", False), d)
+    assert status(svc, d) == "brouillon"
+    svc.abandon(OP, d)
+    assert status(svc, d) == "abandonne"
+    assert actions(svc, d)[-1] == "abandon"
+    with pytest.raises(DossierFige):
+        svc.abandon(OP, d)
+    with pytest.raises(DossierFige):
+        gen(svc, d)
+    with pytest.raises(DossierFige):
+        svc.declare(OP, d)
+    # un administrateur peut abandonner le brouillon d'un autre ; un dossier déclaré, non
+    d2 = svc.create(OP, "b.pdf", pdf_bytes(OTHER_TEXT))
+    svc.abandon(ADMIN, d2)
+    assert status(svc, d2) == "abandonne"
+    d3 = svc.create(OP, "c.pdf", pdf_bytes(MULTILINE_TEXT))
+    gen(svc, d3)
+    svc.declare(OP, d3)
+    with pytest.raises(DossierFige):
+        svc.abandon(ADMIN, d3)
+    assert status(svc, d3) == "declare"
+
+
+def test_reopen_admin_only(svc, fake_pdf):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    with pytest.raises(ValueError):
+        svc.reopen(ADMIN, d)                        # pas abandonné
+    svc.abandon(OP, d)
+    with pytest.raises(PermissionError):
+        svc.reopen(OP, d)
+    svc.reopen(ADMIN, d)
+    assert status(svc, d) == "brouillon"
+    assert actions(svc, d)[-2:] == ["abandon", "reouverture"]
+    assert gen(svc, d) == 1
+
+
+def test_abandoned_draft_excluded_from_other_draft_alert_but_listed(svc, fake_pdf):
+    a = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    b = svc.create(OP, "b.pdf", pdf_bytes(MULTILINE_TEXT))     # dépôt en double
+    gen(svc, a)
+    gen(svc, b)
+    assert "chassis_autre_brouillon" in alert_codes(latest_summary(svc, b))
+    svc.abandon(OP, a)
+    gen(svc, b)
+    assert "chassis_autre_brouillon" not in alert_codes(latest_summary(svc, b))
+    assert {r["id"]: r["status"] for r in svc.list("6099999")} == {a: "abandonne", b: "brouillon"}
+
+
+# ------------------------------------------------------------------ annulation : réparation
+def test_cancel_rfcv_repairs_after_registry_only_cancel(svc, fake_pdf, registry):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    gen(svc, d)
+    svc.declare(OP, d)
+    registry.cancel_rfcv("RCSA6099999", "éclaté")        # base SQLite non validée (panne)
+    assert status(svc, d) == "declare"
+    assert svc.cancel_rfcv(ADMIN, "RCSA6099999", "éclaté") == []
+    assert status(svc, d) == "annule"
+    with pytest.raises(ValueError, match="aucun châssis"):
+        svc.cancel_rfcv(ADMIN, "RCSA6099999", "éclaté")   # plus rien à réparer
+    with pytest.raises(ValueError, match="aucun châssis"):
+        svc.cancel_rfcv(ADMIN, "RCSA6012345", "inconnu")
+
+
+def test_restore_rfcv_repairs_after_registry_only_restore(svc, fake_pdf, registry):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    gen(svc, d)
+    svc.declare(OP, d)
+    svc.cancel_rfcv(ADMIN, "RCSA6099999", "éclaté")
+    registry.restore_rfcv("RCSA6099999")                  # base SQLite non validée (panne)
+    assert status(svc, d) == "annule"
+    result = svc.restore_rfcv(ADMIN, "RCSA6099999")
+    assert result["dossiers_restaures"] == [d]
+    assert status(svc, d) == "declare"
+    with pytest.raises(ValueError, match="aucun châssis annulé"):
+        svc.restore_rfcv(ADMIN, "RCSA6099999")
+
+
+def test_cancel_rfcv_rolls_back_sqlite_on_failure(svc, fake_pdf, registry, monkeypatch):
+    a = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    gen(svc, a)
+    svc.declare(OP, a)
+    original = svc._event
+
+    def boom(dossier_id, *args, **kwargs):
+        if dossier_id is None:
+            raise sqlite3.OperationalError("database is locked")
+        return original(dossier_id, *args, **kwargs)
+
+    monkeypatch.setattr(svc, "_event", boom)
+    with pytest.raises(sqlite3.OperationalError):
+        svc.cancel_rfcv(ADMIN, "RCSA6099999", "éclaté")
+    assert not svc.conn.in_transaction
+    assert status(svc, a) == "declare"
+    monkeypatch.setattr(svc, "_event", original)
+    svc.cancel_rfcv(ADMIN, "RCSA6099999", "éclaté")       # reprise : réparation
+    assert status(svc, a) == "annule"
+
+
+# ------------------------------------------------------------------ historique
+def test_events_listing(svc, fake_pdf):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    gen(svc, d)
+    svc.declare(OP, d)
+    svc.cancel_rfcv(ADMIN, "RCSA6099999", "éclaté")
+    events = svc.events(d)
+    assert [e["action"] for e in events] == ["rfcv_annule", "declaration", "generation", "creation"]
+    assert set(events[0]) >= {"at", "email", "action", "detail"}
+    globaux = svc.recent_events()
+    assert [e["action"] for e in globaux] == ["rfcv_annule"]
+    assert "6099999" in globaux[0]["detail"]
