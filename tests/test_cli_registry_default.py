@@ -79,3 +79,37 @@ def test_cli_default_warns_on_existing_duplicate(env, capsys):
     assert _convert(pdf, tmp_path, "b.xml") is True
     err = capsys.readouterr().err
     assert "Attention" in err and "3 châssis" in err
+
+
+def test_batch_check_only_reports_conflicts(env):
+    from batch_processor import BatchProcessor
+    registry, pdf, tmp_path = env
+    assert _convert(pdf, tmp_path, "a.xml", register_chassis=True) is True
+    res = BatchProcessor._process_single_file(pdf, str(tmp_path / "out"))
+    assert res.success and len(res.chassis_conflicts) == 3
+    assert "3 châssis déjà traité(s)" in res.conflict_warning()
+    import pickle
+    assert pickle.loads(pickle.dumps(res)).chassis_conflicts == res.chassis_conflicts
+
+
+def test_batch_default_does_not_register_and_flag_refuses(env):
+    from batch_processor import BatchProcessor
+    registry, pdf, tmp_path = env
+    r1 = BatchProcessor._process_single_file(pdf, str(tmp_path / "out"))
+    assert r1.success and not r1.chassis_conflicts and _count(registry) == 0
+    r2 = BatchProcessor._process_single_file(pdf, str(tmp_path / "out"), register_chassis=True)
+    assert r2.success and _count(registry) == 3
+    r3 = BatchProcessor._process_single_file(pdf, str(tmp_path / "out"), register_chassis=True)
+    assert not r3.success and "châssis" in r3.error_message.lower()
+
+
+def test_batch_report_csv_includes_chassis_warning(env):
+    from batch_processor import BatchProcessor
+    from batch_report import BatchReportGenerator
+    registry, pdf, tmp_path = env
+    _convert(pdf, tmp_path, "a.xml", register_chassis=True)
+    res = BatchProcessor._process_single_file(pdf, str(tmp_path / "out"))
+    gen = BatchReportGenerator({"results": [res], "total_files": 1, "successful": 1, "failed": 0,
+                                "total_time": 1.0, "success": True})
+    gen.generate_csv(str(tmp_path / "r.csv"))
+    assert "3 châssis déjà traité(s)" in (tmp_path / "r.csv").read_text(encoding="utf-8")

@@ -165,7 +165,7 @@ class ConversionService:
                 return result
 
             # Essayer de parser sans générer XML
-            parser = RFCVParser(pdf_path, taux_douane=taux_douane)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane, register_chassis=False)
             rfcv_data = parser.parse()
 
             # Vérifications basiques

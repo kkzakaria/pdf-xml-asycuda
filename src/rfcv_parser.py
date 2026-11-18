@@ -1622,5 +1622,5 @@ def parse_rfcv(pdf_path: str, taux_douane: Optional[float] = None) -> RFCVData:
     Returns:
         Données RFCV structurées
     """
-    parser = RFCVParser(pdf_path, taux_douane=taux_douane)
+    parser = RFCVParser(pdf_path, taux_douane=taux_douane, register_chassis=False)
     return parser.parse()

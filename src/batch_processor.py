@@ -33,6 +33,16 @@ class BatchResult:
     error_message: Optional[str] = None
     processing_time: float = 0.0
     metrics: Optional[ConversionMetrics] = None
+    # Doublons de châssis constatés en contrôle seul : liste de dicts (chassis_number, first_rfcv_number, ...)
+    chassis_conflicts: List[Dict[str, Any]] = field(default_factory=list)
+
+    def conflict_warning(self) -> Optional[str]:
+        """Avertissement français (nombre de châssis + RFCV d'origine), None s'il n'y a pas de doublon."""
+        if not self.chassis_conflicts:
+            return None
+        origins = sorted({d.get("first_rfcv_number") or d.get("first_filename") or "?"
+                          for d in self.chassis_conflicts})
+        return f"{len(self.chassis_conflicts)} châssis déjà traité(s), RFCV d'origine : {', '.join(origins)}"
 
 
 @dataclass
@@ -205,6 +215,7 @@ class BatchProcessor:
             parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config,
                                 insurance_mode=insurance_mode, register_chassis=register_chassis)
             rfcv_data = parser.parse()
+            result.chassis_conflicts = list(parser.chassis_conflicts)
             if profile or dossier or manifeste or nationalite_transport or takikro or disp:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
                               nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)

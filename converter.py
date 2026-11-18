@@ -450,6 +450,10 @@ Exemples d'utilisation:
         # Exécuter le traitement batch
         processor = BatchProcessor(config)
         batch_results = processor.process()
+        for res in batch_results.get('results', []):
+            warning = res.conflict_warning()
+            if warning:
+                print(f"Attention : {Path(res.pdf_file).name} : {warning}.", file=sys.stderr)
 
         # Générer les rapports si demandé
         if args.report:
