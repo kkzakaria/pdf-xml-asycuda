@@ -2,14 +2,13 @@
 Résumé structuré d'une génération : totaux, valeurs par article, cases clés du corps,
 écarts par rapport au RFCV et alertes (affichés avant téléchargement).
 
-Unités : FOB et fret en devise du RFCV (comme la saisie et la case 22), assurance et CIF en
-XOF. Les valeurs par article (valeurs_articles) sont en devise du RFCV pour le FOB, en XOF
-pour le fret, l'assurance et le CIF (comme la note de valeur du corps).
+Unités : FOB et fret en devise du RFCV (Summary.devise, comme la saisie et la case 22),
+assurance et CIF en XOF ; de même pour les valeurs par article (valeurs_articles).
 """
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import TYPE_CHECKING, Optional
 
 from designation import suggest_designation
@@ -41,23 +40,34 @@ class Alert:
 
 @dataclass
 class Summary:
-    rfcv_number: Optional[str]
-    nb_articles: int
-    nb_vin: int
-    fob_total: float
-    fret_total: float
-    assurance_total: float
-    cif_total: float
-    colis: int
-    poids_brut: float
-    poids_net: float
-    valeurs_articles: dict[str, list[tuple[float, int]]]
-    cases: dict[str, str]
-    ecarts: list[str]
-    alertes: list[Alert]
-    vins: list[str]
-    designation: Optional[str]
+    """
+    Résumé d'une génération. Unités :
+    - fob_total, fret_total : devise du RFCV (``devise``, ex. USD) ;
+    - assurance_total, cif_total : XOF ;
+    - valeurs_articles : "fob" et "fret" en devise du RFCV, "assurance" et "cif" en XOF,
+      chaque liste = [(valeur, nombre d'articles)], par nombre décroissant puis valeur ;
+    - colis : nombre (case 6) ; poids_brut, poids_net : kg.
+    Tous les champs ont une valeur par défaut : from_dict lit un résumé stocké avant
+    l'ajout d'un champ.
+    """
+    rfcv_number: Optional[str] = None
+    nb_articles: int = 0
+    nb_vin: int = 0
+    fob_total: float = 0.0
+    fret_total: float = 0.0
+    assurance_total: float = 0.0
+    cif_total: float = 0.0
+    colis: int = 0
+    poids_brut: float = 0.0
+    poids_net: float = 0.0
+    valeurs_articles: dict[str, list[tuple[float, int]]] = field(default_factory=dict)
+    cases: dict[str, str] = field(default_factory=dict)
+    ecarts: list[str] = field(default_factory=list)
+    alertes: list[Alert] = field(default_factory=list)
+    vins: list[str] = field(default_factory=list)
+    designation: Optional[str] = None
     codes_sh: list[str] = field(default_factory=list)
+    devise: Optional[str] = None       # code devise du RFCV (FOB et fret)
 
     @property
     def bloquante(self) -> bool:
@@ -70,10 +80,13 @@ class Summary:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Summary":
-        d = dict(d)
-        d["valeurs_articles"] = {k: [(float(v), int(n)) for v, n in vals]
-                                 for k, vals in d["valeurs_articles"].items()}
-        d["alertes"] = [Alert.from_dict(a) for a in d["alertes"]]
+        """Ignore les clés inconnues ; une clé absente prend sa valeur par défaut."""
+        d = {k: v for k, v in d.items() if k in {f.name for f in fields(cls)}}
+        if "valeurs_articles" in d:
+            d["valeurs_articles"] = {k: [(float(v), int(n)) for v, n in vals]
+                                     for k, vals in (d["valeurs_articles"] or {}).items()}
+        if "alertes" in d:
+            d["alertes"] = [Alert.from_dict(a) for a in (d["alertes"] or [])]
         return cls(**d)
 
 
@@ -135,7 +148,7 @@ def _valeurs_articles(d: RFCVData) -> dict[str, list[tuple[float, int]]]:
     vis = [i.valuation_item for i in d.items]
     return {
         "fob": _distinct(_item_prices(d)),
-        "fret": _distinct(_amount(v.external_freight if v else None, "amount_national") for v in vis),
+        "fret": _distinct(_amount(v.external_freight if v else None) for v in vis),
         "assurance": _distinct(_amount(v.insurance if v else None, "amount_national") for v in vis),
         "cif": _distinct(float(v.total_cif or 0) if v else 0.0 for v in vis),
     }
@@ -287,4 +300,5 @@ def summarize(rfcv_data: RFCVData, rfcv_reference: RFCVData, corps: "CorpsResult
         vins=vins,
         designation=_designation(d),
         codes_sh=codes_sh,
+        devise=(d.financial.currency_code if d.financial else None) or None,
     )

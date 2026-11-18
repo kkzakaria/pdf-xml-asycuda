@@ -101,6 +101,9 @@ def generate(pdf_path: Path, settings: GenerationSettings, out_dir: Path, stem: 
     les montants « par article »), puis avec les réglages. other_drafts = {libellé du dossier :
     VIN} des autres brouillons ; known_hs = paires (désignation, code SH) déjà déclarées.
     """
+    if registry is None:
+        raise ValueError("Registre des châssis requis : generate() ne doit jamais utiliser le "
+                         "registre par défaut du dépôt")
     common = {"taux_douane": settings.taux_douane, "rapport_paiement": settings.rapport_paiement,
               "registry": registry, "register_chassis": False}
     reference = RFCVParser(str(pdf_path), **common).parse()

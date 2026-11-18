@@ -229,3 +229,25 @@ def test_summary_ecarts(registry, tmp_path):
 def test_alert_dict_roundtrip():
     a = Alert("colis_zero", "msg", False)
     assert Alert.from_dict(a.to_dict()) == a
+
+
+@pytest.mark.skipif(not SAMPLE_PDF.exists(), reason="PDF d'exemple absent")
+def test_fret_per_article_in_rfcv_currency(registry, tmp_path):
+    # taux ≠ 1 : le fret par article reste dans la devise du RFCV (USD), comme la saisie
+    settings = GenerationSettings(taux_douane=576.42, fret=Amount(2000, True))
+    s = generate(SAMPLE_PDF, settings, tmp_path / "out", "d", registry).summary
+    assert s.devise == "USD"
+    assert s.fret_total == 2000 * s.nb_articles
+    assert s.valeurs_articles["fret"] == [(2000.0, s.nb_articles)]
+    assert s.valeurs_articles["fob"] == [(12683.65, 1)]
+
+
+def test_generate_requires_registry(fake_pdf, tmp_path):
+    with pytest.raises(ValueError, match="egistre"):
+        generate(fake_pdf["path"], GenerationSettings(taux_douane=1.0), tmp_path / "out", "d", None)
+
+
+def test_summary_from_dict_tolerates_unknown_and_missing_keys():
+    s = Summary.from_dict({"rfcv_number": "RCSA1", "nb_articles": 2, "champ_futur": 1})
+    assert s.rfcv_number == "RCSA1" and s.nb_articles == 2
+    assert s.devise is None and s.alertes == [] and s.valeurs_articles == {}
