@@ -38,6 +38,7 @@ class RFCVParser:
         registry: Optional[ChassisRegistry] = None,
         insurance_mode: str = "formule",
         fob_revise: Optional[float] = None,
+        register_chassis: bool = True,
     ):
         """
         Initialise le parser
@@ -73,6 +74,10 @@ class RFCVParser:
         self.registry = registry if registry is not None else get_registry()
         self._chassis_duplicates: List[Dict[str, Any]] = []
         self._pending_registrations: List[Dict[str, Any]] = []
+        # Mode contrôle seul (register_chassis=False) : aucune écriture dans le registre,
+        # les doublons sont exposés dans chassis_conflicts au lieu de lever une exception
+        self.register_chassis = register_chassis
+        self.chassis_conflicts: List[Dict[str, Any]] = []
         self._rfcv_number: Optional[str] = None
         self.text = ""
         self.tables = []
@@ -325,11 +330,16 @@ class RFCVParser:
         rfcv_data.items = self._add_additional_vin_items(rfcv_data.items)
 
         # Vérification des doublons de châssis — après parsing complet pour collecter tous les doublons
-        if self._chassis_duplicates:
-            raise DuplicateChassisError(self._chassis_duplicates)
+        if not self.register_chassis:
+            self.chassis_conflicts = list(self._chassis_duplicates)
+            pending_registrations: List[Dict[str, Any]] = []
+        else:
+            if self._chassis_duplicates:
+                raise DuplicateChassisError(self._chassis_duplicates)
+            pending_registrations = self._pending_registrations
 
         # Aucun doublon : enregistrer les châssis extraits en batch
-        for pending in self._pending_registrations:
+        for pending in pending_registrations:
             self.registry.register_extracted(
                 chassis_number=pending["chassis_number"],
                 filename=pending["filename"],
@@ -985,7 +995,7 @@ class RFCVParser:
                 f"VIN généré - {vin}"
             )
 
-            if vin:
+            if vin and self.register_chassis:
                 self.registry.register_generated(
                     chassis_number=vin,
                     filename=Path(self.pdf_path).name,
