@@ -7,7 +7,7 @@ Application interne de génération (`https://generation.karta-transit.ci`), ser
 1. Sur Proxmox, créer une VM (ou un LXC avec `nesting=1` et `keyctl=1`) Debian 12, 2 vCPU, 2 Go de RAM, 20 Go de disque.
 2. Installer Docker Engine et le plugin Compose en suivant https://docs.docker.com/engine/install/debian/ puis vérifier : `docker compose version`.
 3. Récupérer le dépôt (branche de production) : `git clone <url-du-dépôt> /opt/generation && cd /opt/generation/deploy/serveur`.
-4. Créer le dossier des données : `mkdir -p data`. Il est monté dans le conteneur sur `/app/data` et contient `webapp/webapp.db`, `webapp/dossiers/`, `chassis_registry.db` et `sauvegardes/`. Le conteneur tourne avec l'UID 1000 : `chown -R 1000:1000 data`.
+4. Créer le dossier des données : `mkdir -p data`. Il est monté dans le conteneur sur `/app/data` et contient `webapp/webapp.db`, `webapp/dossiers/`, `chassis_registry.db` et `sauvegardes/` (voir §6 pour l'espace disque et la copie hors serveur). Le conteneur tourne avec l'UID 1000 : `chown -R 1000:1000 data`.
 
 ## 2. Tunnel et nom d'hôte (compte Cloudflare Karta, zone `karta-transit.ci`)
 
@@ -45,13 +45,37 @@ L'application tourne avec un seul worker uvicorn (le verrou de déclaration est 
 
 ## 6. Sauvegarde (cron)
 
-`sauvegarde.sh` copie à chaud `webapp.db` et `chassis_registry.db` (`sqlite3 .backup`), archive `dossiers/`, écrit dans `data/sauvegardes/` avec horodatage, supprime ce qui a plus de 30 jours, et sort en erreur si un échec survient. Elle s'exécute dans le conteneur (sqlite3 est dans l'image, le script y est monté). Ajouter dans `crontab -e` (utilisateur membre du groupe docker) :
+`sauvegarde.sh` écrit dans `data/sauvegardes/` :
+
+- une copie datée à chaud de `webapp.db` et de `chassis_registry.db` (`sqlite3 .backup`), supprimée après 30 jours ;
+- `dossiers-miroir/` : miroir incrémental de `data/webapp/dossiers/` (`rsync -a`, sans `--delete`). Les fichiers d'un dossier ne sont jamais réécrits : chaque nuit seuls les nouveaux fichiers sont copiés et rien n'est retiré du miroir ;
+- si la variable `BACKUP_REMOTE` est définie (destination rsync, par exemple `sauvegarde@nas:/sauvegardes/generation/`), une copie de tout `data/sauvegardes/` hors du serveur. Le script sort en erreur si cette copie échoue.
+
+**La copie hors serveur est indispensable** : `data/sauvegardes/` est sur le même disque que les données et ne protège pas d'une perte du disque ou de la VM.
+
+Le script s'exécute sur l'hôte (VM ou LXC), qui porte la clé SSH vers la destination :
+
+1. Installer les outils : `apt install sqlite3 rsync openssh-client`.
+2. Créer une clé SSH sans phrase de passe pour root : `ssh-keygen -t ed25519 -f /root/.ssh/sauvegarde -N ""`, puis ajouter `/root/.ssh/sauvegarde.pub` aux clés autorisées du compte de sauvegarde du NAS (ou du serveur de destination).
+3. Dans `/root/.ssh/config` :
+   ```
+   Host nas
+     HostName <adresse du NAS>
+     User sauvegarde
+     IdentityFile /root/.ssh/sauvegarde
+   ```
+   puis vérifier une première fois à la main (empreinte de l'hôte acceptée) : `ssh nas true`.
+4. Lancer le script une fois à la main, puis l'ajouter dans `crontab -e` de root :
 
 ```
-30 2 * * * cd /opt/generation/deploy/serveur && docker compose exec -T app bash /app/sauvegarde.sh >> /var/log/generation-sauvegarde.log 2>&1
+30 2 * * * DATA_DIR=/opt/generation/deploy/serveur/data BACKUP_REMOTE=nas:/sauvegardes/generation/ /opt/generation/deploy/serveur/sauvegarde.sh >> /var/log/generation-sauvegarde.log 2>&1
 ```
 
-Copier régulièrement `data/sauvegardes/` hors du serveur (NAS, Proxmox Backup).
+Sans `BACKUP_REMOTE`, seule la copie locale est faite. Le script peut aussi tourner dans le conteneur (`sqlite3` et `rsync` sont dans l'image), pour la copie locale seulement : `docker compose exec -T app bash /app/sauvegarde.sh`.
+
+La destination distante n'est jamais purgée par le script (pas de `--delete`) : sa rétention se règle sur le NAS.
+
+Espace disque : `data/` et `data/sauvegardes/` grossissent avec le nombre de dossiers (PDF et générations, plus le miroir qui en double la taille, plus 30 copies de chaque base). Surveiller le disque de 20 Go avec `df -h /opt/generation` (par exemple chaque mois) et agrandir le disque Proxmox avant 80 % d'occupation.
 
 ## 7. Arrêt de l'instance Render
 
