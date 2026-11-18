@@ -121,12 +121,14 @@ class DossierService:
             raise ValueError(f"« {filename} » n'est pas un fichier PDF")
         safe = _safe_filename(filename)
         now = db.now_iso()
+        folder = None
         try:
             cur = self.conn.execute(
                 "INSERT INTO dossiers (filename, pdf_path, created_by, created_at) VALUES (?, '', ?, ?)",
                 (safe, user.email, now))
             dossier_id = cur.lastrowid
             folder = self._root / str(dossier_id)
+            self._set_aside_orphan(folder)
             folder.mkdir(parents=True, exist_ok=False)
             pdf_path = folder / safe
             pdf_path.write_bytes(content)
@@ -137,8 +139,28 @@ class DossierService:
             self.conn.commit()
         except BaseException:
             self.conn.rollback()
+            # l'id sera réattribué : ne pas laisser de dossier sur le disque
+            if folder is not None and folder.exists():
+                shutil.rmtree(folder, ignore_errors=True)
             raise
         return dossier_id
+
+    @staticmethod
+    def _set_aside_orphan(folder: Path) -> None:
+        """
+        Un dossier présent sur le disque pour un id tout juste attribué n'a pas de ligne en
+        base (création interrompue, base restaurée) : il est mis de côté, jamais supprimé.
+        """
+        if not folder.exists():
+            return
+        stamp = db.now_iso().replace(":", "")
+        target = folder.with_name(f"{folder.name}.orphelin-{stamp}")
+        i = 1
+        while target.exists():
+            target = folder.with_name(f"{folder.name}.orphelin-{stamp}-{i}")
+            i += 1
+        logger.warning("Dossier orphelin %s mis de côté sous %s", folder, target.name)
+        folder.rename(target)
 
     @staticmethod
     def _read_rfcv_number(pdf_path: Path) -> Optional[str]:
@@ -259,12 +281,24 @@ class DossierService:
         if summary is None:
             self._refuse(user, dossier_id, "Aucune génération : générer le dossier avant de le déclarer")
         rfcv_number = dossier["rfcv_number"] or summary.rfcv_number
+        # Un RFCV = une déclaration : un autre dossier du même RFCV déjà déclaré bloque.
+        if normalize_rfcv(rfcv_number):
+            autres = [r["id"] for r in self.conn.execute(
+                "SELECT id, rfcv_number FROM dossiers WHERE status = 'declare' AND id != ?", (dossier_id,))
+                if _same_rfcv(r["rfcv_number"], rfcv_number)]
+            if autres:
+                self._refuse(user, dossier_id,
+                             f"Le RFCV {rfcv_number} est déjà déclaré par le dossier "
+                             f"{', '.join(str(i) for i in autres)}. Un RFCV ne se déclare qu'une fois ; "
+                             "un administrateur peut remettre ce dossier en brouillon si besoin.")
 
         conflicts, to_register = [], []
         for vin in dict.fromkeys(v.upper() for v in summary.vins):
             entry = self.registry.check_extracted(vin)
             if entry is None:
                 to_register.append(vin)
+            # entrée du même RFCV : reprise d'une tentative partielle de ce dossier (aucun
+            # autre dossier de ce RFCV n'est déclaré, contrôlé ci-dessus) ; rien à écrire
             elif not _same_rfcv(entry.get("rfcv_number"), rfcv_number):
                 conflicts.append({"chassis_number": vin, "rfcv_number": entry.get("rfcv_number"),
                                   "filename": entry.get("filename")})

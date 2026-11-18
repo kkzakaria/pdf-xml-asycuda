@@ -1,5 +1,6 @@
 """Cycle d'un dossier : brouillon, génération, déclaration, retour en brouillon."""
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -324,3 +325,50 @@ def test_list_and_search(svc, fake_pdf):
     assert svc.list("ZZZ00000000000001") == []          # b jamais généré
     gen(svc, b)
     assert [r["id"] for r in svc.list("ZZZ00000000000001")] == [b]
+
+
+# ------------------------------------------------------------------ corrections (revue, tour 1)
+def test_failed_create_leaves_no_folder_and_next_create_works(svc, fake_pdf, tmp_path, monkeypatch):
+    original = svc._event
+
+    def boom(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(svc, "_event", boom)
+    with pytest.raises(sqlite3.OperationalError):
+        svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    root = tmp_path / "webapp" / "dossiers"
+    assert list(root.iterdir()) == []
+    assert svc.conn.execute("SELECT COUNT(*) FROM dossiers").fetchone()[0] == 0
+    monkeypatch.setattr(svc, "_event", original)
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    assert Path(svc.get(d)["pdf_path"]).read_bytes() == pdf_bytes(MULTILINE_TEXT)
+
+
+def test_create_sets_aside_orphan_folder(svc, fake_pdf, tmp_path):
+    root = tmp_path / "webapp" / "dossiers"
+    (root / "1").mkdir(parents=True)
+    (root / "1" / "ancien.pdf").write_bytes(b"%PDF ancien")
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    assert d == 1
+    assert sorted(p.name for p in (root / "1").iterdir()) == ["a.pdf"]
+    orphans = [p for p in root.iterdir() if p.name.startswith("1.orphelin-")]
+    assert len(orphans) == 1 and (orphans[0] / "ancien.pdf").read_bytes() == b"%PDF ancien"
+
+
+def test_one_rfcv_one_declaration(svc, fake_pdf, registry):
+    a = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    b = svc.create(OP, "a-bis.pdf", pdf_bytes(MULTILINE_TEXT))   # même RFCV déposé deux fois
+    gen(svc, a)
+    gen(svc, b)
+    svc.declare(OP, a)
+    with pytest.raises(DeclarationRefusee) as exc:
+        svc.declare(OP, b)
+    assert f"dossier {a}" in str(exc.value) and "RCSA6099999" in str(exc.value)
+    assert status(svc, b) == "brouillon"
+    svc.revert_to_draft(ADMIN, a)
+    assert registry.get_all_extracted() == []
+    svc.declare(OP, b)
+    assert status(svc, b) == "declare"
+    assert {e["chassis_number"] for e in registry.get_all_extracted()} == set(VINS)
+    assert {e["filename"] for e in registry.get_all_extracted()} == {"a-bis.pdf"}
