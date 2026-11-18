@@ -179,6 +179,11 @@ item `Kind_of_packages_code` = `PK` (box 31).
 `--disp` (API `disp=true`): `Financial/Bank/Code` = `DISP` (box 28, dispense de domiciliation),
 overriding the profile `banque_code`.
 
+Single-file only (rejected in batch, spec §5.7): `--fob-revise` with `--fob-mode prorata|uniforme`,
+`--fret-impose` (total, RFCV currency), `--assurance-imposee` (total, XOF), `--designation` (applied with
+`designation.apply_designation` after `apply_profile`, same order as `generation.generate`, so outputs are
+byte-identical to the webapp for equal settings).
+
 `--corps` (CLI single + batch): also writes `corps_<xml stem>.txt` next to the XML. Corps output must
 stay byte-identical to sydam-api `tools/xml_to_corps.py` for the same XML (field map in `GENERAL`/`ITEM`).
 

@@ -75,6 +75,31 @@ def codes(summary):
 
 # ------------------------------------------------------------------ generate()
 @pytest.mark.skipif(not SAMPLE_PDF.exists(), reason="PDF d'exemple absent")
+def test_generate_matches_cli_output_with_imposed_values(tmp_path, monkeypatch):
+    """Spéc. §5.7 : mêmes réglages (FOB uniforme, fret et assurance imposés, désignation) en CLI."""
+    import converter
+    import rfcv_parser
+
+    cli_registry = ChassisRegistry(str(tmp_path / "cli.db"))
+    monkeypatch.setattr(rfcv_parser, "get_registry", lambda: cli_registry)
+    cli_xml = tmp_path / "cli" / "dossier.xml"
+    assert converter.convert_pdf_to_xml(str(SAMPLE_PDF), str(cli_xml), taux_douane=576.42, corps=True,
+                                        fob_revise=12345.5, fob_mode="uniforme", fret_impose=987.25,
+                                        assurance_imposee=45678, designation="MOTO")
+
+    registry = ChassisRegistry(str(tmp_path / "web.db"))
+    settings = GenerationSettings(taux_douane=576.42, fob_revise=Amount(12345.5), fob_mode="uniforme",
+                                  fret=Amount(987.25), assurance_mode="imposee", assurance=Amount(45678),
+                                  designation="MOTO")
+    res = generate(SAMPLE_PDF, settings, tmp_path / "web", "dossier", registry)
+    assert res.xml_path.read_bytes() == cli_xml.read_bytes()
+    assert res.corps_path.read_bytes() == (cli_xml.parent / "corps_dossier.txt").read_bytes()
+    assert b"MOTO" in res.xml_path.read_bytes()
+    assert res.summary.fret_total == pytest.approx(987.25)
+    assert res.summary.assurance_total == pytest.approx(45678)
+
+
+@pytest.mark.skipif(not SAMPLE_PDF.exists(), reason="PDF d'exemple absent")
 def test_generate_matches_cli_output(tmp_path, monkeypatch):
     import converter
     import rfcv_parser
@@ -251,3 +276,42 @@ def test_summary_from_dict_tolerates_unknown_and_missing_keys():
     s = Summary.from_dict({"rfcv_number": "RCSA1", "nb_articles": 2, "champ_futur": 1})
     assert s.rfcv_number == "RCSA1" and s.nb_articles == 2
     assert s.devise is None and s.alertes == [] and s.valeurs_articles == {}
+
+
+# ------------------------------------------------------------------ CLI (spéc. §5.7)
+def _run_cli(monkeypatch, *argv):
+    import converter
+    monkeypatch.setattr(sys, "argv", ["converter.py", *argv])
+    with pytest.raises(SystemExit) as exc:
+        converter.main()
+    return exc.value.code
+
+
+def test_cli_passes_new_settings(monkeypatch, tmp_path):
+    import converter
+    seen = {}
+    monkeypatch.setattr(converter, "convert_pdf_to_xml", lambda *a, **kw: seen.update(kw) or True)
+    code = _run_cli(monkeypatch, "a.pdf", "--taux-douane", "596.302", "--fob-revise", "1000",
+                    "--fob-mode", "uniforme", "--fret-impose", "250.5", "--assurance-imposee", "30000",
+                    "--designation", "TRICYCLE")
+    assert code == 0
+    assert (seen["fob_revise"], seen["fob_mode"], seen["fret_impose"], seen["assurance_imposee"],
+            seen["designation"]) == (1000.0, "uniforme", 250.5, 30000.0, "TRICYCLE")
+
+
+@pytest.mark.parametrize("option", [["--fob-mode", "uniforme"], ["--fret-impose", "10"],
+                                    ["--assurance-imposee", "10"], ["--designation", "MOTO"]])
+def test_cli_batch_rejects_single_file_settings(monkeypatch, tmp_path, capsys, option):
+    import converter
+    monkeypatch.setattr(converter, "BatchProcessor", lambda *a, **kw: pytest.fail("batch lancé"))
+    assert _run_cli(monkeypatch, "a.pdf", "b.pdf", "--taux-douane", "596.302", *option) == 1
+    assert "propres à un fichier" in capsys.readouterr().err
+
+
+def test_cli_fob_mode_requires_fob_revise_and_positive_amounts(monkeypatch, capsys):
+    import converter
+    monkeypatch.setattr(converter, "convert_pdf_to_xml", lambda *a, **kw: pytest.fail("conversion lancée"))
+    assert _run_cli(monkeypatch, "a.pdf", "--taux-douane", "1", "--fob-mode", "uniforme") == 1
+    assert "--fob-revise" in capsys.readouterr().err
+    assert _run_cli(monkeypatch, "a.pdf", "--taux-douane", "1", "--fret-impose", "0") == 1
+    assert "strictement positif" in capsys.readouterr().err

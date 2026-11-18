@@ -516,6 +516,24 @@ python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transi
 ```
 API : champ `disp=true` (conversion unitaire et batch).
 
+### Valeurs imposées et désignation (fichier unique)
+
+Mêmes réglages que l'application web, pour un seul fichier (refusés en batch) :
+
+| Option | Effet |
+|---|---|
+| `--fob-revise MONTANT` | FOB total révisé (devise du RFCV) ; l'assurance par formule est recalculée |
+| `--fob-mode prorata\|uniforme` | répartition du FOB révisé : au prorata (défaut) ou même valeur par article |
+| `--fret-impose MONTANT` | fret total imposé (devise du RFCV) |
+| `--assurance-imposee MONTANT` | assurance totale imposée (XOF), au lieu de la formule ou du RFCV |
+| `--designation TEXTE` | désignation courte de tous les articles (ex. `MOTO`), appliquée après le profil |
+
+```bash
+python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transit.ini \
+  --fob-revise 12000 --fob-mode uniforme --fret-impose 900 --assurance-imposee 45000 --designation MOTO --corps
+```
+Pour des réglages égaux, les fichiers sont identiques octet pour octet à ceux de l'application web.
+
 ## ♻️ RFCV annulé : libérer ses châssis
 
 Une conversion ne fait que contrôler les châssis (`data/chassis_registry.db`) : elle n'écrit rien
