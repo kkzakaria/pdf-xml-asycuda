@@ -41,6 +41,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -59,12 +60,17 @@ COPY --chown=appuser:appuser run_api.py /app/
 COPY --chown=appuser:appuser profils/ /app/profils/
 COPY --chown=appuser:appuser .env.example /app/
 
+# Les gabarits Jinja et les statiques de l'app web sont sous src/webapp/ (copiés avec src/)
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/uploads /app/output /app/data /app/logs && \
     chown -R appuser:appuser /app/uploads /app/output /app/data /app/logs
 
 # Switch to non-root user
 USER appuser
+
+# Données persistantes (webapp.db, dossiers/, chassis_registry.db, sauvegardes) :
+# à monter depuis l'hôte (bind mount)
+VOLUME ["/app/data"]
 
 # Expose API port
 EXPOSE 8000
@@ -73,5 +79,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Default command
-CMD ["python", "run_api.py"]
+# Default command : UN SEUL worker (le verrou de déclaration est par processus).
+# Ne pas ajouter --workers ni lancer plusieurs instances.
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

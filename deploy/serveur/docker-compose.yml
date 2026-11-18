@@ -1,0 +1,33 @@
+# Déploiement serveur Karta : app + cloudflared, aucun port publié.
+# Le seul accès passe par le tunnel Cloudflare (+ Cloudflare Access).
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: karta-generation:latest
+    restart: unless-stopped
+    environment:
+      WEBAPP_ACCESS_AUD: ${WEBAPP_ACCESS_AUD:?WEBAPP_ACCESS_AUD requis}
+      WEBAPP_ADMINS: ${WEBAPP_ADMINS:?WEBAPP_ADMINS requis}
+      WEBAPP_DATA_DIR: /app/data/webapp
+      WEBAPP_REGISTRY_PATH: /app/data/chassis_registry.db
+      # Ne jamais définir WEBAPP_DEV_USER ici (refus de démarrage avec l'AUD).
+    volumes:
+      - ./data:/app/data
+      - ./sauvegarde.sh:/app/sauvegarde.sh:ro
+    networks: [interne]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # Pas de httpHostHeader : l'app compare l'Origin au Host reçu (nom public).
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN requis}
+    depends_on: [app]
+    networks: [interne]
+
+networks:
+  interne:
+    driver: bridge
