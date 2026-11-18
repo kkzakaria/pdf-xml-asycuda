@@ -315,3 +315,25 @@ def test_cli_fob_mode_requires_fob_revise_and_positive_amounts(monkeypatch, caps
     assert "--fob-revise" in capsys.readouterr().err
     assert _run_cli(monkeypatch, "a.pdf", "--taux-douane", "1", "--fret-impose", "0") == 1
     assert "strictement positif" in capsys.readouterr().err
+
+
+def test_chassis_of_same_rfcv_not_blocking(registry, fake_pdf, tmp_path):
+    """VIN déjà enregistrés sous le RFCV généré (reprise) : note informative, pas de blocage."""
+    registry.register_extracted(VIN1, "a.pdf", "6099999")           # même RFCV, autre écriture
+    registry.register_extracted("LC6XCH1G7T1519489", "a.pdf", "RCSA6099999")
+    res = generate(fake_pdf["path"], GenerationSettings(taux_douane=1.0), tmp_path / "out", "d", registry)
+    alertes = codes(res.summary)
+    assert "chassis_declares" not in alertes
+    assert alertes["chassis_meme_rfcv"].bloquante is False
+    assert "2 châssis" in alertes["chassis_meme_rfcv"].message
+    assert not any(a.bloquante for a in res.summary.alertes if a.code.startswith("chassis"))
+
+
+def test_chassis_of_other_rfcv_still_blocking(registry, fake_pdf, tmp_path):
+    registry.register_extracted(VIN1, "a.pdf", "RCSA6099999")
+    registry.register_extracted("LK1PCJL85T1050418", "b.pdf", "RCSA6088888")
+    res = generate(fake_pdf["path"], GenerationSettings(taux_douane=1.0), tmp_path / "out", "d", registry)
+    alerte = codes(res.summary)["chassis_declares"]
+    assert alerte.bloquante is True
+    assert alerte.message.startswith("1 châssis") and "RCSA6088888" in alerte.message
+    assert "RCSA6099999" not in alerte.message

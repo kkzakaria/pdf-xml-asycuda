@@ -278,6 +278,47 @@ def test_declare_rolls_back_on_partial_write(svc, fake_pdf, registry, monkeypatc
     assert status(svc, d) == "brouillon"
 
 
+def test_declare_after_crash_with_own_chassis_registered(svc, fake_pdf, registry):
+    """VIN déjà dans le registre sous le RFCV du dossier (crash, CLI) : pas de blocage."""
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    for vin in VINS:
+        registry.register_extracted(vin, "a.pdf", "RCSA6099999")
+    gen(svc, d)
+    summary = latest_summary(svc, d)
+    assert not any(a["bloquante"] for a in summary["alertes"])
+    assert alert_codes(summary)["chassis_meme_rfcv"]["bloquante"] is False
+    svc.declare(OP, d)
+    assert status(svc, d) == "declare"
+    assert {e["rfcv_number"] for e in registry.get_all_extracted()} == {"RCSA6099999"}
+
+
+def test_declare_still_blocked_by_chassis_of_other_rfcv(svc, fake_pdf, registry):
+    d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))
+    registry.register_extracted(VINS[0], "b.pdf", "RCSA6088888")
+    gen(svc, d)
+    assert alert_codes(latest_summary(svc, d))["chassis_declares"]["bloquante"] is True
+    with pytest.raises(DeclarationRefusee):
+        svc.declare(OP, d)
+    assert status(svc, d) == "brouillon"
+
+
+NO_RFCV_TEXT = MULTILINE_TEXT.replace("RCSA6099999", "XXXA6099999")
+
+
+def test_declare_refused_without_rfcv_number(svc, fake_pdf, registry):
+    d = svc.create(OP, "a.pdf", pdf_bytes(NO_RFCV_TEXT))
+    assert svc.get(d)["rfcv_number"] in (None, "")
+    gen(svc, d)
+    summary = latest_summary(svc, d)
+    assert summary["vins"] == VINS and not summary["rfcv_number"]
+    with pytest.raises(DeclarationRefusee) as exc:
+        svc.declare(OP, d)
+    assert "N° RFCV illisible" in str(exc.value)
+    assert status(svc, d) == "brouillon"
+    assert registry.get_all_extracted() == []
+    assert "declaration_refusee" in actions(svc, d)
+
+
 # ------------------------------------------------------------------ retour en brouillon
 def test_revert_to_draft_admin_only_and_frees_chassis(svc, fake_pdf, registry):
     d = svc.create(OP, "a.pdf", pdf_bytes(MULTILINE_TEXT))

@@ -30,7 +30,8 @@ from generation_summary import FOB_MODES, fmt_montant  # noqa: E402
 
 from . import config, db  # noqa: E402
 from .auth import User, current_user, require_admin  # noqa: E402
-from .dossiers import DeclarationRefusee, DossierFige, DossierIntrouvable, DossierService  # noqa: E402
+from .dossiers import (RFCV_ILLISIBLE, DeclarationRefusee, DossierFige, DossierIntrouvable,  # noqa: E402
+                       DossierService)
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,8 @@ def _dossier_context(svc: DossierService, dossier_id: int, form: Optional[dict] 
     generations = svc.generations(dossier_id)
     summary = svc.latest_summary(dossier_id)
     fige = dossier["status"] != "brouillon"
+    # sans n° RFCV lisible, la déclaration est refusée (voir DossierService._declare)
+    rfcv_illisible = summary is not None and not normalize_rfcv(dossier["rfcv_number"] or summary.rfcv_number)
     if form is None and not fige:
         if generations:
             form = settings_to_form(GenerationSettings.from_dict(json.loads(generations[0]["settings_json"])))
@@ -249,7 +252,9 @@ def _dossier_context(svc: DossierService, dossier_id: int, form: Optional[dict] 
     return {
         "dossier": dossier, "generations": generations, "summary": summary, "fige": fige,
         "latest": generations[0] if generations else None,
-        "can_declare": not fige and summary is not None and not summary.bloquante and not dossier["error"],
+        "rfcv_illisible": RFCV_ILLISIBLE if rfcv_illisible else None,
+        "can_declare": (not fige and summary is not None and not summary.bloquante and not dossier["error"]
+                        and not rfcv_illisible),
         "can_abandon": dossier["status"] == "brouillon",
         "events": svc.events(dossier_id),
         "form": form or {}, "form_errors": form_errors or [], "profiles": list(_profiles()),

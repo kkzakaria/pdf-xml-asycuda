@@ -70,7 +70,8 @@
   <button type="submit" id="declarer"{% if not can_declare %} disabled{% endif %}>Déclaré dans SYDAM</button>
   {% if not summary %}<small>Générer le dossier avant de le déclarer.</small>
   {% elif dossier.error %}<small>La dernière génération a échoué : régénérer avant de déclarer.</small>
-  {% elif summary.bloquante %}<small>Alerte bloquante : corriger puis régénérer.</small>{% endif %}
+  {% elif summary.bloquante %}<small>Alerte bloquante : corriger puis régénérer.</small>
+  {% elif rfcv_illisible %}<small>{{ rfcv_illisible }}.</small>{% endif %}
 </form>
 {% endif %}
 

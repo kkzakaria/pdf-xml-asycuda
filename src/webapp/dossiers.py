@@ -46,6 +46,9 @@ GEN_DIR_ESSAIS = 20
 # Déclarations sérialisées : contrôle du registre puis écriture sans entrelacement.
 _declare_lock = threading.Lock()
 
+RFCV_ILLISIBLE = ("N° RFCV illisible : impossible de déclarer ce dossier sans n° RFCV ; "
+                  "vérifiez le PDF")
+
 
 class DossierIntrouvable(LookupError):
     """Aucun dossier avec cet identifiant."""
@@ -331,6 +334,10 @@ class DossierService:
                          "de le déclarer")
         declared_n = self.generations(dossier_id)[0]["n"]
         rfcv_number = dossier["rfcv_number"] or summary.rfcv_number
+        if not normalize_rfcv(rfcv_number):
+            # sans n° RFCV, les châssis ne pourraient plus être libérés (retour en brouillon,
+            # annulation du RFCV) : refus
+            self._refuse(user, dossier_id, RFCV_ILLISIBLE)
         # Un RFCV = une déclaration : un autre dossier du même RFCV déjà déclaré bloque.
         if normalize_rfcv(rfcv_number):
             autres = [r["id"] for r in self.conn.execute(

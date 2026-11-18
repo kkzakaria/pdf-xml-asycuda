@@ -232,6 +232,15 @@ async def test_declare_button_disabled_with_blocking_alert(client, as_user, fake
     assert r.status_code == 409 and "déclaré" in r.text
 
 
+async def test_declare_button_disabled_without_rfcv_number(client, as_user, fake_pdf):
+    d = await new_dossier(client, "a.pdf", MULTILINE_TEXT.replace("RCSA6099999", "XXXA6099999"))
+    r = await generate(client, d)
+    assert "disabled" in declare_button(r.text)
+    assert "N° RFCV illisible" in r.text
+    r = await client.post(f"/dossiers/{d}/declarer")
+    assert r.status_code == 409 and "N° RFCV illisible" in r.text
+
+
 async def test_operator_cannot_revert(client, as_user, fake_pdf):
     d = await new_dossier(client)
     await generate(client, d)

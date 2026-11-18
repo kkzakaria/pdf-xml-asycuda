@@ -11,6 +11,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field, fields
 from typing import TYPE_CHECKING, Optional
 
+from chassis_registry import normalize_rfcv
 from designation import suggest_designation
 from models import RFCVData
 
@@ -211,6 +212,16 @@ def _ecarts(d: RFCVData, ref: RFCVData, settings: Optional["GenerationSettings"]
 def _alertes(d: RFCVData, ref: RFCVData, vins: list[str], conflicts: list[dict],
              other_drafts: dict[str, set[str]], known_hs, settings) -> list[Alert]:
     alertes = []
+    # VIN déjà enregistrés sous ce même RFCV (reprise après une déclaration interrompue,
+    # passage CLI --enregistrer-chassis) : information, pas un conflit
+    rfcv = normalize_rfcv(d.identification.rfcv_number if d.identification else None)
+    if rfcv:
+        memes = [c for c in conflicts if normalize_rfcv(c.get("first_rfcv_number")) == rfcv]
+        conflicts = [c for c in conflicts if normalize_rfcv(c.get("first_rfcv_number")) != rfcv]
+        if memes:
+            alertes.append(Alert("chassis_meme_rfcv",
+                                 f"{len(memes)} châssis déjà enregistré(s) pour ce même RFCV (reprise)",
+                                 False))
     if conflicts:
         origines = sorted({c.get("first_rfcv_number") or c.get("first_filename") or "?" for c in conflicts})
         alertes.append(Alert("chassis_declares",
