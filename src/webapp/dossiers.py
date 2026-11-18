@@ -360,6 +360,80 @@ class DossierService:
         self._event(dossier_id, admin.email, "retour_brouillon", f"{len(removed)} châssis retiré(s) du registre")
         self.conn.commit()
 
+    # -------------------------------------------------------------- administration des châssis
+    @staticmethod
+    def _require_admin(admin: User) -> None:
+        if not getattr(admin, "is_admin", False):
+            raise PermissionError("Réservé aux administrateurs")
+
+    def _dossiers_of_rfcv(self, rfcv_number: str, status: str) -> list[sqlite3.Row]:
+        return [r for r in self.conn.execute("SELECT id, rfcv_number FROM dossiers WHERE status = ?", (status,))
+                if _same_rfcv(r["rfcv_number"], rfcv_number)]
+
+    def cancel_rfcv(self, admin: User, rfcv_number: str, motif: str) -> list[str]:
+        """
+        RFCV annulé par la société d'inspection : ses châssis quittent le registre actif et les
+        dossiers déclarés de ce RFCV passent « annule ». ValueError (message français) si le
+        motif est vide ou si le RFCV n'a aucun châssis enregistré (aucun changement d'état).
+        """
+        self._require_admin(admin)
+        if not (motif or "").strip():
+            raise ValueError("Motif d'annulation obligatoire")
+        if not normalize_rfcv(rfcv_number):
+            raise ValueError("Numéro RFCV obligatoire")
+        cancelled = self.registry.cancel_rfcv(rfcv_number, motif.strip())
+        if not cancelled:
+            raise ValueError("aucun châssis enregistré pour ce RFCV")
+        for r in self._dossiers_of_rfcv(rfcv_number, "declare"):
+            self.conn.execute("UPDATE dossiers SET status = 'annule' WHERE id = ?", (r["id"],))
+            self._event(r["id"], admin.email, "rfcv_annule", f"RFCV annulé : {motif.strip()}")
+        self._event(None, admin.email, "rfcv_annule",
+                    f"{rfcv_number.strip()} : {len(cancelled)} châssis ({motif.strip()})")
+        self.conn.commit()
+        return cancelled
+
+    def restore_rfcv(self, admin: User, rfcv_number: str) -> dict:
+        """
+        Annule l'annulation d'un RFCV. Les dossiers « annule » de ce RFCV repassent « declare »
+        sauf si l'un de leurs VIN est en conflit (repris par un autre RFCV). Rend
+        {"restored", "conflicts", "dossiers_restaures", "dossiers_en_conflit"}.
+        """
+        self._require_admin(admin)
+        result = self.registry.restore_rfcv(rfcv_number)
+        if not result["restored"] and not result["conflicts"]:
+            raise ValueError("aucun châssis annulé à restaurer pour ce RFCV")
+        conflicts = set(result["conflicts"])
+        back, stuck = [], []
+        for r in self._dossiers_of_rfcv(rfcv_number, "annule"):
+            summary = self.latest_summary(r["id"])
+            vins = {v.upper() for v in (summary.vins if summary else [])}
+            if vins & conflicts:
+                stuck.append(r["id"])
+                continue
+            self.conn.execute("UPDATE dossiers SET status = 'declare' WHERE id = ?", (r["id"],))
+            self._event(r["id"], admin.email, "rfcv_restaure", "annulation du RFCV levée")
+            back.append(r["id"])
+        self._event(None, admin.email, "rfcv_restaure",
+                    f"{rfcv_number.strip()} : {len(result['restored'])} restauré(s), {len(conflicts)} en conflit")
+        self.conn.commit()
+        return {**result, "dossiers_restaures": back, "dossiers_en_conflit": stuck}
+
+    def hs_known(self) -> list[tuple[str, str]]:
+        return [(r[0], r[1]) for r in self.conn.execute(
+            "SELECT designation, hs_code FROM hs_known ORDER BY designation, hs_code")]
+
+    def mark_hs_known(self, admin: User, designation: str, hs_code: str) -> None:
+        """Le couple (désignation, code SH) devient habituel : l'alerte n'est plus levée. Idempotent."""
+        self._require_admin(admin)
+        designation, hs_code = (designation or "").strip(), (hs_code or "").strip()
+        if not designation or not hs_code:
+            raise ValueError("Désignation et code SH obligatoires")
+        cur = self.conn.execute("INSERT OR IGNORE INTO hs_known (designation, hs_code) VALUES (?, ?)",
+                                (designation, hs_code))
+        if cur.rowcount:
+            self._event(None, admin.email, "code_sh_normal", f"{designation} : {hs_code}")
+        self.conn.commit()
+
     # -------------------------------------------------------------- liste
     def list(self, search: str | None = None) -> list[dict]:
         """Dossiers du plus récent au plus ancien ; recherche par n° RFCV (normalisé) ou VIN."""

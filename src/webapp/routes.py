@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -22,7 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from chassis_registry import ChassisRegistry  # noqa: E402
+from chassis_registry import ChassisRegistry, normalize_rfcv  # noqa: E402
 from company_profile import load_profile  # noqa: E402
 from generation import ASSURANCE_MODES, Amount, GenerationSettings  # noqa: E402
 from generation_summary import FOB_MODES, fmt_montant  # noqa: E402
@@ -40,6 +41,16 @@ _env = Environment(loader=FileSystemLoader(str(HERE / "templates")), autoescape=
                    trim_blocks=True, lstrip_blocks=True)
 _env.filters["montant"] = lambda x: fmt_montant(x) if x is not None else ""
 _env.filters["valeurs"] = lambda vals: ", ".join(f"{n} × {fmt_montant(v)}" for v, n in (vals or []))
+_SH_ALERTE = re.compile(r"Code SH (\S+) jamais déclaré pour « (.*) »$", re.S)
+
+
+def _paire_sh(message: str):
+    """(désignation, code SH) d'une alerte « code_sh_inhabituel », sinon None."""
+    m = _SH_ALERTE.match(message or "")
+    return (m.group(2), m.group(1)) if m else None
+
+
+_env.filters["paire_sh"] = _paire_sh
 templates = Jinja2Templates(env=_env)
 
 STATUTS = {"brouillon": "Brouillon", "declare": "Déclaré", "annule": "Annulé"}
@@ -335,6 +346,81 @@ def brouillon(request: Request, dossier_id: int, admin: User = Depends(require_a
         return _render(request, "dossier.html", admin, status_code=409, message=str(exc),
                        **_dossier_context(svc, dossier_id))
     return RedirectResponse(f"/dossiers/{dossier_id}", status_code=303)
+
+
+# ------------------------------------------------------------------ Châssis (administrateurs)
+def _chassis_context(svc: DossierService, vin: str = "", notice: str = "", errors: Optional[list[str]] = None,
+                     conflicts: Optional[list[str]] = None, form: Optional[dict] = None) -> dict:
+    vin = re.sub(r"\s+", "", vin or "").upper()
+    groups: dict[str, dict] = {}
+    for row in svc.registry.get_cancelled():
+        g = groups.setdefault(normalize_rfcv(row["rfcv_number"]), {
+            "rfcv_number": row["rfcv_number"], "count": 0, "reason": row["reason"],
+            "cancelled_at": row["cancelled_at"], "restantes": 0})
+        g["count"] += 1
+        g["restantes"] += row["restored_at"] is None
+    return {
+        "vin": vin, "notice": notice, "errors": errors or [], "conflicts": conflicts or [], "form": form or {},
+        "entry": svc.registry.get_entry(vin) if vin else None,
+        "history": svc.registry.get_cancelled(chassis_number=vin) if vin else [],
+        "vin_dossiers": svc.list(vin) if vin else [],
+        "cancelled": list(groups.values()), "hs_known": svc.hs_known(),
+    }
+
+
+def _chassis_error(request, admin, svc, message, form=None, conflicts=None, vin=""):
+    return _render(request, "chassis.html", admin, status_code=422,
+                   **_chassis_context(svc, vin=vin, errors=[message], conflicts=conflicts, form=form))
+
+
+@router.get("/chassis", response_class=HTMLResponse)
+def chassis(request: Request, vin: str = "", msg: str = "", admin: User = Depends(require_admin),
+            svc: DossierService = Depends(get_service)):
+    return _render(request, "chassis.html", admin, **_chassis_context(svc, vin=vin, notice=msg[:300]))
+
+
+def _chassis_redirect(message: str) -> RedirectResponse:
+    return RedirectResponse("/chassis?" + urlencode({"msg": message}), status_code=303)
+
+
+@router.post("/chassis/annuler")
+def chassis_annuler(request: Request, values: dict = Depends(form_data),
+                    admin: User = Depends(require_admin), svc: DossierService = Depends(get_service)):
+    rfcv, motif = values.get("rfcv", "").strip(), values.get("motif", "").strip()
+    try:
+        cancelled = svc.cancel_rfcv(admin, rfcv, motif)
+    except ValueError as exc:
+        return _chassis_error(request, admin, svc, str(exc)[:1].upper() + str(exc)[1:],
+                              form={"rfcv": rfcv, "motif": motif})
+    return _chassis_redirect(f"RFCV {rfcv} annulé : {len(cancelled)} châssis libérés")
+
+
+@router.post("/chassis/restaurer/{rfcv}")
+def chassis_restaurer(request: Request, rfcv: str, admin: User = Depends(require_admin),
+                      svc: DossierService = Depends(get_service)):
+    try:
+        result = svc.restore_rfcv(admin, rfcv)
+    except ValueError as exc:
+        return _chassis_error(request, admin, svc, str(exc)[:1].upper() + str(exc)[1:])
+    if result["conflicts"]:
+        return _render(request, "chassis.html", admin, **_chassis_context(
+            svc, conflicts=result["conflicts"],
+            notice=f"RFCV {rfcv} : {len(result['restored'])} châssis restauré(s), "
+                   f"{len(result['conflicts'])} en conflit (déjà repris par un autre RFCV)"))
+    return _chassis_redirect(f"RFCV {rfcv} restauré : {len(result['restored'])} châssis")
+
+
+@router.post("/chassis/code-sh-normal")
+def chassis_code_sh_normal(request: Request, values: dict = Depends(form_data),
+                           admin: User = Depends(require_admin), svc: DossierService = Depends(get_service)):
+    try:
+        svc.mark_hs_known(admin, values.get("designation", ""), values.get("hs_code", ""))
+    except ValueError as exc:
+        return _chassis_error(request, admin, svc, str(exc))
+    retour = values.get("retour", "")
+    if re.fullmatch(r"/dossiers/\d+", retour):            # jamais d'adresse externe
+        return RedirectResponse(retour, status_code=303)
+    return _chassis_redirect("Code SH enregistré comme habituel")
 
 
 # ------------------------------------------------------------------ téléchargements

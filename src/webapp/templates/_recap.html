@@ -12,7 +12,14 @@
 <ul class="alertes">
   {% for a in summary.alertes %}
   <li class="{{ 'alerte-bloquante' if a.bloquante else 'alerte-avertissement' }}">
-    <strong>{{ "Bloquant" if a.bloquante else "À vérifier" }} :</strong> {{ a.message }}</li>
+    <strong>{{ "Bloquant" if a.bloquante else "À vérifier" }} :</strong> {{ a.message }}
+    {% if a.code == "code_sh_inhabituel" and user.is_admin %}{% set paire = a.message | paire_sh %}{% if paire %}
+    <form method="post" action="/chassis/code-sh-normal" class="en-ligne">
+      <input type="hidden" name="designation" value="{{ paire[0] }}">
+      <input type="hidden" name="hs_code" value="{{ paire[1] }}">
+      <input type="hidden" name="retour" value="/dossiers/{{ dossier.id }}">
+      <button type="submit">Marquer ce code SH comme normal</button>
+    </form>{% endif %}{% endif %}</li>
   {% endfor %}
 </ul>
 {% endif %}
