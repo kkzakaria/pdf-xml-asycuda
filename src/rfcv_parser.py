@@ -20,7 +20,7 @@ from proportional_calculator import ProportionalCalculator
 from item_grouper import group_items_by_hs_code
 from chassis_registry import ChassisRegistry, DuplicateChassisError, get_registry
 import rfcv_format_2026 as fmt2026
-from asycuda_enrichment import enrich_for_asycuda
+from asycuda_enrichment import enrich_for_asycuda, distribute_evenly
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,9 @@ class RFCVParser:
         insurance_mode: str = "formule",
         fob_revise: Optional[float] = None,
         register_chassis: bool = True,
+        fob_mode: str = "prorata",
+        fret_impose: Optional[float] = None,
+        assurance_imposee: Optional[float] = None,
     ):
         """
         Initialise le parser
@@ -63,6 +66,16 @@ class RFCVParser:
         if fob_revise is not None and fob_revise <= 0:
             raise ValueError(f"fob_revise doit être > 0 : {fob_revise!r}")
         self.fob_revise = fob_revise
+        if fob_mode not in ("prorata", "uniforme"):
+            raise ValueError(f"fob_mode invalide : {fob_mode!r} (attendu 'prorata' ou 'uniforme')")
+        self.fob_mode = fob_mode
+        # fret_impose : total en devise du RFCV ; assurance_imposee : total en XOF
+        if fret_impose is not None and fret_impose <= 0:
+            raise ValueError(f"fret_impose doit être > 0 : {fret_impose!r}")
+        if assurance_imposee is not None and assurance_imposee <= 0:
+            raise ValueError(f"assurance_imposee doit être > 0 : {assurance_imposee!r}")
+        self.fret_impose = fret_impose
+        self.assurance_imposee = assurance_imposee
         # Vrai si l'assurance retenue vient de la formule (à recalculer après un FOB révisé)
         self._insurance_from_formula = False
         self.is_format_2026 = False
@@ -297,10 +310,14 @@ class RFCVParser:
         if not items or fob_rfcv <= 0:
             logger.warning("FOB révisé ignoré : aucun FOB d'article à répartir")
             return
-        cents = ProportionalCalculator().distribute_proportionally(
-            total_amount=round(self.fob_revise * 100),
-            item_fobs=[i.tarification.item_price for i in items],
-            fob_total=fob_rfcv)
+        total_cents = round(self.fob_revise * 100)
+        if self.fob_mode == "uniforme":
+            cents = distribute_evenly(total_cents, len(items))
+        else:
+            cents = ProportionalCalculator().distribute_proportionally(
+                total_amount=total_cents,
+                item_fobs=[i.tarification.item_price for i in items],
+                fob_total=fob_rfcv)
         for item, c in zip(items, cents):
             item.tarification.item_price = c / 100
             if item.valuation_item:
@@ -315,16 +332,48 @@ class RFCVParser:
             val.invoice.amount_foreign = self.fob_revise
             val.invoice.amount_national = self.fob_revise * rate if rate else val.invoice.amount_national
         val.total_invoice = self.fob_revise
-        freight = val.external_freight.amount_foreign if val.external_freight else None
-        if self._insurance_from_formula and freight and rate:
-            value = math.ceil(2500 + (self.fob_revise + freight) * rate * 0.0015)
-            val.insurance = CurrencyAmount(amount_national=value, amount_foreign=value, currency_code='XOF',
-                                           currency_name='Franc CFA', currency_rate=1.0)
+
+    @staticmethod
+    def _formula_insurance(fob: float, freight: float, rate: float) -> CurrencyAmount:
+        """Assurance par formule : ceiling(2500 + (FOB + FRET) × taux × 0,15 %), en XOF."""
+        return RFCVParser._xof_amount(math.ceil(2500 + (fob + freight) * rate * 0.0015))
+
+    @staticmethod
+    def _xof_amount(value: float) -> CurrencyAmount:
+        return CurrencyAmount(amount_national=value, amount_foreign=value, currency_code='XOF',
+                              currency_name='Franc CFA', currency_rate=1.0)
+
+    def _apply_imposed_amounts(self, rfcv_data: RFCVData, fob_revised: bool) -> None:
+        """Fret et assurance imposés ; recalcule l'assurance par formule si FOB ou fret ont changé."""
+        val, fin = rfcv_data.valuation, rfcv_data.financial
+        if val is None:
+            return
+        rate = fin.exchange_rate if fin and fin.exchange_rate else None
+        freight_obj = val.external_freight
+        if self.fret_impose is not None:
+            code = freight_obj.currency_code if freight_obj else None
+            r = rate if rate else (1.0 if code in (None, 'XOF') else None)
+            if freight_obj is None:
+                freight_obj = val.external_freight = CurrencyAmount(
+                    amount_national=None, amount_foreign=None, currency_code=None,
+                    currency_name=None, currency_rate=r)
+            freight_obj.amount_foreign = self.fret_impose
+            if r:
+                freight_obj.amount_national = self.fret_impose * r
+        freight = freight_obj.amount_foreign if freight_obj else None
+        if self._insurance_from_formula and (fob_revised or self.fret_impose is not None) and freight and rate:
+            fob = val.invoice.amount_foreign if val.invoice and val.invoice.amount_foreign else val.total_invoice
+            if fob:
+                val.insurance = self._formula_insurance(fob, freight, rate)
+        if self.assurance_imposee is not None:
+            val.insurance = self._xof_amount(self.assurance_imposee)
 
     def _finalize(self, rfcv_data: RFCVData) -> RFCVData:
         """Étapes communes aux deux formats, après lecture des sections et des articles."""
         if self.fob_revise is not None:
             self._apply_fob_revision(rfcv_data)
+        if self.fret_impose is not None or self.assurance_imposee is not None or self.fob_revise is not None:
+            self._apply_imposed_amounts(rfcv_data, fob_revised=self.fob_revise is not None)
 
         # Générer des articles supplémentaires si plus de VINs sont demandés que d'articles véhicule
         rfcv_data.items = self._add_additional_vin_items(rfcv_data.items)
