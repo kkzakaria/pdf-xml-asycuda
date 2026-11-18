@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Châssis · Génération XML & corps{% endblock %}
+{% block content %}
+<h1>Châssis</h1>
+
+{% if notice %}<div class="info" role="status"><p>{{ notice }}</p></div>{% endif %}
+{% if errors %}
+<div class="erreur" role="alert">{% for e in errors %}<p>{{ e }}</p>{% endfor %}</div>
+{% endif %}
+{% if conflicts %}
+<div class="erreur" role="alert">
+  <p>Châssis non restaurés (déjà repris par un autre RFCV) :</p>
+  <ul>{% for c in conflicts %}<li>{{ c }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<h2>Rechercher un châssis</h2>
+<form class="recherche" method="get" action="/chassis">
+  <label for="vin">VIN</label>
+  <input id="vin" name="vin" type="search" value="{{ vin }}">
+  <button type="submit">Rechercher</button>
+</form>
+{% if vin %}
+<h3>{{ vin }}</h3>
+{% if entry %}
+<p>Registre actif : RFCV {{ entry.rfcv_number or "?" }} · fichier {{ entry.filename or "?" }}
+  · enregistré le {{ (entry.registered_at or "")[:16] | replace("T", " ") }}</p>
+{% else %}
+<p>Absent du registre actif : ce châssis peut être déclaré.</p>
+{% endif %}
+{% if history %}
+<table>
+  <thead><tr><th>RFCV annulé</th><th>Fichier</th><th>Annulé le</th><th>Motif</th><th>Restauré</th></tr></thead>
+  <tbody>
+  {% for h in history %}
+  <tr><td>{{ h.rfcv_number or "?" }}</td><td>{{ h.filename or "" }}</td>
+    <td>{{ h.cancelled_at[:16] | replace("T", " ") }}</td><td>{{ h.reason }}</td>
+    <td>{{ "oui, le " ~ h.restored_at[:16] | replace("T", " ") if h.restored_at else "non" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% if vin_dossiers %}
+<p>Dossiers contenant ce châssis :</p>
+<ul>{% for d in vin_dossiers %}
+  <li><a href="/dossiers/{{ d.id }}">{{ d.rfcv_number or ("Dossier " ~ d.id) }}</a>
+    ({{ STATUTS.get(d.status, d.status) }})</li>{% endfor %}</ul>
+{% else %}
+<p>Aucun dossier ne contient ce châssis.</p>
+{% endif %}
+{% endif %}
+
+<h2>Annuler un RFCV</h2>
+<p>À utiliser quand la société d'inspection a annulé un RFCV : ses châssis sont libérés et ses
+  dossiers déclarés passent « Annulé ».</p>
+<form method="post" action="/chassis/annuler" class="annuler">
+  <label for="rfcv">N° RFCV</label>
+  <input id="rfcv" name="rfcv" required value="{{ form.rfcv or '' }}">
+  <label for="motif">Motif</label>
+  <input id="motif" name="motif" required value="{{ form.motif or '' }}">
+  <button type="submit" onclick="return confirm('Annuler ce RFCV et libérer ses châssis ?')">Annuler le RFCV</button>
+</form>
+
+<h2>RFCV annulés</h2>
+{% if cancelled %}
+<table>
+  <thead><tr><th>RFCV</th><th class="nombre">Châssis</th><th>Motif</th><th>Annulé le</th><th>Statut</th></tr></thead>
+  <tbody>
+  {% for c in cancelled %}
+  <tr><td>{{ c.rfcv_number }}</td><td class="nombre">{{ c.count }}</td><td>{{ c.reason }}</td>
+    <td>{{ c.cancelled_at[:16] | replace("T", " ") }}</td>
+    <td>{% if c.restantes %}
+      <form method="post" action="/chassis/restaurer/{{ c.rfcv_number | urlencode }}" class="en-ligne"
+            onsubmit="return confirm('Restaurer ce RFCV ? Ses châssis reviennent dans le registre.')">
+        <button type="submit">Restaurer</button></form>
+      {% else %}Restauré{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Aucun RFCV annulé.</p>
+{% endif %}
+
+<h2>Dernières actions</h2>
+{% if events %}
+<table class="historique">
+  <thead><tr><th>Le</th><th>Par</th><th>Action</th><th>Détail</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+  <tr><td>{{ e.at[:16] | replace("T", " ") }}</td><td>{{ e.email }}</td>
+    <td>{{ ACTIONS.get(e.action, e.action) }}</td><td>{{ e.detail or "" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Aucune annulation, restauration ni code SH enregistré pour l'instant.</p>
+{% endif %}
+
+<h2>Codes SH habituels</h2>
+{% if hs_known %}
+<table>
+  <thead><tr><th>Désignation</th><th>Code SH</th></tr></thead>
+  <tbody>{% for d, code in hs_known %}<tr><td>{{ d }}</td><td><code>{{ code }}</code></td></tr>{% endfor %}</tbody>
+</table>
+{% else %}
+<p>Aucun couple enregistré : les alertes de code SH ne sont levées qu'après la première déclaration.</p>
+{% endif %}
+{% endblock %}

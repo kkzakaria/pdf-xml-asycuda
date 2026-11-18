@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
 from company_profile import apply_profile, load_profile
+from designation import apply_designation
 from corps_generator import write_corps
 from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
@@ -35,7 +36,12 @@ def convert_pdf_to_xml(
     takikro: bool = False,
     disp: bool = False,
     fob_revise: float = None,
-    corps: bool = False
+    corps: bool = False,
+    register_chassis: bool = False,
+    fob_mode: str = "prorata",
+    fret_impose: float = None,
+    assurance_imposee: float = None,
+    designation: str = None
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -50,6 +56,13 @@ def convert_pdf_to_xml(
                        Format: {'generate_chassis': True, 'quantity': 180, 'wmi': 'LZS',
                                'vds': 'HCKZS', 'year': 2025, 'plant_code': 'S',
                                'ensure_unique': True}
+
+        register_chassis: enregistrer les châssis dans le registre (refus des doublons).
+                       Par défaut la conversion ne fait que contrôler les doublons.
+        fob_mode: répartition du FOB révisé, 'prorata' (défaut) ou 'uniforme'
+        fret_impose: fret total imposé (devise du RFCV)
+        assurance_imposee: assurance totale imposée (XOF)
+        designation: désignation courte appliquée à tous les articles (après le profil)
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -88,14 +101,29 @@ def convert_pdf_to_xml(
             rapport_paiement=rapport_paiement,
             chassis_config=chassis_config,
             insurance_mode=insurance_mode,
-            fob_revise=fob_revise
+            fob_revise=fob_revise,
+            register_chassis=register_chassis,
+            fob_mode=fob_mode,
+            fret_impose=fret_impose,
+            assurance_imposee=assurance_imposee
         )
         rfcv_data = parser.parse()
+        if parser.chassis_conflicts:
+            origins = sorted({d.get("first_rfcv_number") or d.get("first_filename") or "?"
+                              for d in parser.chassis_conflicts})
+            print(f"Attention : {len(parser.chassis_conflicts)} châssis déjà traité(s), "
+                  f"RFCV d'origine : {', '.join(origins)}.", file=sys.stderr)
+            print("  Si ce RFCV a été annulé : python registre.py annuler <RFCV> --motif \"...\""
+                  " (détail d'un châssis : python registre.py chercher <VIN>)", file=sys.stderr)
 
         # Constantes société (profil) et données du dossier, absentes du RFCV
         if profile or dossier or manifeste or nationalite_transport or takikro or disp:
             apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
                           nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)
+
+        # Désignation courte (même ordre que generation.generate : après le profil)
+        if designation:
+            apply_designation(rfcv_data, designation)
 
         if verbose:
             print(f"  ✓ Extraction réussie")
@@ -259,9 +287,24 @@ Exemples d'utilisation:
     profile_group.add_argument('--fob-revise', type=float, default=None,
                                help='FOB total révisé (devise du RFCV), réparti au prorata des articles ; '
                                     "l'assurance par formule est recalculée. Un seul fichier.")
+    profile_group.add_argument('--fob-mode', choices=['prorata', 'uniforme'], default='prorata',
+                               help='Répartition du FOB révisé : prorata (défaut) ou uniforme '
+                                    '(même valeur pour chaque article). Avec --fob-revise.')
+    profile_group.add_argument('--fret-impose', type=float, default=None, metavar='MONTANT',
+                               help='Fret total imposé (devise du RFCV), réparti sur les articles. Un seul fichier.')
+    profile_group.add_argument('--assurance-imposee', type=float, default=None, metavar='MONTANT',
+                               help="Assurance totale imposée (XOF), au lieu de la formule ou du RFCV. "
+                                    "Un seul fichier.")
+    profile_group.add_argument('--designation', default=None, metavar='TEXTE',
+                               help='Désignation courte de tous les articles (case 31 et marques), ex. MOTO. '
+                                    'Un seul fichier.')
     profile_group.add_argument('--takikro', action='store_true',
                                help='Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, '
                                     'case 10 (dernière provenance) = GH, case 18 nationalité = 99, case 31 colis = PK')
+    parser.add_argument('--enregistrer-chassis', action='store_true',
+                        help='Enregistre les châssis dans le registre (refuse les doublons). '
+                             'Par défaut la conversion ne fait que contrôler les doublons ; '
+                             "l'enregistrement se fait à la déclaration SYDAM (application web)")
     parser.add_argument('--corps', action='store_true',
                         help='Génère aussi le corps SYDAM (corps_<nom>.txt à côté du XML), '
                              "fichier d'écriture de l'agent SYDAM")
@@ -398,8 +441,11 @@ Exemples d'utilisation:
 
         # Profil société et assurance : communs à tous les fichiers. Les données de dossier
         # (n°, manifeste, nationalité) sont propres à chaque fichier : non applicables en batch CLI.
-        if args.dossier or args.manifeste or args.nationalite_transport or args.fob_revise:
-            print("Erreur: --dossier, --manifeste, --nationalite-transport et --fob-revise sont propres à un fichier ; "
+        if (args.dossier or args.manifeste or args.nationalite_transport or args.fob_revise
+                or args.fob_mode != 'prorata' or args.fret_impose is not None
+                or args.assurance_imposee is not None or args.designation):
+            print("Erreur: --dossier, --manifeste, --nationalite-transport, --fob-revise, --fob-mode, "
+                  "--fret-impose, --assurance-imposee et --designation sont propres à un fichier ; "
                   "en batch, utilisez l'API (listes par fichier) ou convertissez fichier par fichier.",
                   file=sys.stderr)
             sys.exit(1)
@@ -428,11 +474,16 @@ Exemples d'utilisation:
             takikro=args.takikro,
             disp=args.disp,
             corps=args.corps,
+            register_chassis=args.enregistrer_chassis,
         )
 
         # Exécuter le traitement batch
         processor = BatchProcessor(config)
         batch_results = processor.process()
+        for res in batch_results.get('results', []):
+            warning = res.conflict_warning()
+            if warning:
+                print(f"Attention : {Path(res.pdf_file).name} : {warning}.", file=sys.stderr)
 
         # Générer les rapports si demandé
         if args.report:
@@ -471,6 +522,15 @@ Exemples d'utilisation:
             print("Exemple: --taux-douane 573.1390", file=sys.stderr)
             sys.exit(1)
 
+        if args.fob_mode != 'prorata' and args.fob_revise is None:
+            print("Erreur: --fob-mode s'utilise avec --fob-revise.", file=sys.stderr)
+            sys.exit(1)
+        for option, value in (("--fob-revise", args.fob_revise), ("--fret-impose", args.fret_impose),
+                              ("--assurance-imposee", args.assurance_imposee)):
+            if value is not None and value <= 0:
+                print(f"Erreur: {option} doit être un montant strictement positif.", file=sys.stderr)
+                sys.exit(1)
+
         profile = None
         if args.profil:
             try:
@@ -495,7 +555,12 @@ Exemples d'utilisation:
             takikro=args.takikro,
             disp=args.disp,
             fob_revise=args.fob_revise,
-            corps=args.corps
+            corps=args.corps,
+            register_chassis=args.enregistrer_chassis,
+            fob_mode=args.fob_mode,
+            fret_impose=args.fret_impose,
+            assurance_imposee=args.assurance_imposee,
+            designation=args.designation
         )
         sys.exit(0 if success else 1)
 

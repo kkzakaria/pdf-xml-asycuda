@@ -90,7 +90,8 @@ class ConversionService:
 
             parser = RFCVParser(pdf_path, taux_douane=taux_douane, rapport_paiement=rapport_paiement,
                                 chassis_config=chassis_config, force_reprocess=force_reprocess,
-                                insurance_mode=insurance_mode)
+                                insurance_mode=insurance_mode,
+                                register_chassis=False)  # l'API ne fait que contrôler ; l'enregistrement = déclaration
             rfcv_data = parser.parse()
             if profile or dossier or manifeste or nationalite_transport or takikro or disp:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
@@ -164,7 +165,7 @@ class ConversionService:
                 return result
 
             # Essayer de parser sans générer XML
-            parser = RFCVParser(pdf_path, taux_douane=taux_douane)
+            parser = RFCVParser(pdf_path, taux_douane=taux_douane, register_chassis=False)
             rfcv_data = parser.parse()
 
             # Vérifications basiques

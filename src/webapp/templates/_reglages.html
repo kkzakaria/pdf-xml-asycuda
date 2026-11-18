@@ -1,0 +1,67 @@
+{% macro texte(name, label, hint="") %}
+<label>{{ label }}{% if hint %} <small>{{ hint }}</small>{% endif %}
+  <input type="text" name="{{ name }}" value="{{ form.get(name, '') }}"></label>
+{% endmacro %}
+{% macro case(name, label) %}
+<label class="case"><input type="checkbox" name="{{ name }}" value="1"{% if form.get(name) %} checked{% endif %}> {{ label }}</label>
+{% endmacro %}
+{% macro montant(name, label, unite, vide) %}
+<div class="montant">
+  <label>{{ label }} <small>({{ unite }})</small>
+    <input type="text" inputmode="decimal" name="{{ name }}" value="{{ form.get(name, '') }}" placeholder="{{ vide }}"></label>
+  <label class="case"><input type="checkbox" name="{{ name }}_par_article" value="1"{% if form.get(name ~ '_par_article') %} checked{% endif %}>
+    par article{% if nb_articles %} (× {{ nb_articles }} articles){% else %} (× nombre d'articles du RFCV){% endif %}</label>
+</div>
+{% endmacro %}
+<h2>Réglages</h2>
+<div id="erreurs-reglages">
+{% if form_errors %}
+<div class="erreur" role="alert">
+  <p>Réglages invalides :</p>
+  <ul>{% for e in form_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+</div>
+<form class="reglages" method="post" action="/dossiers/{{ dossier.id }}/generer"
+      hx-post="/dossiers/{{ dossier.id }}/generer" hx-target="#recap" hx-swap="outerHTML"
+      hx-indicator="#generation-en-cours" hx-disabled-elt="#generer">
+  <fieldset>
+    <legend>Déclaration</legend>
+    <label>Profil société
+      <select name="profile">
+        <option value=""{% if not form.get('profile') %} selected{% endif %}>Aucun profil</option>
+        {% for p in profiles %}
+        <option value="{{ p }}"{% if form.get('profile') == p %} selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select></label>
+    {{ texte("dossier", "N° de dossier", "(facultatif)") }}
+    {{ texte("manifeste", "Manifeste", "(facultatif)") }}
+    {{ texte("nationalite_transport", "Nationalité du transport", "(facultatif)") }}
+    {{ texte("rapport_paiement", "Rapport de paiement", "(facultatif)") }}
+    {{ case("takikro", "Takikro (passage terrestre)") }}
+    {{ case("disp", "DISP (case 28)") }}
+    <label>Taux douanier
+      <input type="text" inputmode="decimal" name="taux_douane" value="{{ form.get('taux_douane', '') }}" required></label>
+    {{ texte("designation", "Désignation", "(marques case 31 et description commerciale)") }}
+  </fieldset>
+  <fieldset>
+    <legend>Valeurs</legend>
+    {{ montant("fob_revise", "FOB révisé", devise_unite, "FOB du RFCV") }}
+    <label>Répartition du FOB révisé
+      <select name="fob_mode">
+        {% for k, v in fob_modes.items() %}
+        <option value="{{ k }}"{% if form.get('fob_mode') == k %} selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select></label>
+    {{ montant("fret", "Fret", devise_unite, "fret du RFCV") }}
+    <label>Assurance
+      <select name="assurance_mode">
+        {% for k, v in assurance_modes.items() %}
+        <option value="{{ k }}"{% if form.get('assurance_mode') == k %} selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select></label>
+    {{ montant("assurance", "Assurance imposée", "XOF", "si « Imposée »") }}
+  </fieldset>
+  <button type="submit" id="generer">Générer</button>
+  <span id="generation-en-cours" class="htmx-indicator">Génération en cours…</span>
+</form>

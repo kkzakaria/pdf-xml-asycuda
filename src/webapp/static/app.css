@@ -1,0 +1,37 @@
+:root { --rouge: #b42318; --rouge-fond: #fef3f2; --ambre: #b54708; --ambre-fond: #fffaeb;
+        --vert: #067647; --gris: #667085; --bord: #d0d5dd; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #101828;
+       background: #fff; line-height: 1.4; }
+.entete { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .6rem 1rem;
+          border-bottom: 1px solid var(--bord); background: #f9fafb; }
+.entete .appli { font-weight: 600; color: inherit; text-decoration: none; }
+.entete nav a { margin-right: .8rem; }
+.entete .utilisateur { margin-left: auto; color: var(--gris); font-size: .9rem; }
+main { max-width: 72rem; margin: 0 auto; padding: 1rem; }
+table { border-collapse: collapse; width: 100%; margin: .5rem 0 1rem; }
+th, td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid var(--bord); vertical-align: top; }
+.nombre { text-align: right; white-space: nowrap; }
+.statut { font-size: .8rem; padding: .1rem .4rem; border-radius: .3rem; background: #f2f4f7; }
+.statut-declare { background: #ecfdf3; color: var(--vert); }
+.statut-annule { background: #f2f4f7; color: var(--gris); }
+.statut-abandonne { background: #f2f4f7; color: var(--gris); font-style: italic; }
+tr.abandonne td, tr.abandonne a { color: var(--gris); }
+.meta, small { color: var(--gris); }
+.erreur, .alerte-bloquante { color: var(--rouge); background: var(--rouge-fond); border-left: 4px solid var(--rouge); }
+.alerte-avertissement { color: var(--ambre); background: var(--ambre-fond); border-left: 4px solid var(--ambre); }
+.succes { border-left: 4px solid var(--vert); padding: .3rem .8rem; }
+.erreur { padding: .3rem .8rem; margin: .5rem 0; }
+.alertes { list-style: none; padding: 0; }
+.alertes li { padding: .4rem .6rem; margin: .3rem 0; }
+form.reglages fieldset { border: 1px solid var(--bord); margin: 0 0 .8rem; display: grid;
+                         grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .6rem 1rem; }
+form.reglages label { display: block; }
+form.reglages input[type=text], form.reglages select { display: block; width: 100%; padding: .3rem; }
+label.case { display: flex; gap: .4rem; align-items: center; }
+button { padding: .4rem .9rem; cursor: pointer; }
+button[disabled] { cursor: not-allowed; opacity: .5; }
+.declarer { margin: 1rem 0; }
+.htmx-indicator { display: none; color: var(--gris); }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline; }
+.recherche { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; }

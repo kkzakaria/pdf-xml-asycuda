@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Génération XML & corps{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<header class="entete">
+  <a class="appli" href="/">Génération XML & corps</a>
+  <nav>
+    <a href="/">Dossiers</a>
+    <a href="/nouveau">Nouveau</a>
+    {% if user.is_admin %}<a href="/chassis">Châssis</a>{% endif %}
+  </nav>
+  <span class="utilisateur">Connecté : {{ user.email }}{% if user.is_admin %} (administrateur){% endif %}</span>
+</header>
+<main>
+<div id="erreur-reseau" class="erreur" role="alert" hidden><p>Session expirée ou erreur réseau : rechargez la page.</p></div>
+{% block content %}{% endblock %}
+</main>
+<script>
+  // Requête htmx sans réponse (session Access expirée, réseau coupé) ou réponse en erreur
+  (function () {
+    function signaler() { document.getElementById("erreur-reseau").hidden = false; }
+    document.addEventListener("htmx:sendError", signaler);
+    document.addEventListener("htmx:responseError", signaler);
+  })();
+</script>
+</body>
+</html>

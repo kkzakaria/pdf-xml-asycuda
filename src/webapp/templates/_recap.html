@@ -1,0 +1,104 @@
+<div id="recap">
+{% if htmx %}<div id="erreurs-reglages" hx-swap-oob="true"></div>{% endif %}
+{% if htmx and message %}<div class="erreur" role="alert"><p>{{ message }}</p></div>{% endif %}
+{% if dossier.error %}
+<div class="erreur" role="alert"><p>{{ dossier.error }}</p></div>
+{% endif %}
+{% if summary %}
+{% set dev = summary.devise or "devise du RFCV" %}
+<h2>Récapitulatif{% if latest %} — génération n°{{ latest.n }}{% if dossier.error and not fige %} (précédente — la dernière tentative a échoué){% endif %}{% endif %}</h2>
+
+{% if summary.alertes %}
+<ul class="alertes">
+  {% for a in summary.alertes %}
+  <li class="{{ 'alerte-bloquante' if a.bloquante else 'alerte-avertissement' }}">
+    <strong>{{ "Bloquant" if a.bloquante else "À vérifier" }} :</strong> {{ a.message }}
+    {% if a.code == "code_sh_inhabituel" and user.is_admin %}{% set paire = a.message | paire_sh %}{% if paire %}
+    <form method="post" action="/chassis/code-sh-normal" class="en-ligne">
+      <input type="hidden" name="designation" value="{{ paire[0] }}">
+      <input type="hidden" name="hs_code" value="{{ paire[1] }}">
+      <input type="hidden" name="retour" value="/dossiers/{{ dossier.id }}">
+      <button type="submit">Marquer ce code SH comme normal</button>
+    </form>{% endif %}{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<table class="totaux">
+  <thead><tr><th></th><th class="nombre">Total</th><th>Par article</th></tr></thead>
+  <tbody>
+    <tr><th>Articles</th><td class="nombre">{{ summary.nb_articles }}</td><td></td></tr>
+    <tr><th>FOB (case 22, {{ dev }})</th><td class="nombre">{{ summary.fob_total | montant }} {{ dev }}</td>
+      <td>{{ summary.valeurs_articles.get("fob") | valeurs }}</td></tr>
+    <tr><th>Fret ({{ dev }})</th><td class="nombre">{{ summary.fret_total | montant }} {{ dev }}</td>
+      <td>{{ summary.valeurs_articles.get("fret") | valeurs }}</td></tr>
+    <tr><th>Assurance (XOF)</th><td class="nombre">{{ summary.assurance_total | montant }} XOF</td>
+      <td>{{ summary.valeurs_articles.get("assurance") | valeurs }}</td></tr>
+    <tr><th>CIF (XOF)</th><td class="nombre">{{ summary.cif_total | montant }} XOF</td>
+      <td>{{ summary.valeurs_articles.get("cif") | valeurs }}</td></tr>
+    <tr><th>Colis (case 6)</th><td class="nombre">{{ summary.colis | montant }}</td><td></td></tr>
+    <tr><th>Poids brut / net (kg)</th><td class="nombre">{{ summary.poids_brut | montant }} / {{ summary.poids_net | montant }}</td><td></td></tr>
+    <tr><th>VIN</th><td class="nombre">{{ summary.nb_vin }}</td><td></td></tr>
+  </tbody>
+</table>
+
+<h3>Cases clés du corps</h3>
+<table class="cases">
+  {% for key, label in cases %}
+  <tr><th>{{ label }}</th><td><code>{{ summary.cases.get(key, "") }}</code></td></tr>
+  {% endfor %}
+</table>
+
+{% if summary.ecarts %}
+<h3>Écarts par rapport au RFCV</h3>
+<ul>{% for e in summary.ecarts %}<li>{{ e }}</li>{% endfor %}</ul>
+{% endif %}
+
+<h3>Fichiers</h3>
+<ul class="fichiers">
+  <li><a href="/dossiers/{{ dossier.id }}/fichiers/{{ latest.n }}/xml">XML ASYCUDA</a></li>
+  <li><a href="/dossiers/{{ dossier.id }}/fichiers/{{ latest.n }}/corps">Corps SYDAM</a></li>
+  <li><a href="/dossiers/{{ dossier.id }}/fichiers/{{ latest.n }}/pdf">PDF d'origine</a></li>
+</ul>
+{% else %}
+<p>Aucune génération pour l'instant.</p>
+{% endif %}
+
+{% if not fige %}
+<form method="post" action="/dossiers/{{ dossier.id }}/declarer" class="declarer"
+      onsubmit="return confirm('Confirmer : ce dossier a été déclaré dans SYDAM ? Ses châssis seront enregistrés.')">
+  <button type="submit" id="declarer"{% if not can_declare %} disabled{% endif %}>Déclaré dans SYDAM</button>
+  {% if not summary %}<small>Générer le dossier avant de le déclarer.</small>
+  {% elif dossier.error %}<small>La dernière génération a échoué : régénérer avant de déclarer.</small>
+  {% elif summary.bloquante %}<small>Alerte bloquante : corriger puis régénérer.</small>
+  {% elif rfcv_illisible %}<small>{{ rfcv_illisible }}.</small>{% endif %}
+</form>
+{% endif %}
+
+{% if generations %}
+<h3>Historique des générations</h3>
+<table class="historique">
+  <thead><tr><th>Génération</th><th>Le</th><th>Par</th><th>Fichiers</th></tr></thead>
+  <tbody>
+  {% for g in generations %}
+  <tr><td>Génération {{ g.n }}</td><td>{{ g.created_at[:16] | replace("T", " ") }}</td><td>{{ g.created_by }}</td>
+    <td><a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/xml">XML</a>
+      · <a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/corps">corps</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if events %}
+<h3>Historique du dossier</h3>
+<table class="historique">
+  <thead><tr><th>Le</th><th>Par</th><th>Action</th><th>Détail</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+  <tr><td>{{ e.at[:16] | replace("T", " ") }}</td><td>{{ e.email }}</td>
+    <td>{{ ACTIONS.get(e.action, e.action) }}</td><td>{{ e.detail or "" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+</div>

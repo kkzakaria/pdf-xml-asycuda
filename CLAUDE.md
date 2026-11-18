@@ -179,6 +179,11 @@ item `Kind_of_packages_code` = `PK` (box 31).
 `--disp` (API `disp=true`): `Financial/Bank/Code` = `DISP` (box 28, dispense de domiciliation),
 overriding the profile `banque_code`.
 
+Single-file only (rejected in batch, spec §5.7): `--fob-revise` with `--fob-mode prorata|uniforme`,
+`--fret-impose` (total, RFCV currency), `--assurance-imposee` (total, XOF), `--designation` (applied with
+`designation.apply_designation` after `apply_profile`, same order as `generation.generate`, so outputs are
+byte-identical to the webapp for equal settings).
+
 `--corps` (CLI single + batch): also writes `corps_<xml stem>.txt` next to the XML. Corps output must
 stay byte-identical to sydam-api `tools/xml_to_corps.py` for the same XML (field map in `GENERAL`/`ITEM`).
 
@@ -255,8 +260,10 @@ API_PROFILES_DIR=profils      # company profiles (*.ini), copied into the Docker
 
 ## Chassis Registry Caution
 
-Every conversion of an RFCV with VINs registers them in `data/chassis_registry.db`; a second
-conversion of the same RFCV raises `DuplicateChassisError` (HTTP 409) unless `force_reprocess`.
+A conversion only CHECKS VINs against `data/chassis_registry.db` ("registered" = declared in SYDAM):
+it writes nothing by default (CLI warns on duplicates, API passes `register_chassis=False`).
+Recording happens at declaration (web app "Déclaré dans SYDAM") or with CLI `--enregistrer-chassis`,
+which registers and raises `DuplicateChassisError` (HTTP 409 route mapping) on a duplicate unless `force_reprocess`.
 In tests and experiments, pass `registry=ChassisRegistry(tmp_path / "registry.db")` to
 `RFCVParser` instead of using the repository database.
 

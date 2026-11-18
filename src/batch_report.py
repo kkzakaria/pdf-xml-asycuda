@@ -54,7 +54,8 @@ class BatchReportGenerator:
                 'success': result.success,
                 'output_file': result.output_file,
                 'processing_time': round(result.processing_time, 3),
-                'error': result.error_message if not result.success else None
+                'error': result.error_message if not result.success else None,
+                'chassis_conflicts': result.chassis_conflicts
             }
 
             # Ajouter les métriques si disponibles
@@ -90,7 +91,7 @@ class BatchReportGenerator:
             fieldnames = [
                 'file', 'success', 'output_file', 'processing_time',
                 'items_count', 'containers_count', 'fill_rate',
-                'xml_valid', 'warnings_count', 'error'
+                'xml_valid', 'warnings_count', 'error', 'chassis_warning'
             ]
 
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -108,7 +109,8 @@ class BatchReportGenerator:
                     'fill_rate': round(result.metrics.fields_filled_rate, 1) if result.metrics else '',
                     'xml_valid': 'Yes' if result.metrics and result.metrics.xml_valid else 'No',
                     'warnings_count': len(result.metrics.warnings) if result.metrics else '',
-                    'error': result.error_message if not result.success else ''
+                    'error': result.error_message if not result.success else '',
+                    'chassis_warning': result.conflict_warning() or ''
                 }
                 writer.writerow(row)
 
@@ -182,6 +184,14 @@ class BatchReportGenerator:
             for result in failed_results:
                 lines.append(f"### {Path(result.pdf_file).name}\n")
                 lines.append(f"**Erreur**: `{result.error_message}`\n")
+
+        # Doublons de châssis (contrôle seul)
+        conflict_results = [r for r in self.batch_results['results'] if r.chassis_conflicts]
+        if conflict_results:
+            lines.append("\n## ⚠️ Châssis déjà traités\n")
+            for result in conflict_results:
+                lines.append(f"- **{Path(result.pdf_file).name}** : {result.conflict_warning()}")
+            lines.append("")
 
         # Performance
         lines.append("\n## ⚡ Performance\n")
