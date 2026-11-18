@@ -7,6 +7,7 @@ import logging
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import asyncio
@@ -21,7 +22,7 @@ from slowapi.errors import RateLimitExceeded
 from .routes import convert, batch, files, health, chassis, stats, profiles, corps
 from starlette.middleware.base import BaseHTTPMiddleware
 from webapp.auth import access_guard, log_startup_mode
-from webapp.pages import router as webapp_router
+from webapp.routes import STATIC_DIR as WEBAPP_STATIC_DIR, router as webapp_router
 
 # Configuration centralisée du logging
 configure_logging(settings)
@@ -251,6 +252,8 @@ app.include_router(stats.router)
 app.include_router(profiles.router)
 app.include_router(corps.router)
 app.include_router(webapp_router)
+# Fichiers statiques de la webapp (CSS, htmx) : derrière le garde Access comme le reste
+app.mount("/static", StaticFiles(directory=WEBAPP_STATIC_DIR), name="webapp-static")
 
 
 # Description de l'API (l'ancienne route racine ; « / » sert désormais la webapp)

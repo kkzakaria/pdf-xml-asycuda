@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ dossier.rfcv_number or ("Dossier " ~ dossier.id) }} · Génération XML & corps{% endblock %}
+{% block content %}
+<h1>{{ dossier.rfcv_number or "RFCV non lu" }}
+  <span class="statut statut-{{ dossier.status }}">{{ STATUTS.get(dossier.status, dossier.status) }}</span></h1>
+<p class="meta">Dossier {{ dossier.id }} · {{ dossier.filename }} · déposé le {{ dossier.created_at[:16] | replace("T", " ") }}
+  par {{ dossier.created_by }}
+  {% if dossier.declared_at %} · déclaré dans SYDAM le {{ dossier.declared_at[:16] | replace("T", " ") }}
+  par {{ dossier.declared_by }}{% endif %}</p>
+
+{% if message %}
+<div class="erreur" role="alert">
+  <p>{{ message }}</p>
+  {% if conflicts %}
+  <ul>{% for c in conflicts %}<li>{{ c.chassis_number }} : RFCV {{ c.rfcv_number or "?" }} ({{ c.filename or "?" }})</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if fige %}
+<p class="fige">Dossier figé : ses fichiers ne sont plus régénérés.</p>
+{% if user.is_admin and dossier.status == "declare" %}
+<form method="post" action="/dossiers/{{ dossier.id }}/brouillon"
+      onsubmit="return confirm('Remettre ce dossier en brouillon ? Ses châssis seront retirés du registre.')">
+  <button type="submit">Remettre en brouillon</button>
+</form>
+{% endif %}
+{% else %}
+<section id="reglages">
+{% include "_reglages.html" %}
+</section>
+{% endif %}
+
+{% include "_recap.html" %}
+{% endblock %}

@@ -10,6 +10,7 @@ l'e-mail du jeton.
 """
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -105,19 +106,40 @@ def make_user(email: str, settings: config.WebappSettings) -> User:
 _initialized_dbs: set[str] = set()
 _db_lock = threading.Lock()
 
+# Dernière visite enregistrée par (base, e-mail) : au plus une écriture par minute.
+RECORD_INTERVAL_SECONDS = 60
+_last_recorded: dict[tuple[str, str], float] = {}
+
 
 def record_user(email: str, settings: config.WebappSettings) -> None:
-    """Crée la base au besoin et enregistre la visite de l'utilisateur."""
+    """
+    Crée la base au besoin et enregistre la visite de l'utilisateur, au plus une fois par
+    minute et par e-mail. Une erreur de base est journalisée, jamais propagée : la requête
+    de l'utilisateur ne doit pas échouer pour la mise à jour de sa dernière visite.
+    """
     path = settings.db_path
-    conn = db.connect(path)
+    key = (str(path.resolve()), email)
+    now = time.monotonic()
+    with _db_lock:
+        last = _last_recorded.get(key)
+        if last is not None and now - last < RECORD_INTERVAL_SECONDS:
+            return
+        _last_recorded[key] = now
     try:
+        conn = db.connect(path)
+        try:
+            with _db_lock:
+                if key[0] not in _initialized_dbs:
+                    db.init(conn)
+                    _initialized_dbs.add(key[0])
+            db.upsert_user(conn, email)
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("Enregistrement de la visite de %s", email)
         with _db_lock:
-            if str(path.resolve()) not in _initialized_dbs:
-                db.init(conn)
-                _initialized_dbs.add(str(path.resolve()))
-        db.upsert_user(conn, email)
-    finally:
-        conn.close()
+            if _last_recorded.get(key) == now:
+                del _last_recorded[key]     # nouvel essai à la prochaine requête
 
 
 def _authenticate(token: str | None, settings: config.WebappSettings) -> User:

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Nouveau · Génération XML & corps{% endblock %}
+{% block content %}
+<h1>Nouveaux dossiers</h1>
+{% if errors %}
+<div class="erreur">
+  <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if created %}
+<div class="succes">
+  <p>Dossiers créés :</p>
+  <ul>{% for id, name in created %}<li><a href="/dossiers/{{ id }}">{{ name }}</a></li>{% endfor %}</ul>
+</div>
+{% endif %}
+<form method="post" action="/nouveau" enctype="multipart/form-data">
+  <p>Chaque PDF RFCV déposé devient un dossier en brouillon.</p>
+  <input type="file" name="fichiers" accept="application/pdf,.pdf" multiple required>
+  <button type="submit">Déposer</button>
+</form>
+{% endblock %}

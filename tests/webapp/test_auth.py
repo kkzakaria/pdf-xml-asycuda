@@ -167,3 +167,30 @@ def test_jwks_source_url_and_cache(monkeypatch, rsa_key, make_token, webapp_sett
 def jwt_algorithms_rsa():
     from jwt.algorithms import RSAAlgorithm
     return RSAAlgorithm
+
+
+def test_record_user_throttled(webapp_settings, monkeypatch):
+    """Au plus une écriture par minute et par e-mail ; une erreur de base ne casse pas la requête."""
+    s = webapp_settings()
+    calls = []
+    original = auth.db.upsert_user
+    monkeypatch.setattr(auth.db, "upsert_user", lambda conn, email: (calls.append(email), original(conn, email)))
+    clock = [1000.0]
+    monkeypatch.setattr(auth.time, "monotonic", lambda: clock[0])
+    auth.record_user("a@karta.ci", s)
+    auth.record_user("a@karta.ci", s)
+    auth.record_user("b@karta.ci", s)
+    assert calls == ["a@karta.ci", "b@karta.ci"]
+    clock[0] += 61
+    auth.record_user("a@karta.ci", s)
+    assert calls == ["a@karta.ci", "b@karta.ci", "a@karta.ci"]
+
+    def broken(conn, email):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(auth.db, "upsert_user", broken)
+    clock[0] += 61
+    auth.record_user("a@karta.ci", s)          # journalisé, pas d'exception
+    monkeypatch.setattr(auth.db, "upsert_user", lambda conn, email: calls.append(email))
+    auth.record_user("a@karta.ci", s)          # l'échec n'a pas compté comme une visite
+    assert calls[-1] == "a@karta.ci" and len(calls) == 4

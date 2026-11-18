@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Dossiers · Génération XML & corps{% endblock %}
+{% block content %}
+<h1>Dossiers</h1>
+<form class="recherche" method="get" action="/">
+  <label for="q">N° RFCV ou VIN</label>
+  <input id="q" name="q" type="search" value="{{ q }}">
+  <button type="submit">Rechercher</button>
+  {% if q %}<a href="/">Tout afficher</a>{% endif %}
+</form>
+{% if dossiers %}
+<table>
+  <thead><tr><th>RFCV</th><th>Fichier</th><th>Déposé le</th><th>Par</th><th>Statut</th>
+    <th class="nombre">Articles</th><th class="nombre">FOB</th></tr></thead>
+  <tbody>
+  {% for d in dossiers %}
+  <tr>
+    <td><a href="/dossiers/{{ d.id }}">{{ d.rfcv_number or ("Dossier " ~ d.id) }}</a></td>
+    <td>{{ d.filename }}</td>
+    <td>{{ d.created_at[:16] | replace("T", " ") }}</td>
+    <td>{{ d.created_by }}</td>
+    <td><span class="statut statut-{{ d.status }}">{{ STATUTS.get(d.status, d.status) }}</span>
+      {% if d.error %}<span class="alerte-avertissement" title="{{ d.error }}">échec</span>{% endif %}</td>
+    <td class="nombre">{{ d.nb_articles if d.nb_articles is not none else "—" }}</td>
+    <td class="nombre">{% if d.fob_total is not none %}{{ d.fob_total | montant }} {{ d.devise or "" }}{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% elif q %}
+<p>Aucun dossier pour « {{ q }} ».</p>
+{% else %}
+<p>Aucun dossier. <a href="/nouveau">Déposer des RFCV</a>.</p>
+{% endif %}
+{% endblock %}
