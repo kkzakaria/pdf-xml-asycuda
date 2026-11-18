@@ -46,14 +46,14 @@
   </fieldset>
   <fieldset>
     <legend>Valeurs</legend>
-    {{ montant("fob_revise", "FOB révisé", "devise du RFCV : " ~ devise, "FOB du RFCV") }}
+    {{ montant("fob_revise", "FOB révisé", devise_unite, "FOB du RFCV") }}
     <label>Répartition du FOB révisé
       <select name="fob_mode">
         {% for k, v in fob_modes.items() %}
         <option value="{{ k }}"{% if form.get('fob_mode') == k %} selected{% endif %}>{{ v }}</option>
         {% endfor %}
       </select></label>
-    {{ montant("fret", "Fret", "devise du RFCV : " ~ devise, "fret du RFCV") }}
+    {{ montant("fret", "Fret", devise_unite, "fret du RFCV") }}
     <label>Assurance
       <select name="assurance_mode">
         {% for k, v in assurance_modes.items() %}

@@ -195,7 +195,9 @@ async def test_mark_hs_known_silences_alert(client, as_user, fake_pdf):
     r = await client.post("/chassis/code-sh-normal", data={"designation": m.group(1), "hs_code": m.group(2),
                                                            "retour": "https://evil.example/"})
     assert r.status_code == 303 and r.headers["location"].startswith("/chassis")
-    assert (await client.get("/chassis")).text.count(m.group(2)) == 1
+    page = (await client.get("/chassis")).text
+    assert page[page.index("<h2>Codes SH habituels</h2>"):].count(m.group(2)) == 1
+    assert page[page.index("Dernières actions"):].count("Code SH habituel") == 1     # une seule fois au journal
     await generer(client, d)
     assert "jamais déclaré" not in (await client.get(f"/dossiers/{d}")).text
     # champs vides : message, pas d'erreur 500

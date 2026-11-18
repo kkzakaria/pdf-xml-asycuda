@@ -14,7 +14,7 @@
     <th class="nombre">Articles</th><th class="nombre">FOB</th></tr></thead>
   <tbody>
   {% for d in dossiers %}
-  <tr>
+  <tr{% if d.status == "abandonne" %} class="abandonne"{% endif %}>
     <td><a href="/dossiers/{{ d.id }}">{{ d.rfcv_number or ("Dossier " ~ d.id) }}</a></td>
     <td>{{ d.filename }}</td>
     <td>{{ d.created_at[:16] | replace("T", " ") }}</td>

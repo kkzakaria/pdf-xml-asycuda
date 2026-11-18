@@ -18,7 +18,16 @@
   <span class="utilisateur">Connecté : {{ user.email }}{% if user.is_admin %} (administrateur){% endif %}</span>
 </header>
 <main>
+<div id="erreur-reseau" class="erreur" role="alert" hidden><p>Session expirée ou erreur réseau : rechargez la page.</p></div>
 {% block content %}{% endblock %}
 </main>
+<script>
+  // Requête htmx sans réponse (session Access expirée, réseau coupé) ou réponse en erreur
+  (function () {
+    function signaler() { document.getElementById("erreur-reseau").hidden = false; }
+    document.addEventListener("htmx:sendError", signaler);
+    document.addEventListener("htmx:responseError", signaler);
+  })();
+</script>
 </body>
 </html>

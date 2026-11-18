@@ -315,3 +315,119 @@ async def test_cross_site_post_rejected(client, as_user, fake_pdf):
 async def test_api_routes_not_subject_to_origin_check(client, as_user):
     r = await client.get("/api", headers={"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"})
     assert r.status_code == 200
+
+
+# ------------------------------------------------------------------ revue finale
+async def test_dossier_page_shows_history(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await generate(client, d)
+    await client.post(f"/dossiers/{d}/declarer")
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "Historique du dossier" in page
+    hist = page[page.index("Historique du dossier"):]
+    # le plus récent d'abord : déclaration, génération, dépôt
+    assert hist.index("Déclaré dans SYDAM") < hist.index("Génération") < hist.index("Dépôt")
+    assert OP in hist
+    # n° de la génération déclarée
+    assert "génération 1 déclarée" in page
+
+
+async def test_chassis_page_shows_recent_admin_actions(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await generate(client, d)
+    await client.post(f"/dossiers/{d}/declarer")
+    as_user(CHEF)
+    r = await client.post("/chassis/annuler", data={"rfcv": "RCSA6099999", "motif": "éclaté en deux"})
+    assert r.status_code == 303
+    page = (await client.get("/chassis")).text
+    assert "Dernières actions" in page
+    actions = page[page.index("Dernières actions"):]
+    assert "RFCV annulé" in actions and CHEF in actions and "éclaté en deux" in actions
+
+
+async def test_abandon_and_reopen_pages(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "Abandonner ce brouillon" in page and "confirm(" in page
+    # un autre opérateur ne voit pas le bouton et est refusé
+    as_user("autre@karta.ci")
+    assert "Abandonner ce brouillon" not in (await client.get(f"/dossiers/{d}")).text
+    assert (await client.post(f"/dossiers/{d}/abandonner")).status_code == 403
+    as_user(OP)
+    r = await client.post(f"/dossiers/{d}/abandonner")
+    assert r.status_code == 303
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "Abandonné" in page and 'name="taux_douane"' not in page and "Rouvrir" not in page
+    assert (await client.post(f"/dossiers/{d}/abandonner")).status_code == 409
+    liste = (await client.get("/")).text
+    assert 'class="abandonne"' in liste and "Abandonné" in liste
+    assert (await client.post(f"/dossiers/{d}/reouvrir")).status_code == 403
+    as_user(CHEF)
+    assert "Rouvrir" in (await client.get(f"/dossiers/{d}")).text
+    assert (await client.post(f"/dossiers/{d}/reouvrir")).status_code == 303
+    assert 'name="taux_douane"' in (await client.get(f"/dossiers/{d}")).text
+
+
+async def test_failed_regeneration_labels_previous_and_blocks_declare(client, as_user, fake_pdf, monkeypatch):
+    import webapp.dossiers as dossiers_mod
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    assert "disabled" not in declare_button(r.text)
+    original = dossiers_mod.generate_drafts
+
+    def boom(*a, **kw):
+        raise RuntimeError("moteur en panne")
+
+    monkeypatch.setattr(dossiers_mod, "generate_drafts", boom)
+    r = await generate(client, d)
+    monkeypatch.setattr(dossiers_mod, "generate_drafts", original)
+    assert "moteur en panne" in r.text
+    assert "précédente — la dernière tentative a échoué" in r.text
+    assert "disabled" in declare_button(r.text)
+    r = await generate(client, d)
+    assert "précédente" not in r.text and "disabled" not in declare_button(r.text)
+
+
+async def test_zero_amounts_rejected(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    for field, label in (("fob_revise", "FOB révisé"), ("fret", "Fret"), ("assurance", "Assurance")):
+        extra = {"assurance_mode": "imposee"} if field == "assurance" else {}
+        r = await client.post(f"/dossiers/{d}/generer", data=form(**{field: "0"}, **extra))
+        assert r.status_code == 422, field
+        assert f"{label} : le montant doit être strictement positif" in r.text
+    assert "Génération 1" not in (await client.get(f"/dossiers/{d}")).text
+
+
+async def test_htmx_error_handler_in_layout(client, as_user):
+    page = (await client.get("/nouveau")).text
+    assert "htmx:sendError" in page and "htmx:responseError" in page
+    assert "Session expirée ou erreur réseau : rechargez la page." in page
+
+
+async def test_original_pdf_download_without_generation(client, as_user, fake_pdf):
+    d = await new_dossier(client, "a.pdf")
+    r = await client.get(f"/dossiers/{d}/pdf")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert 'filename="a.pdf"' in r.headers["content-disposition"]
+    assert r.content == pdf_bytes(MULTILINE_TEXT)
+    assert f'href="/dossiers/{d}/pdf"' in (await client.get(f"/dossiers/{d}")).text
+    assert (await client.get("/dossiers/999/pdf")).status_code == 404
+
+
+async def test_original_pdf_path_confined(client, as_user, fake_pdf, tmp_path):
+    import sqlite3
+    d = await new_dossier(client, "a.pdf")
+    secret = tmp_path / "secret.pdf"
+    secret.write_bytes(b"%PDF secret")
+    conn = sqlite3.connect(tmp_path / "webapp" / "webapp.db")
+    conn.execute("UPDATE dossiers SET pdf_path = ? WHERE id = ?", (str(secret), d))
+    conn.commit()
+    conn.close()
+    assert (await client.get(f"/dossiers/{d}/pdf")).status_code == 404
+
+
+async def test_currency_label_before_first_generation(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "devise du RFCV : devise du RFCV" not in page
+    assert "(devise du RFCV)" in page

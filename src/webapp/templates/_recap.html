@@ -6,7 +6,7 @@
 {% endif %}
 {% if summary %}
 {% set dev = summary.devise or "devise du RFCV" %}
-<h2>Récapitulatif{% if latest %} — génération {{ latest.n }}{% endif %}</h2>
+<h2>Récapitulatif{% if latest %} — génération n°{{ latest.n }}{% if dossier.error and not fige %} (précédente — la dernière tentative a échoué){% endif %}{% endif %}</h2>
 
 {% if summary.alertes %}
 <ul class="alertes">
@@ -69,6 +69,7 @@
       onsubmit="return confirm('Confirmer : ce dossier a été déclaré dans SYDAM ? Ses châssis seront enregistrés.')">
   <button type="submit" id="declarer"{% if not can_declare %} disabled{% endif %}>Déclaré dans SYDAM</button>
   {% if not summary %}<small>Générer le dossier avant de le déclarer.</small>
+  {% elif dossier.error %}<small>La dernière génération a échoué : régénérer avant de déclarer.</small>
   {% elif summary.bloquante %}<small>Alerte bloquante : corriger puis régénérer.</small>{% endif %}
 </form>
 {% endif %}
@@ -82,6 +83,19 @@
   <tr><td>Génération {{ g.n }}</td><td>{{ g.created_at[:16] | replace("T", " ") }}</td><td>{{ g.created_by }}</td>
     <td><a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/xml">XML</a>
       · <a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/corps">corps</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if events %}
+<h3>Historique du dossier</h3>
+<table class="historique">
+  <thead><tr><th>Le</th><th>Par</th><th>Action</th><th>Détail</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+  <tr><td>{{ e.at[:16] | replace("T", " ") }}</td><td>{{ e.email }}</td>
+    <td>{{ ACTIONS.get(e.action, e.action) }}</td><td>{{ e.detail or "" }}</td></tr>
   {% endfor %}
   </tbody>
 </table>

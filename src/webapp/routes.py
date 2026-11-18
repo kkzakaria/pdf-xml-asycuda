@@ -53,8 +53,14 @@ def _paire_sh(message: str):
 _env.filters["paire_sh"] = _paire_sh
 templates = Jinja2Templates(env=_env)
 
-STATUTS = {"brouillon": "Brouillon", "declare": "Déclaré", "annule": "Annulé"}
+STATUTS = {"brouillon": "Brouillon", "declare": "Déclaré", "annule": "Annulé", "abandonne": "Abandonné"}
 _env.globals["STATUTS"] = STATUTS
+ACTIONS = {"creation": "Dépôt", "generation": "Génération", "generation_echec": "Échec de génération",
+           "generation_abandonnee": "Génération abandonnée", "declaration": "Déclaré dans SYDAM",
+           "declaration_refusee": "Déclaration refusée", "retour_brouillon": "Remis en brouillon",
+           "abandon": "Abandonné", "reouverture": "Rouvert", "rfcv_annule": "RFCV annulé",
+           "rfcv_restaure": "RFCV restauré", "code_sh_normal": "Code SH habituel"}
+_env.globals["ACTIONS"] = ACTIONS
 CASES = [("Fcx_Aa", "Bureau (case A)"), ("Fcx_29a", "Bureau d'entrée / sortie (case 29)"),
          ("Fcx_10", "Case 10"), ("Fcx_18b", "Case 18"), ("Fcx_28b", "Case 28 (banque)"),
          ("Fcx_31f", "Case 31, article 1"), ("Fld_40", "Case 40, article 1")]
@@ -186,7 +192,7 @@ def form_to_settings(values: dict[str, str]) -> tuple[Optional[GenerationSetting
     taux = _parse_number(values.get("taux_douane", ""), "Taux douanier", errors, required=True, positive=True)
 
     def amount(key, label):
-        v = _parse_number(values.get(key, ""), label, errors)
+        v = _parse_number(values.get(key, ""), label, errors, positive=True)
         return Amount(v, bool(values.get(f"{key}_par_article"))) if v is not None else None
 
     fob = amount("fob_revise", "FOB révisé")
@@ -243,10 +249,12 @@ def _dossier_context(svc: DossierService, dossier_id: int, form: Optional[dict] 
     return {
         "dossier": dossier, "generations": generations, "summary": summary, "fige": fige,
         "latest": generations[0] if generations else None,
-        "can_declare": not fige and summary is not None and not summary.bloquante,
+        "can_declare": not fige and summary is not None and not summary.bloquante and not dossier["error"],
+        "can_abandon": dossier["status"] == "brouillon",
+        "events": svc.events(dossier_id),
         "form": form or {}, "form_errors": form_errors or [], "profiles": list(_profiles()),
         "fob_modes": FOB_MODES, "assurance_modes": ASSURANCE_LIBELLES, "cases": CASES,
-        "devise": (summary.devise if summary else None) or "devise du RFCV",
+        "devise_unite": f"devise du RFCV : {summary.devise}" if summary and summary.devise else "devise du RFCV",
         "nb_articles": summary.nb_articles if summary else None,
     }
 
@@ -336,6 +344,32 @@ def declarer(request: Request, dossier_id: int, user: User = Depends(current_use
     return RedirectResponse(f"/dossiers/{dossier_id}", status_code=303)
 
 
+@router.post("/dossiers/{dossier_id}/abandonner")
+def abandonner(request: Request, dossier_id: int, user: User = Depends(current_user),
+               svc: DossierService = Depends(get_service)):
+    _get_dossier(svc, dossier_id)
+    try:
+        svc.abandon(user, dossier_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except DossierFige as exc:
+        return _render(request, "dossier.html", user, status_code=409, message=str(exc),
+                       **_dossier_context(svc, dossier_id))
+    return RedirectResponse(f"/dossiers/{dossier_id}", status_code=303)
+
+
+@router.post("/dossiers/{dossier_id}/reouvrir")
+def reouvrir(request: Request, dossier_id: int, admin: User = Depends(require_admin),
+             svc: DossierService = Depends(get_service)):
+    _get_dossier(svc, dossier_id)
+    try:
+        svc.reopen(admin, dossier_id)
+    except ValueError as exc:
+        return _render(request, "dossier.html", admin, status_code=409, message=str(exc),
+                       **_dossier_context(svc, dossier_id))
+    return RedirectResponse(f"/dossiers/{dossier_id}", status_code=303)
+
+
 @router.post("/dossiers/{dossier_id}/brouillon")
 def brouillon(request: Request, dossier_id: int, admin: User = Depends(require_admin),
               svc: DossierService = Depends(get_service)):
@@ -364,7 +398,7 @@ def _chassis_context(svc: DossierService, vin: str = "", notice: str = "", error
         "entry": svc.registry.get_entry(vin) if vin else None,
         "history": svc.registry.get_cancelled(chassis_number=vin) if vin else [],
         "vin_dossiers": svc.list(vin) if vin else [],
-        "cancelled": list(groups.values()), "hs_known": svc.hs_known(),
+        "cancelled": list(groups.values()), "hs_known": svc.hs_known(), "events": svc.recent_events(),
     }
 
 
@@ -392,6 +426,8 @@ def chassis_annuler(request: Request, values: dict = Depends(form_data),
     except ValueError as exc:
         return _chassis_error(request, admin, svc, str(exc)[:1].upper() + str(exc)[1:],
                               form={"rfcv": rfcv, "motif": motif})
+    if not cancelled:                   # reprise : châssis déjà annulés dans le registre
+        return _chassis_redirect(f"RFCV {rfcv} : annulation reprise, ses dossiers déclarés passent « Annulé »")
     return _chassis_redirect(f"RFCV {rfcv} annulé : {len(cancelled)} châssis libérés")
 
 
@@ -424,6 +460,25 @@ def chassis_code_sh_normal(request: Request, values: dict = Depends(form_data),
 
 
 # ------------------------------------------------------------------ téléchargements
+def _send_stored(svc: DossierService, dossier: dict, path: Optional[str], kind: str, filename: str):
+    """Fichier enregistré du dossier, confiné à son dossier sur le disque (aucun chemin ne vient de l'URL)."""
+    introuvable = HTTPException(status_code=404, detail="Fichier introuvable")
+    if not path:
+        raise introuvable
+    resolved = Path(path).resolve()
+    folder = (Path(svc.settings.data_dir) / "dossiers" / str(dossier["id"])).resolve()
+    if not resolved.is_relative_to(folder) or not resolved.is_file():
+        raise introuvable
+    return FileResponse(resolved, media_type=FICHIERS[kind], filename=filename)
+
+
+@router.get("/dossiers/{dossier_id}/pdf")
+def pdf_origine(dossier_id: int, svc: DossierService = Depends(get_service)):
+    """PDF d'origine du dossier, disponible dès le dépôt."""
+    dossier = _get_dossier(svc, dossier_id)
+    return _send_stored(svc, dossier, dossier["pdf_path"], "pdf", dossier["filename"])
+
+
 @router.get("/dossiers/{dossier_id}/fichiers/{n}/{kind}")
 def fichier(dossier_id: int, n: int, kind: str, svc: DossierService = Depends(get_service)):
     """Fichiers enregistrés pour ce dossier et cette génération : aucun chemin ne vient de l'URL."""
@@ -435,12 +490,6 @@ def fichier(dossier_id: int, n: int, kind: str, svc: DossierService = Depends(ge
     if generation is None:
         raise introuvable
     path = {"xml": generation["xml_path"], "corps": generation["corps_path"], "pdf": dossier["pdf_path"]}[kind]
-    if not path:
-        raise introuvable
-    path = Path(path).resolve()
-    folder = (Path(svc.settings.data_dir) / "dossiers" / str(dossier_id)).resolve()
-    if not path.is_relative_to(folder) or not path.is_file():
-        raise introuvable
     stem = Path(dossier["filename"]).stem
     filename = {"xml": f"{stem}.xml", "corps": f"corps_{stem}.txt", "pdf": dossier["filename"]}[kind]
-    return FileResponse(path, media_type=FICHIERS[kind], filename=filename)
+    return _send_stored(svc, dossier, path, kind, filename)

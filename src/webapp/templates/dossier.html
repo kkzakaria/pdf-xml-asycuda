@@ -6,7 +6,8 @@
 <p class="meta">Dossier {{ dossier.id }} · {{ dossier.filename }} · déposé le {{ dossier.created_at[:16] | replace("T", " ") }}
   par {{ dossier.created_by }}
   {% if dossier.declared_at %} · déclaré dans SYDAM le {{ dossier.declared_at[:16] | replace("T", " ") }}
-  par {{ dossier.declared_by }}{% endif %}</p>
+  par {{ dossier.declared_by }}{% if dossier.declared_n %} (génération {{ dossier.declared_n }} déclarée){% endif %}{% endif %}
+  · <a href="/dossiers/{{ dossier.id }}/pdf">PDF d'origine</a></p>
 
 {% if message %}
 <div class="erreur" role="alert">
@@ -18,7 +19,17 @@
 {% endif %}
 
 {% if fige %}
+{% if dossier.status == "abandonne" %}
+<p class="fige">Brouillon abandonné : il n'est plus généré ni déclaré.</p>
+{% if user.is_admin %}
+<form method="post" action="/dossiers/{{ dossier.id }}/reouvrir"
+      onsubmit="return confirm('Rouvrir ce dossier ? Il redevient un brouillon.')">
+  <button type="submit">Rouvrir le dossier</button>
+</form>
+{% endif %}
+{% else %}
 <p class="fige">Dossier figé : ses fichiers ne sont plus régénérés.</p>
+{% endif %}
 {% if user.is_admin and dossier.status == "declare" %}
 <form method="post" action="/dossiers/{{ dossier.id }}/brouillon"
       onsubmit="return confirm('Remettre ce dossier en brouillon ? Ses châssis seront retirés du registre.')">
@@ -32,4 +43,11 @@
 {% endif %}
 
 {% include "_recap.html" %}
+
+{% if can_abandon and (user.is_admin or user.email == dossier.created_by) %}
+<form method="post" action="/dossiers/{{ dossier.id }}/abandonner" class="abandonner"
+      onsubmit="return confirm('Abandonner ce brouillon (dépôt erroné ou en double) ? Il restera visible, grisé, mais ne sera plus généré ni déclaré.')">
+  <button type="submit">Abandonner ce brouillon</button>
+</form>
+{% endif %}
 {% endblock %}

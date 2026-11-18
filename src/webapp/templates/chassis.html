@@ -81,6 +81,21 @@
 <p>Aucun RFCV annulé.</p>
 {% endif %}
 
+<h2>Dernières actions</h2>
+{% if events %}
+<table class="historique">
+  <thead><tr><th>Le</th><th>Par</th><th>Action</th><th>Détail</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+  <tr><td>{{ e.at[:16] | replace("T", " ") }}</td><td>{{ e.email }}</td>
+    <td>{{ ACTIONS.get(e.action, e.action) }}</td><td>{{ e.detail or "" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Aucune annulation, restauration ni code SH enregistré pour l'instant.</p>
+{% endif %}
+
 <h2>Codes SH habituels</h2>
 {% if hs_known %}
 <table>
