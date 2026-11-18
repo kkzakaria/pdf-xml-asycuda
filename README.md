@@ -518,8 +518,10 @@ API : champ `disp=true` (conversion unitaire et batch).
 
 ## ♻️ RFCV annulé : libérer ses châssis
 
-Chaque conversion enregistre les châssis du RFCV (`data/chassis_registry.db`) : un second RFCV qui
-reprend les mêmes châssis est refusé (doublon, HTTP 409). Quand la société d'inspection annule un
+Une conversion ne fait que contrôler les châssis (`data/chassis_registry.db`) : elle n'écrit rien
+et signale en avertissement les doublons (RFCV d'origine). L'enregistrement a lieu à la déclaration
+(application web, « Déclaré dans SYDAM ») ou avec `--enregistrer-chassis` en ligne de commande ;
+dans ce cas un second RFCV qui reprend les mêmes châssis est refusé (doublon, HTTP 409). Quand la société d'inspection annule un
 RFCV (par exemple éclaté en plusieurs RFCV), on l'annule aussi dans le registre : ses châssis
 passent dans l'historique des annulations, avec le motif et la date, et le nouveau RFCV passe.
 

@@ -35,7 +35,8 @@ def convert_pdf_to_xml(
     takikro: bool = False,
     disp: bool = False,
     fob_revise: float = None,
-    corps: bool = False
+    corps: bool = False,
+    register_chassis: bool = False
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -50,6 +51,9 @@ def convert_pdf_to_xml(
                        Format: {'generate_chassis': True, 'quantity': 180, 'wmi': 'LZS',
                                'vds': 'HCKZS', 'year': 2025, 'plant_code': 'S',
                                'ensure_unique': True}
+
+        register_chassis: enregistrer les châssis dans le registre (refus des doublons).
+                       Par défaut la conversion ne fait que contrôler les doublons.
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -88,9 +92,17 @@ def convert_pdf_to_xml(
             rapport_paiement=rapport_paiement,
             chassis_config=chassis_config,
             insurance_mode=insurance_mode,
-            fob_revise=fob_revise
+            fob_revise=fob_revise,
+            register_chassis=register_chassis
         )
         rfcv_data = parser.parse()
+        if parser.chassis_conflicts:
+            origins = sorted({d.get("first_rfcv_number") or d.get("first_filename") or "?"
+                              for d in parser.chassis_conflicts})
+            print(f"Attention : {len(parser.chassis_conflicts)} châssis déjà traité(s), "
+                  f"RFCV d'origine : {', '.join(origins)}.", file=sys.stderr)
+            print("  Si ce RFCV a été annulé : python registre.py annuler <RFCV> --motif \"...\""
+                  " (détail d'un châssis : python registre.py chercher <VIN>)", file=sys.stderr)
 
         # Constantes société (profil) et données du dossier, absentes du RFCV
         if profile or dossier or manifeste or nationalite_transport or takikro or disp:
@@ -262,6 +274,10 @@ Exemples d'utilisation:
     profile_group.add_argument('--takikro', action='store_true',
                                help='Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, '
                                     'case 10 (dernière provenance) = GH, case 18 nationalité = 99, case 31 colis = PK')
+    parser.add_argument('--enregistrer-chassis', action='store_true',
+                        help='Enregistre les châssis dans le registre (refuse les doublons). '
+                             'Par défaut la conversion ne fait que contrôler les doublons ; '
+                             "l'enregistrement se fait à la déclaration SYDAM (application web)")
     parser.add_argument('--corps', action='store_true',
                         help='Génère aussi le corps SYDAM (corps_<nom>.txt à côté du XML), '
                              "fichier d'écriture de l'agent SYDAM")
@@ -428,6 +444,7 @@ Exemples d'utilisation:
             takikro=args.takikro,
             disp=args.disp,
             corps=args.corps,
+            register_chassis=args.enregistrer_chassis,
         )
 
         # Exécuter le traitement batch
@@ -495,7 +512,8 @@ Exemples d'utilisation:
             takikro=args.takikro,
             disp=args.disp,
             fob_revise=args.fob_revise,
-            corps=args.corps
+            corps=args.corps,
+            register_chassis=args.enregistrer_chassis
         )
         sys.exit(0 if success else 1)
 

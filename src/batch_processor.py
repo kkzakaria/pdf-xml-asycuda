@@ -54,6 +54,7 @@ class BatchConfig:
     insurance_mode: str = "formule"              # 'formule' ou 'rfcv'
     takikro: bool = False                        # dossiers terrestres de Takikro (company_profile.TAKIKRO)
     disp: bool = False                           # case 28 : banque DISP (dispense de domiciliation)
+    register_chassis: bool = False               # enregistrer les châssis (sinon contrôle des doublons seul)
     corps: bool = False                          # corps SYDAM corps_<nom>.txt à côté de chaque XML
     # Données de dossier, une par fichier (même ordre que input_paths)
     dossiers: List[Optional[str]] = field(default_factory=list)
@@ -150,6 +151,7 @@ class BatchProcessor:
             "takikro": cfg.takikro,
             "disp": cfg.disp,
             "corps": cfg.corps,
+            "register_chassis": cfg.register_chassis,
             "dossier": pick(cfg.dossiers),
             "manifeste": pick(cfg.manifestes),
             "nationalite_transport": pick(cfg.nationalites_transport),
@@ -160,7 +162,8 @@ class BatchProcessor:
                              chassis_config: Optional[Dict[str, Any]] = None, profile: Optional[Any] = None,
                              insurance_mode: str = "formule", dossier: Optional[str] = None,
                              manifeste: Optional[str] = None, nationalite_transport: Optional[str] = None,
-                             takikro: bool = False, disp: bool = False, corps: bool = False) -> BatchResult:
+                             takikro: bool = False, disp: bool = False, corps: bool = False,
+                             register_chassis: bool = False) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -176,6 +179,7 @@ class BatchProcessor:
             takikro: dossier terrestre de Takikro
             disp: case 28 = DISP (dispense de domiciliation)
             corps: générer aussi le corps SYDAM à côté du XML
+            register_chassis: enregistrer les châssis (sinon contrôle des doublons seul)
 
         Returns:
             Résultat du traitement
@@ -199,7 +203,7 @@ class BatchProcessor:
             # de doublons est best-effort (SQLite sérialisera les écritures, mais deux workers
             # peuvent passer le check_extracted simultanément sur le même châssis).
             parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config,
-                                insurance_mode=insurance_mode)
+                                insurance_mode=insurance_mode, register_chassis=register_chassis)
             rfcv_data = parser.parse()
             if profile or dossier or manifeste or nationalite_transport or takikro or disp:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
