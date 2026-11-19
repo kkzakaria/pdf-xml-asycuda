@@ -66,17 +66,17 @@ def test_restore_and_conflicts(registry):
 
 def test_split_rfcv_scenario(registry, tmp_path):
     """RFCV d'origine traité, puis annulé et éclaté : le nouveau RFCV reprend ses châssis."""
-    original = parse_text(MULTILINE_TEXT, registry, tmp_path)
+    original = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=True)
     vins = [i.packages.marks2 for i in original.items if i.packages and i.packages.marks2]
     assert vins and registry.check_extracted(vins[0].replace("CH:", "").strip())["rfcv_number"] == "RCSA6099999"
 
     split = MULTILINE_TEXT.replace("RCSA6099999", "RCSA6099998")
     with pytest.raises(DuplicateChassisError) as e:
-        parse_text(split, registry, tmp_path)
+        parse_text(split, registry, tmp_path, register_chassis=True)
     assert {d["first_rfcv_number"] for d in e.value.duplicates} == {"RCSA6099999"}
 
     assert len(registry.cancel_rfcv("RCSA6099999", "éclaté en RCSA6099998")) == len(e.value.duplicates)
-    data = parse_text(split, registry, tmp_path)
+    data = parse_text(split, registry, tmp_path, register_chassis=True)
     assert len(data.items) == len(original.items)
     for d in e.value.duplicates:
         assert registry.check_extracted(d["chassis_number"])["rfcv_number"] == "RCSA6099998"

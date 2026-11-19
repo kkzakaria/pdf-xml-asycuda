@@ -160,13 +160,45 @@ def test_revision_uniform_integer_unchanged(registry, tmp_path):
     assert data.valuation.total_invoice == 3 * 43101
 
 
-def test_revision_prorata_rounded_after_distribution(registry, tmp_path):
-    # au centime : 50 000,01 + 50 000 + 49 999,99 -> 50 001 + 50 000 + 50 000 = 150 001
+def test_revision_prorata_distributed_in_units(registry, tmp_path):
+    # arrondi actif : répartition en unités entières (plus grand reste), Σ = total révisé exact
+    # (au centime puis plafond, on obtenait 50 001 + 50 000 + 50 000 = 150 001)
     data = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0,
                       fob_revise=150000)
-    assert prices(data) == [50001.0, 50000.0, 50000.0]
-    assert data.valuation.total_invoice == 150001.0
-    assert data.valuation.insurance.amount_national == formula(150001, 3000, 1.0)
+    assert all(p == int(p) for p in prices(data))
+    assert sum(prices(data)) == 150000
+    assert data.valuation.total_invoice == 150000.0
+    assert data.valuation.insurance.amount_national == formula(150000, 3000, 1.0)
+
+
+def test_revision_prorata_units_odd_total(registry, tmp_path):
+    data = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0,
+                      fob_revise=100001)
+    assert all(p == int(p) for p in prices(data))
+    assert sum(prices(data)) == 100001
+    assert data.valuation.total_invoice == 100001.0
+
+
+def test_revision_uniform_units_not_divisible(registry, tmp_path):
+    # 100 000 / 3 : au centime 33 333,34 + 33 333,33 × 2 -> plafond 33 334 × 3 = 100 002
+    data = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0,
+                      fob_revise=100000, fob_mode="uniforme")
+    assert prices(data) == [33334.0, 33333.0, 33333.0]
+    assert data.valuation.total_invoice == 100000.0
+
+
+def test_revision_total_with_cents_rounded_up_first(registry, tmp_path):
+    data = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0,
+                      fob_revise=100000.40, fob_mode="uniforme")
+    assert prices(data) == [33334.0, 33334.0, 33333.0]
+    assert data.valuation.total_invoice == 100001.0
+
+
+def test_revision_uniform_fob_exact_keeps_cents(registry, tmp_path):
+    data = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0,
+                      fob_revise=100000, fob_mode="uniforme", fob_exact=True)
+    assert prices(data) == [33333.34, 33333.33, 33333.33]
+    assert data.valuation.total_invoice == 100000
 
 
 def test_revision_prorata_fob_exact(registry, tmp_path):

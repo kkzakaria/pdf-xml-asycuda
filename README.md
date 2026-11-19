@@ -553,9 +553,16 @@ la somme des articles arrondis (31287 : 215 × 69 = 14 835). Montants nationaux,
 CIF et valeur statistique sont calculés sur les montants arrondis ; un montant entier est inchangé ;
 une assurance imposée ou attestée est conservée. `--fob-exact` rétablit le montant exact au centime.
 
+Avec l'arrondi actif, le FOB révisé (`--fob-revise`) est réparti en **unités entières** (plus grand
+reste, au prorata des FOB RFCV ou à parts égales en `uniforme`) : chaque article est entier et la
+somme est exactement le total révisé (15 963 309 sur 320 articles -> 211 × 49 885 + 109 × 49 886) ;
+un total révisé avec centimes est d'abord arrondi à l'unité supérieure. Avec `--fob-exact`, la
+répartition se fait au centime.
+
 ## ♻️ RFCV annulé : libérer ses châssis
 
 Une conversion ne fait que contrôler les châssis (`data/chassis_registry.db`) : elle n'écrit rien
+(c'est aussi le défaut de la bibliothèque : `RFCVParser(..., register_chassis=False)`)
 et signale en avertissement les doublons (RFCV d'origine). L'enregistrement a lieu à la déclaration
 (application web, « Déclaré dans SYDAM ») ou avec `--enregistrer-chassis` en ligne de commande ;
 dans ce cas un second RFCV qui reprend les mêmes châssis est refusé (doublon, HTTP 409). Quand la société d'inspection annule un

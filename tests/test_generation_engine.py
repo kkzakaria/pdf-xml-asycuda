@@ -56,7 +56,7 @@ def test_check_only_never_writes(registry, tmp_path):
 
 
 def test_check_only_reports_conflicts_instead_of_raising(registry, tmp_path):
-    parse_text(MULTILINE_TEXT, registry, tmp_path)  # enregistre (défaut)
+    parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=True)  # enregistre
     p = parse_text_parser(MULTILINE_TEXT.replace("RCSA6099999", "RCSA6099998"), registry, tmp_path,
                           register_chassis=False)  # ne lève pas
     assert {c["first_rfcv_number"] for c in p.chassis_conflicts} == {"RCSA6099999"}

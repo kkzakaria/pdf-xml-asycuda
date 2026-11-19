@@ -38,7 +38,7 @@ class RFCVParser:
         registry: Optional[ChassisRegistry] = None,
         insurance_mode: str = "formule",
         fob_revise: Optional[float] = None,
-        register_chassis: bool = True,
+        register_chassis: bool = False,
         fob_mode: str = "prorata",
         fret_impose: Optional[float] = None,
         assurance_imposee: Optional[float] = None,
@@ -59,6 +59,10 @@ class RFCVParser:
                            comme les déclarations de production (28923, 28928, 31287).
                            'rfcv' = assurance attestée en case 21 du RFCV × taux douanier
                            (repli sur la formule si le RFCV n'en porte pas).
+            register_chassis: False (défaut) = contrôle seul : aucune écriture dans le registre, les
+                           doublons sont exposés dans chassis_conflicts ; True = enregistre les
+                           châssis et lève DuplicateChassisError sur un doublon (sauf force_reprocess).
+                           À passer explicitement par les appelants qui enregistrent.
             fob_exact: False (défaut) = FOB de la case 22 arrondi à l'unité supérieure de la
                            devise, article par article, comme les déclarations de production
                            Karta (voir _round_fob_to_unit) ; True = montant exact, au centime.
@@ -307,8 +311,14 @@ class RFCVParser:
         """
         Remplace le FOB attesté par le FOB révisé (devise du RFCV).
 
-        Le total est réparti sur les articles au prorata de leur FOB RFCV, au centime, par la
-        méthode du plus grand reste (Σ articles = total révisé). L'assurance par formule est
+        Le total est réparti sur les articles au prorata de leur FOB RFCV ('prorata') ou à parts
+        égales ('uniforme'), par la méthode du plus grand reste (Σ articles = total révisé) :
+        - arrondi actif (fob_exact False, défaut) : répartition en UNITÉS entières de la devise,
+          chaque article est entier et Σ articles = total révisé exactement (l'arrondi par article
+          de la case 22 ne change alors plus rien) ; un total révisé comportant des centimes est
+          d'abord arrondi à l'unité supérieure (15 963 308,40 -> 15 963 309) ;
+        - fob_exact True : répartition au centime, total révisé conservé tel quel.
+        L'assurance par formule est
         recalculée sur le FOB révisé (y compris en mode 'rfcv' quand la formule a servi de repli) ;
         une assurance attestée (case 21) est conservée. Fret, poids et colis sont inchangés.
         """
@@ -317,28 +327,32 @@ class RFCVParser:
         if not items or fob_rfcv <= 0:
             logger.warning("FOB révisé ignoré : aucun FOB d'article à répartir")
             return
-        total_cents = round(self.fob_revise * 100)
+        # Unité de répartition : 100 = unité entière (arrondi case 22 actif), 1 = centime (fob_exact)
+        step = 1 if self.fob_exact else 100
+        fob_total = self.fob_revise if self.fob_exact else self._fob_unit(self.fob_revise)
+        total_steps = round(fob_total * 100) // step
         if self.fob_mode == "uniforme":
-            cents = distribute_evenly(total_cents, len(items))
+            shares = distribute_evenly(total_steps, len(items))
         else:
-            cents = ProportionalCalculator().distribute_proportionally(
-                total_amount=total_cents,
+            shares = ProportionalCalculator().distribute_proportionally(
+                total_amount=total_steps,
                 item_fobs=[i.tarification.item_price for i in items],
                 fob_total=fob_rfcv)
-        for item, c in zip(items, cents):
-            item.tarification.item_price = c / 100
+        for item, n in zip(items, shares):
+            amount = n * step / 100
+            item.tarification.item_price = amount
             if item.valuation_item:
-                item.valuation_item.total_cost = c / 100
-        logger.info(f"FOB révisé : {fob_rfcv:,.2f} -> {self.fob_revise:,.2f} ({len(items)} articles)")
+                item.valuation_item.total_cost = amount
+        logger.info(f"FOB révisé : {fob_rfcv:,.2f} -> {fob_total:,.2f} ({len(items)} articles)")
 
         val, fin = rfcv_data.valuation, rfcv_data.financial
         if val is None:
             return
         rate = fin.exchange_rate if fin and fin.exchange_rate else None
         if val.invoice:
-            val.invoice.amount_foreign = self.fob_revise
-            val.invoice.amount_national = self.fob_revise * rate if rate else val.invoice.amount_national
-        val.total_invoice = self.fob_revise
+            val.invoice.amount_foreign = fob_total
+            val.invoice.amount_national = fob_total * rate if rate else val.invoice.amount_national
+        val.total_invoice = fob_total
 
     @staticmethod
     def _fob_unit(value: float) -> float:

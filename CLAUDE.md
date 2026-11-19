@@ -190,6 +190,9 @@ national amounts, formula insurance (recomputed; imposed/attested insurance kept
 value follow from the rounded amounts. `--fob-exact` (CLI single + batch, `GenerationSettings.fob_exact`,
 web app "FOB exact (sans arrondi)", `RFCVParser(fob_exact=True)`) keeps the exact amount (cents).
 Tests asserting cents on fictitious RFCVs pass `fob_exact=True`.
+With rounding active, `--fob-revise` is distributed in WHOLE currency units (largest remainder,
+prorata of RFCV article FOBs, or `distribute_evenly` for `uniforme`), so Σ articles = revised total
+exactly (a revised total with cents is first rounded up to the unit); `fob_exact=True` distributes in cents.
 
 Single-file only (rejected in batch, spec §5.7): `--fob-revise` with `--fob-mode prorata|uniforme`,
 `--fret-impose` (total, RFCV currency), `--assurance-imposee` (total, XOF), `--designation` (applied with
@@ -279,7 +282,10 @@ API_PROFILES_DIR=profils      # company profiles (*.ini), copied into the Docker
 ## Chassis Registry Caution
 
 A conversion only CHECKS VINs against `data/chassis_registry.db` ("registered" = declared in SYDAM):
-it writes nothing by default (CLI warns on duplicates, API passes `register_chassis=False`).
+it writes nothing by default: `RFCVParser(register_chassis=False)` is the library default (check only,
+duplicates in `chassis_conflicts`), the CLI warns on duplicates, the API passes `register_chassis=False`.
+A script calling `RFCVParser(pdf).parse()` never writes to the registry; recording must pass
+`register_chassis=True` explicitly (tests asserting registration or `DuplicateChassisError` do so).
 Recording happens at declaration (web app "Déclaré dans SYDAM") or with CLI `--enregistrer-chassis`,
 which registers and raises `DuplicateChassisError` (HTTP 409 route mapping) on a duplicate unless `force_reprocess`.
 In tests and experiments, pass `registry=ChassisRegistry(tmp_path / "registry.db")` to
