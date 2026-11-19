@@ -33,6 +33,17 @@ LOCODE_NAMES = {"TGLFW": "LOME", "CNNSA": "NANSHA", "CNSHA": "SHANGHAI", "CNNGB"
                 "CNSZX": "SHENZHEN", "CNTAO": "QINGDAO", "CNTXG": "TIANJIN", "CIABJ": "ABIDJAN",
                 "GHTEM": "TEMA", "BJCOO": "COTONOU", "AEJEA": "JEBEL ALI"}
 
+# Libellé SYDAM du mode de paiement (case 10 du RFCV « Paiement sur compte bancaire »)
+PAYMENT_ACCOUNT = "COMPTE DE PAIEMENT"
+
+
+def payment_mode_label(mode: str | None) -> str | None:
+    """Mode de paiement du RFCV -> libellé SYDAM (« ... compte ... » -> COMPTE DE PAIEMENT)."""
+    if mode and "compte" in mode.lower():
+        return PAYMENT_ACCOUNT
+    return mode
+
+
 PACKAGE_KINDS = {"colis": "COLIS", "carton": "CARTONS", "cartons": "CARTONS",
                  "palette": "PALETTES", "palettes": "PALETTES", "pieces": "PIECES",
                  "pièces": "PIECES"}

@@ -138,6 +138,9 @@ class RFCVParser:
     def _parse_format_legacy(self, rfcv_data: RFCVData) -> None:
         """Format RFCV historique (nombres 1 234,56, code SH à points)."""
         rfcv_data.property = self._parse_property()
+        if rfcv_data.property.package_type:
+            # Libellé du RFCV (« PACKAGES ») -> nom de la nomenclature SYDAM du code des articles
+            rfcv_data.property.package_type = self._map_package_type(rfcv_data.property.package_type)[1]
         rfcv_data.identification = self._parse_identification()
         self._rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
         rfcv_data.exporter = self._parse_exporter()
@@ -211,8 +214,7 @@ class RFCVParser:
 
         rfcv_data.financial = Financial(
             transaction_code1='0', transaction_code2='1',
-            mode_of_payment=('COMPTE DE PAIEMENT' if h["payment_mode"] and 'compte' in h["payment_mode"].lower()
-                             else h["payment_mode"]),
+            mode_of_payment=fmt2026.payment_mode_label(h["payment_mode"]),
             deferred_payment_ref=self.rapport_paiement or None,
             invoice_number=h["invoice_number"], invoice_date=h["invoice_date"],
             invoice_amount=None,  # case 18 non utilisée par ASYCUDA
@@ -428,6 +430,12 @@ class RFCVParser:
             # Ajouter uniquement au premier article
             rfcv_data.items[0].previous_document_reference = prev_doc_ref
 
+            # Case 44 (Free_text_1) des articles sans châssis : « <facture> DU <date> »
+            # (les articles avec châssis gardent « CH: <VIN> »)
+            for item in rfcv_data.items:
+                if not (item.packages and item.packages.chassis_number) and not item.free_text_1:
+                    item.free_text_1 = prev_doc_ref
+
         # Enrichir ValuationItem.invoice avec les données de devise pour chaque item
         if rfcv_data.financial and rfcv_data.financial.currency_code and rfcv_data.financial.exchange_rate:
             for item in rfcv_data.items:
@@ -452,6 +460,10 @@ class RFCVParser:
         # Champs calculés attendus par ASYCUDA (colis par article, CIF, valeur statistique,
         # éléments de la valeur, totaux) — voir asycuda_enrichment
         enrich_for_asycuda(rfcv_data)
+
+        # Case 41 : unité d'apurement des articles sans châssis = poids net de l'article
+        # (après la répartition des poids)
+        self._add_clearance_unit_by_weight(rfcv_data)
 
         # NOTE: La répartition du nombre de colis est maintenant gérée par le regroupement d'articles
         # Le nombre de colis (section 24) est stocké comme quantité du premier article du premier groupe
@@ -725,8 +737,13 @@ class RFCVParser:
         if voyage:
             transport.voyage_number = voyage
 
-        # P1.6 + P4.2: Lieu de chargement - non utilisé (mis à null dans XML)
-        # Note: loading_place_code et loading_place_name ne sont plus extraits
+        # Case 27 : lieu de chargement (UN/LOCODE) ; nom connu seulement, jamais inventé.
+        # Sensible à la casse et sur la même ligne : champ vide -> rien.
+        loading = re.search(r'Lieu\s*de\s*chargement\s*:[ \t]*([A-Z]{5})\b', self.text)
+        if loading:
+            transport.loading_place_code = loading.group(1)
+            transport.loading_place_name = fmt2026.LOCODE_NAMES.get(loading.group(1))
+            transport.loading_location = loading.group(1)
 
         # P1.6: Lieu de déchargement
         unloading = self._extract_field(r'Lieu\s*de\s*déchargement:\s*([A-Z]{5})')
@@ -756,10 +773,19 @@ class RFCVParser:
         """Parse les informations financières"""
         financial = Financial()
 
-        # Mode de paiement
-        payment_mode = self._extract_field(r'10\.\s*Mode de Paiement[:\s]+(.*?)(?:\n|$)')
+        # Mode de paiement (case 10) : ligne sous l'en-tête, qui commence par le pays de provenance
+        # (case 9, colonne voisine) : « Chine Paiement sur compte bancaire »
+        payment_mode = self._extract_field(r'10\.\s*Mode de Paiement[^\n]*\n([^\n]+)')
         if payment_mode:
-            financial.mode_of_payment = payment_mode
+            mode = re.search(r'\bPaiement\b.*', payment_mode, re.IGNORECASE)
+            if mode:
+                payment_mode = mode.group(0)
+            else:
+                country = next((name for name in sorted(fmt2026.COUNTRY_CODES, key=len, reverse=True)
+                                if payment_mode.lower().startswith(name.lower() + ' ')), None)
+                if country:
+                    payment_mode = payment_mode[len(country):].strip()
+            financial.mode_of_payment = fmt2026.payment_mode_label(payment_mode.strip())
 
         # Rapport de paiement (Deffered_payment_reference)
         # Fourni en paramètre si disponible (numéro de quittance du Trésor)
@@ -1609,6 +1635,26 @@ class RFCVParser:
                     f"Article avec châssis {item.packages.chassis_number}: "
                     f"unités supplémentaires (QA=1, 40=1), valuation_method=40"
                 )
+
+
+    @staticmethod
+    def _add_clearance_unit_by_weight(rfcv_data: RFCVData) -> None:
+        """
+        Case 41 des articles sans châssis : unité d'apurement QA = poids net de l'article (kg),
+        comme la déclaration de production 31917 (marchandise générale). Les articles avec châssis
+        gardent QA = 1 et 40 = 1 (_add_supplementary_units_for_chassis). Poids net absent ou nul : rien.
+        """
+        for item in rfcv_data.items:
+            if item.packages and item.packages.chassis_number:
+                continue
+            weight = item.valuation_item.net_weight if item.valuation_item else None
+            if not weight:
+                continue
+            if not item.tarification:
+                item.tarification = Tarification()
+            quantity = int(weight) if float(weight).is_integer() else weight  # « 15986 » comme SYDAM
+            item.tarification.supplementary_units = [
+                SupplementaryUnit(code='QA', name="Unité d'apurement", quantity=quantity)]
 
 
 def parse_rfcv(pdf_path: str, taux_douane: Optional[float] = None) -> RFCVData:
