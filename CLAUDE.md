@@ -177,7 +177,9 @@ profile: offices `CITKK` (clearance + border, names left to ASYCUDA), `Summary_d
 item `Kind_of_packages_code` = `PK` (box 31).
 
 `--disp` (API `disp=true`): `Financial/Bank/Code` = `DISP` (box 28, dispense de domiciliation),
-overriding the profile `banque_code`.
+overriding the profile `banque_code`. `--banque CODE` (CLI single + batch, `GenerationSettings.banque`,
+web app "Banque (case 28)"): the dossier's domiciliation bank (FDI field 18) instead of the profile
+`banque_code`; `--disp` keeps priority when both are given.
 
 Single-file only (rejected in batch, spec §5.7): `--fob-revise` with `--fob-mode prorata|uniforme`,
 `--fret-impose` (total, RFCV currency), `--assurance-imposee` (total, XOF), `--designation` (applied with
@@ -219,7 +221,13 @@ real declarations (production 28923/28928/31287, ASYCUDA export 28926).
 - `Value_item` = `freight+0+insurance+0-0` (thousands with `,`)
 - `Value_details` = `Total_cost` = Σ (freight + insurance)
 - Packages spread evenly over chassis articles, remainder to the first ones
-- `Summary_declaration` = bill of lading; `Free_text_1` = `CH: <VIN>`
+- `Summary_declaration` = bill of lading; `Free_text_1` = `CH: <VIN>` (chassis articles),
+  `<invoice no> DU <invoice date>` (articles without chassis, production 31917)
+- Box 41 `Supplementary_unit`: chassis articles `QA`=1 + `40`=1; articles without chassis `QA` =
+  article net weight (production 31917), nothing if no net weight
+- `Mode_of_payment`: `rfcv_format_2026.payment_mode_label` (both formats; legacy line starts with
+  the box 9 country, stripped); `Package_type` (legacy) = nomenclature name of the package code;
+  `Place_of_loading` = box "Lieu de chargement" UN/LOCODE + `LOCODE_NAMES` (unknown code: no name)
 
 ### Article Grouping
 

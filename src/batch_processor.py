@@ -64,6 +64,7 @@ class BatchConfig:
     insurance_mode: str = "formule"              # 'formule' ou 'rfcv'
     takikro: bool = False                        # dossiers terrestres de Takikro (company_profile.TAKIKRO)
     disp: bool = False                           # case 28 : banque DISP (dispense de domiciliation)
+    banque: str | None = None                    # case 28 : code banque au lieu du profil (disp prioritaire)
     register_chassis: bool = False               # enregistrer les châssis (sinon contrôle des doublons seul)
     corps: bool = False                          # corps SYDAM corps_<nom>.txt à côté de chaque XML
     # Données de dossier, une par fichier (même ordre que input_paths)
@@ -160,6 +161,7 @@ class BatchProcessor:
             "insurance_mode": cfg.insurance_mode,
             "takikro": cfg.takikro,
             "disp": cfg.disp,
+            "banque": cfg.banque,
             "corps": cfg.corps,
             "register_chassis": cfg.register_chassis,
             "dossier": pick(cfg.dossiers),
@@ -173,7 +175,7 @@ class BatchProcessor:
                              insurance_mode: str = "formule", dossier: Optional[str] = None,
                              manifeste: Optional[str] = None, nationalite_transport: Optional[str] = None,
                              takikro: bool = False, disp: bool = False, corps: bool = False,
-                             register_chassis: bool = False) -> BatchResult:
+                             register_chassis: bool = False, banque: str | None = None) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -188,6 +190,7 @@ class BatchProcessor:
             dossier, manifeste, nationalite_transport: données du dossier (optionnel)
             takikro: dossier terrestre de Takikro
             disp: case 28 = DISP (dispense de domiciliation)
+            banque: case 28 = ce code banque au lieu du profil (disp prioritaire)
             corps: générer aussi le corps SYDAM à côté du XML
             register_chassis: enregistrer les châssis (sinon contrôle des doublons seul)
 
@@ -216,9 +219,10 @@ class BatchProcessor:
                                 insurance_mode=insurance_mode, register_chassis=register_chassis)
             rfcv_data = parser.parse()
             result.chassis_conflicts = list(parser.chassis_conflicts)
-            if profile or dossier or manifeste or nationalite_transport or takikro or disp:
+            if profile or dossier or manifeste or nationalite_transport or takikro or disp or banque:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                              nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)
+                              nationalite_transport=nationalite_transport, takikro=takikro, disp=disp,
+                              banque=banque)
 
             # Générer le XML
             generator = XMLGenerator(rfcv_data)

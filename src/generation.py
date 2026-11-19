@@ -42,6 +42,7 @@ class GenerationSettings:
     rapport_paiement: Optional[str] = None
     takikro: bool = False
     disp: bool = False
+    banque: str | None = None           # case 28 : remplace banque_code du profil (DISP prioritaire)
     fob_revise: Optional[Amount] = None
     fob_mode: str = "prorata"
     fret: Optional[Amount] = None
@@ -114,9 +115,10 @@ def generate(pdf_path: Path, settings: GenerationSettings, out_dir: Path, stem: 
 
     # Même condition que la CLI (converter.convert_pdf_to_xml)
     s = settings
-    if s.profile or s.dossier or s.manifeste or s.nationalite_transport or s.takikro or s.disp:
+    if s.profile or s.dossier or s.manifeste or s.nationalite_transport or s.takikro or s.disp or s.banque:
         apply_profile(rfcv_data, s.profile, dossier=s.dossier, manifeste=s.manifeste,
-                      nationalite_transport=s.nationalite_transport, takikro=s.takikro, disp=s.disp)
+                      nationalite_transport=s.nationalite_transport, takikro=s.takikro, disp=s.disp,
+                      banque=s.banque)
     if s.designation:
         apply_designation(rfcv_data, s.designation)
 

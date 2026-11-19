@@ -516,6 +516,17 @@ python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transi
 ```
 API : champ `disp=true` (conversion unitaire et batch).
 
+### Banque du dossier (`--banque CODE`)
+
+La banque de domiciliation varie selon le dossier (FDI, champ 18) : `--banque CODE` met ce code en
+case 28 (`Fcx_28b`, `Financial/Bank/Code`) au lieu du `banque_code` du profil (fichier unique et
+batch, réglage « Banque (case 28) » de l'application web). Si `--disp` est aussi donné, `DISP` est
+prioritaire.
+
+```bash
+python converter.py rfcv.pdf --taux-douane 592.945 --profil profils/djam-dks.ini --dossier 31917 --banque SGBCI
+```
+
 ### Valeurs imposées et désignation (fichier unique)
 
 Mêmes réglages que l'application web, pour un seul fichier (refusés en batch) :

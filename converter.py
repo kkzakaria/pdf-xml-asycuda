@@ -35,6 +35,7 @@ def convert_pdf_to_xml(
     nationalite_transport: str = None,
     takikro: bool = False,
     disp: bool = False,
+    banque: str | None = None,
     fob_revise: float = None,
     corps: bool = False,
     register_chassis: bool = False,
@@ -63,6 +64,7 @@ def convert_pdf_to_xml(
         fret_impose: fret total imposé (devise du RFCV)
         assurance_imposee: assurance totale imposée (XOF)
         designation: désignation courte appliquée à tous les articles (après le profil)
+        banque: code banque (case 28) à la place du banque_code du profil (disp prioritaire)
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -117,9 +119,10 @@ def convert_pdf_to_xml(
                   " (détail d'un châssis : python registre.py chercher <VIN>)", file=sys.stderr)
 
         # Constantes société (profil) et données du dossier, absentes du RFCV
-        if profile or dossier or manifeste or nationalite_transport or takikro or disp:
+        if profile or dossier or manifeste or nationalite_transport or takikro or disp or banque:
             apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                          nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)
+                          nationalite_transport=nationalite_transport, takikro=takikro, disp=disp,
+                          banque=banque)
 
         # Désignation courte (même ordre que generation.generate : après le profil)
         if designation:
@@ -310,6 +313,9 @@ Exemples d'utilisation:
                              "fichier d'écriture de l'agent SYDAM")
     profile_group.add_argument('--disp', action='store_true',
                                help='Case 28 : code banque DISP (dispense de domiciliation) au lieu de la banque du profil')
+    profile_group.add_argument('--banque', default=None, metavar='CODE',
+                               help='Case 28 : code de la banque de domiciliation du dossier (FDI, champ 18), '
+                                    'au lieu de banque_code du profil. --disp reste prioritaire.')
 
     parser.add_argument(
         '--rapport-paiement',
@@ -473,6 +479,7 @@ Exemples d'utilisation:
             insurance_mode="rfcv" if args.assurance_rfcv else "formule",
             takikro=args.takikro,
             disp=args.disp,
+            banque=args.banque,
             corps=args.corps,
             register_chassis=args.enregistrer_chassis,
         )
@@ -554,6 +561,7 @@ Exemples d'utilisation:
             nationalite_transport=args.nationalite_transport,
             takikro=args.takikro,
             disp=args.disp,
+            banque=args.banque,
             fob_revise=args.fob_revise,
             corps=args.corps,
             register_chassis=args.enregistrer_chassis,

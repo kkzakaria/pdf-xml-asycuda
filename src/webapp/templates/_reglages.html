@@ -39,6 +39,7 @@
     {{ texte("nationalite_transport", "Nationalité du transport", "(facultatif)") }}
     {{ texte("rapport_paiement", "Rapport de paiement", "(facultatif)") }}
     {{ case("takikro", "Takikro (passage terrestre)") }}
+    {{ texte("banque", "Banque (case 28)", "(facultatif, remplace la banque du profil ; DISP prioritaire)") }}
     {{ case("disp", "DISP (case 28)") }}
     <label>Taux douanier
       <input type="text" inputmode="decimal" name="taux_douane" value="{{ form.get('taux_douane', '') }}" required></label>

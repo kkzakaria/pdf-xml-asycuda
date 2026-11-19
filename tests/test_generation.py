@@ -85,16 +85,17 @@ def test_generate_matches_cli_output_with_imposed_values(tmp_path, monkeypatch):
     cli_xml = tmp_path / "cli" / "dossier.xml"
     assert converter.convert_pdf_to_xml(str(SAMPLE_PDF), str(cli_xml), taux_douane=576.42, corps=True,
                                         fob_revise=12345.5, fob_mode="uniforme", fret_impose=987.25,
-                                        assurance_imposee=45678, designation="MOTO")
+                                        assurance_imposee=45678, designation="MOTO", banque="SGBC")
 
     registry = ChassisRegistry(str(tmp_path / "web.db"))
     settings = GenerationSettings(taux_douane=576.42, fob_revise=Amount(12345.5), fob_mode="uniforme",
                                   fret=Amount(987.25), assurance_mode="imposee", assurance=Amount(45678),
-                                  designation="MOTO")
+                                  designation="MOTO", banque="SGBC")
     res = generate(SAMPLE_PDF, settings, tmp_path / "web", "dossier", registry)
     assert res.xml_path.read_bytes() == cli_xml.read_bytes()
     assert res.corps_path.read_bytes() == (cli_xml.parent / "corps_dossier.txt").read_bytes()
     assert b"MOTO" in res.xml_path.read_bytes()
+    assert res.summary.cases["Fcx_28b"] == "SGBC"                 # --banque sans profil
     assert res.summary.fret_total == pytest.approx(987.25)
     assert res.summary.assurance_total == pytest.approx(45678)
 
@@ -140,7 +141,7 @@ def test_settings_roundtrip_dict():
     s = GenerationSettings(
         taux_douane=576.42, profile=CompanyProfile(bureau_code="CIAB6", declarant_nom="KARTA"),
         dossier="123", manifeste="M1", nationalite_transport="TG", rapport_paiement="25P2003J",
-        takikro=True, disp=True, fob_revise=Amount(5400, True), fob_mode="uniforme",
+        takikro=True, disp=True, banque="SGBC", fob_revise=Amount(5400, True), fob_mode="uniforme",
         fret=Amount(2000, True), assurance_mode="imposee", assurance=Amount(93, True), designation="MOTO")
     d = json.loads(json.dumps(s.to_dict()))
     assert GenerationSettings.from_dict(d) == s

@@ -159,6 +159,19 @@ async def test_generate_shows_recap_values(client, as_user, fake_pdf):
     assert "Génération 2" in r.text
 
 
+async def test_banque_setting(client, as_user, fake_pdf):
+    """Réglage « Banque (case 28) » : remplace la banque du profil, conservé dans le formulaire."""
+    d = await new_dossier(client)
+    r = await client.get(f"/dossiers/{d}")
+    assert 'name="banque"' in r.text and "Banque (case 28)" in r.text
+    r = await generate(client, d, banque=" SGBC ")
+    assert r.status_code == 200, r.text
+    r = await client.get(f"/dossiers/{d}/fichiers/1/corps")
+    assert "Fcx_28b=SGBC" in r.text
+    r = await client.get(f"/dossiers/{d}")
+    assert 'name="banque" value="SGBC"' in r.text
+
+
 async def test_invalid_amount_rerenders_form_with_error(client, as_user, fake_pdf):
     d = await new_dossier(client)
     r = await client.post(f"/dossiers/{d}/generer", data=form(fob_revise="12abc", taux_douane="600"))

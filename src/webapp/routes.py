@@ -156,7 +156,7 @@ def settings_to_form(s: GenerationSettings) -> dict[str, str]:
                 logger.warning("Profil illisible : %s", path)
     values = {"taux_douane": _num(s.taux_douane), "profile": profile, "fob_mode": s.fob_mode,
               "assurance_mode": s.assurance_mode}
-    for key in ("dossier", "manifeste", "nationalite_transport", "rapport_paiement", "designation"):
+    for key in ("dossier", "manifeste", "nationalite_transport", "rapport_paiement", "designation", "banque"):
         values[key] = getattr(s, key) or ""
     for key in ("takikro", "disp"):
         values[key] = "1" if getattr(s, key) else ""
@@ -228,7 +228,7 @@ def form_to_settings(values: dict[str, str]) -> tuple[Optional[GenerationSetting
     return GenerationSettings(
         taux_douane=taux, profile=profile, dossier=text("dossier"), manifeste=text("manifeste"),
         nationalite_transport=text("nationalite_transport"), rapport_paiement=text("rapport_paiement"),
-        takikro=bool(values.get("takikro")), disp=bool(values.get("disp")),
+        takikro=bool(values.get("takikro")), disp=bool(values.get("disp")), banque=text("banque"),
         fob_revise=fob, fob_mode=fob_mode, fret=fret,
         assurance_mode=assurance_mode, assurance=assurance if assurance_mode == "imposee" else None,
         designation=text("designation"),

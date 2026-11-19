@@ -37,6 +37,7 @@ def test_common_values_applied_to_all_files(tmp_path):
     profile = CompanyProfile(bureau_code="CIAB6")
     proc = BatchProcessor(BatchConfig(
         input_paths=files, taux_douane=596.302, profile=profile, insurance_mode="rfcv", takikro=True, disp=True,
+        banque="SGBC",
         chassis_configs=[{"generate_chassis": False}], progress_bar=False))
     for f in files:
         opts = proc._file_options(Path(f))
@@ -45,6 +46,7 @@ def test_common_values_applied_to_all_files(tmp_path):
         assert opts["insurance_mode"] == "rfcv"
         assert opts["takikro"] is True
         assert opts["disp"] is True
+        assert opts["banque"] == "SGBC"
         assert opts["chassis_config"] == {"generate_chassis": False}  # valeur unique répliquée
         assert opts["dossier"] is None  # jamais répliqué
 
