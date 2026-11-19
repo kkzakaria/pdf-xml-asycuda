@@ -79,7 +79,9 @@ def test_imposed_freight_and_insurance_per_article_reference_case(registry, tmp_
 
 
 def test_imposed_freight_recomputes_formula_insurance(registry, tmp_path):
-    d = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0, fret_impose=10000)
+    # fob_exact : formule sur le FOB attesté 100 000 (arrondi par défaut : tests/test_fob_arrondi.py)
+    d = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0, fret_impose=10000,
+                   fob_exact=True)
     assert d.valuation.insurance.amount_national == math.ceil(2500 + (100000 + 10000) * 0.0015)
 
 

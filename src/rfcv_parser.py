@@ -42,6 +42,7 @@ class RFCVParser:
         fob_mode: str = "prorata",
         fret_impose: Optional[float] = None,
         assurance_imposee: Optional[float] = None,
+        fob_exact: bool = False,
     ):
         """
         Initialise le parser
@@ -58,6 +59,9 @@ class RFCVParser:
                            comme les déclarations de production (28923, 28928, 31287).
                            'rfcv' = assurance attestée en case 21 du RFCV × taux douanier
                            (repli sur la formule si le RFCV n'en porte pas).
+            fob_exact: False (défaut) = FOB de la case 22 arrondi à l'unité supérieure de la
+                           devise, article par article, comme les déclarations de production
+                           Karta (voir _round_fob_to_unit) ; True = montant exact, au centime.
         """
         if insurance_mode not in ("rfcv", "formule"):
             raise ValueError(f"insurance_mode invalide : {insurance_mode!r} (attendu 'rfcv' ou 'formule')")
@@ -76,6 +80,7 @@ class RFCVParser:
             raise ValueError(f"assurance_imposee doit être > 0 : {assurance_imposee!r}")
         self.fret_impose = fret_impose
         self.assurance_imposee = assurance_imposee
+        self.fob_exact = fob_exact
         # Vrai si l'assurance retenue vient de la formule (à recalculer après un FOB révisé)
         self._insurance_from_formula = False
         self.is_format_2026 = False
@@ -336,6 +341,46 @@ class RFCVParser:
         val.total_invoice = self.fob_revise
 
     @staticmethod
+    def _fob_unit(value: float) -> float:
+        """FOB arrondi à l'unité SUPÉRIEURE de la devise (au centime près : 3,0000001 -> 3)."""
+        cents = round(value * 100)
+        return float(-(-cents // 100))
+
+    def _round_fob_to_unit(self, rfcv_data: RFCVData) -> bool:
+        """
+        Case 22 arrondie comme les déclarations de production Karta : FOB de chaque article
+        arrondi à l'unité supérieure (31287 : 68,01 USD -> 69 ; 31917 : 9 569,67 -> 9 570), total
+        = Σ des articles arrondis (31287 : 215 × 69 = 14 835 et non ⌈14 622,15⌉ = 14 623).
+        Montants entiers inchangés. Renvoie True si un montant a changé.
+        """
+        val, fin = rfcv_data.valuation, rfcv_data.financial
+        items = [i for i in rfcv_data.items if i.tarification and i.tarification.item_price is not None]
+        changed = False
+        for item in items:
+            unit = self._fob_unit(item.tarification.item_price)
+            if unit != item.tarification.item_price:
+                item.tarification.item_price = unit
+                changed = True
+        if val is None:
+            return changed
+        old_total = val.total_invoice
+        if changed:
+            total = float(sum(i.tarification.item_price for i in items))
+        elif old_total is not None:
+            total = self._fob_unit(old_total)        # articles entiers : total seul arrondi
+        else:
+            return False
+        if total == old_total and not changed:
+            return False
+        rate = fin.exchange_rate if fin and fin.exchange_rate else None
+        val.total_invoice = total
+        if val.invoice:
+            val.invoice.amount_foreign = total
+            val.invoice.amount_national = total * rate if rate else val.invoice.amount_national
+        logger.info(f"FOB arrondi à l'unité (case 22) : {old_total} -> {total}")
+        return True
+
+    @staticmethod
     def _formula_insurance(fob: float, freight: float, rate: float) -> CurrencyAmount:
         """Assurance par formule : ceiling(2500 + (FOB + FRET) × taux × 0,15 %), en XOF."""
         return RFCVParser._xof_amount(math.ceil(2500 + (fob + freight) * rate * 0.0015))
@@ -435,6 +480,12 @@ class RFCVParser:
             for item in rfcv_data.items:
                 if not (item.packages and item.packages.chassis_number) and not item.free_text_1:
                     item.free_text_1 = prev_doc_ref
+
+        # Case 22 : FOB arrondi à l'unité (sauf fob_exact), après révision et regroupement,
+        # avant la répartition du fret / de l'assurance et les montants calculés
+        if not self.fob_exact and self._round_fob_to_unit(rfcv_data):
+            # assurance par formule recalculée sur le FOB arrondi (imposée/attestée conservée)
+            self._apply_imposed_amounts(rfcv_data, fob_revised=True)
 
         # Enrichir ValuationItem.invoice avec les données de devise pour chaque item
         if rfcv_data.financial and rfcv_data.financial.currency_code and rfcv_data.financial.exchange_rate:

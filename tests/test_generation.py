@@ -63,9 +63,14 @@ def corps_of(rfcv_data):
 
 
 def build(registry, tmp_path, **kwargs):
-    """(données finales, référence, corps) à partir de MULTILINE_TEXT."""
-    ref = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0)
-    data = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0, **kwargs)
+    """(données finales, référence, corps) à partir de MULTILINE_TEXT.
+
+    Case 22 au centime (fob_exact) : ces tests portent sur les FOB attestés différents
+    (33 333,34 / 33 333,33), que l'arrondi par défaut à l'unité rendrait égaux."""
+    ref = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0,
+                     fob_exact=True)
+    data = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0,
+                      fob_exact=True, **kwargs)
     return data, ref
 
 
@@ -75,8 +80,10 @@ def codes(summary):
 
 # ------------------------------------------------------------------ generate()
 @pytest.mark.skipif(not SAMPLE_PDF.exists(), reason="PDF d'exemple absent")
-def test_generate_matches_cli_output_with_imposed_values(tmp_path, monkeypatch):
-    """Spéc. §5.7 : mêmes réglages (FOB uniforme, fret et assurance imposés, désignation) en CLI."""
+@pytest.mark.parametrize("fob_exact", [False, True])
+def test_generate_matches_cli_output_with_imposed_values(tmp_path, monkeypatch, fob_exact):
+    """Spéc. §5.7 : mêmes réglages (FOB uniforme, fret et assurance imposés, désignation) en CLI,
+    case 22 arrondie (défaut) ou exacte (--fob-exact)."""
     import converter
     import rfcv_parser
 
@@ -85,14 +92,17 @@ def test_generate_matches_cli_output_with_imposed_values(tmp_path, monkeypatch):
     cli_xml = tmp_path / "cli" / "dossier.xml"
     assert converter.convert_pdf_to_xml(str(SAMPLE_PDF), str(cli_xml), taux_douane=576.42, corps=True,
                                         fob_revise=12345.5, fob_mode="uniforme", fret_impose=987.25,
-                                        assurance_imposee=45678, designation="MOTO", banque="SGBC")
+                                        assurance_imposee=45678, designation="MOTO", banque="SGBC",
+                                        fob_exact=fob_exact)
 
     registry = ChassisRegistry(str(tmp_path / "web.db"))
     settings = GenerationSettings(taux_douane=576.42, fob_revise=Amount(12345.5), fob_mode="uniforme",
                                   fret=Amount(987.25), assurance_mode="imposee", assurance=Amount(45678),
-                                  designation="MOTO", banque="SGBC")
+                                  designation="MOTO", banque="SGBC", fob_exact=fob_exact)
     res = generate(SAMPLE_PDF, settings, tmp_path / "web", "dossier", registry)
     assert res.xml_path.read_bytes() == cli_xml.read_bytes()
+    # FOB révisé 12 345,50 (un article après regroupement) : 12 346 arrondi, 12 345,5 exact
+    assert res.summary.fob_total == pytest.approx(12345.5 if fob_exact else 12346)
     assert res.corps_path.read_bytes() == (cli_xml.parent / "corps_dossier.txt").read_bytes()
     assert b"MOTO" in res.xml_path.read_bytes()
     assert res.summary.cases["Fcx_28b"] == "SGBC"                 # --banque sans profil
@@ -173,7 +183,8 @@ def test_generate_applies_designation(registry, fake_pdf, tmp_path):
 
 
 def test_summary_json_roundtrip(registry, fake_pdf, tmp_path):
-    settings = GenerationSettings(taux_douane=1.0, fob_revise=Amount(150000))
+    # au centime : FOB attestés différents -> alerte fob_heterogene
+    settings = GenerationSettings(taux_douane=1.0, fob_revise=Amount(150000), fob_exact=True)
     s = generate(fake_pdf["path"], settings, tmp_path / "out", "d", registry).summary
     assert s.alertes  # fob_heterogene au moins
     assert Summary.from_dict(json.loads(json.dumps(s.to_dict()))) == s
@@ -265,7 +276,7 @@ def test_fret_per_article_in_rfcv_currency(registry, tmp_path):
     assert s.devise == "USD"
     assert s.fret_total == 2000 * s.nb_articles
     assert s.valeurs_articles["fret"] == [(2000.0, s.nb_articles)]
-    assert s.valeurs_articles["fob"] == [(12683.65, 1)]
+    assert s.valeurs_articles["fob"] == [(12684.0, 1)]      # 12 683,65 arrondi à l'unité (case 22)
 
 
 def test_generate_requires_registry(fake_pdf, tmp_path):

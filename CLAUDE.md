@@ -181,6 +181,16 @@ overriding the profile `banque_code`. `--banque CODE` (CLI single + batch, `Gene
 web app "Banque (case 28)"): the dossier's domiciliation bank (FDI field 18) instead of the profile
 `banque_code`; `--disp` keeps priority when both are given.
 
+Box 22 FOB rounded by default like Karta's production declarations (pending a management
+decision): `RFCVParser._round_fob_to_unit`, in `_finalize` after FOB revision and HS grouping, before
+the proportional distribution and `enrich_for_asycuda`. Rule from production pairs: each declared
+article's FOB rounded UP to the currency unit (31287: 68.01 USD -> 69; 31917: 9 569.67 -> 9 570),
+case-22 total = Σ rounded articles (31287: 215 × 69 = 14 835, not ⌈14 622.15⌉), integers unchanged;
+national amounts, formula insurance (recomputed; imposed/attested insurance kept), CIF and statistical
+value follow from the rounded amounts. `--fob-exact` (CLI single + batch, `GenerationSettings.fob_exact`,
+web app "FOB exact (sans arrondi)", `RFCVParser(fob_exact=True)`) keeps the exact amount (cents).
+Tests asserting cents on fictitious RFCVs pass `fob_exact=True`.
+
 Single-file only (rejected in batch, spec §5.7): `--fob-revise` with `--fob-mode prorata|uniforme`,
 `--fret-impose` (total, RFCV currency), `--assurance-imposee` (total, XOF), `--designation` (applied with
 `designation.apply_designation` after `apply_profile`, same order as `generation.generate`, so outputs are

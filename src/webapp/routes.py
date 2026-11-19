@@ -158,7 +158,7 @@ def settings_to_form(s: GenerationSettings) -> dict[str, str]:
               "assurance_mode": s.assurance_mode}
     for key in ("dossier", "manifeste", "nationalite_transport", "rapport_paiement", "designation", "banque"):
         values[key] = getattr(s, key) or ""
-    for key in ("takikro", "disp"):
+    for key in ("takikro", "disp", "fob_exact"):
         values[key] = "1" if getattr(s, key) else ""
     for key in ("fob_revise", "fret", "assurance"):
         amount: Optional[Amount] = getattr(s, key)
@@ -231,7 +231,7 @@ def form_to_settings(values: dict[str, str]) -> tuple[Optional[GenerationSetting
         takikro=bool(values.get("takikro")), disp=bool(values.get("disp")), banque=text("banque"),
         fob_revise=fob, fob_mode=fob_mode, fret=fret,
         assurance_mode=assurance_mode, assurance=assurance if assurance_mode == "imposee" else None,
-        designation=text("designation"),
+        designation=text("designation"), fob_exact=bool(values.get("fob_exact")),
     ), []
 
 

@@ -195,7 +195,8 @@ class TestPipelineWithChassis:
 
     def test_fob_revision(self, registry, tmp_path):
         # FOB RFCV 33 333,34 + 33 333,33 + 33 333,33 = 100 000 ; FOB révisé 150 000
-        d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=596.302, fob_revise=150000)
+        # au centime (fob_exact) ; arrondi par défaut : tests/test_fob_arrondi.py
+        d = parse_text(MULTILINE_TEXT, registry, tmp_path, taux_douane=596.302, fob_revise=150000, fob_exact=True)
         prices = [i.tarification.item_price for i in d.items]
         assert round(sum(prices), 2) == 150000.0
         assert prices == [50000.01, 50000.0, 49999.99]              # au prorata des FOB RFCV

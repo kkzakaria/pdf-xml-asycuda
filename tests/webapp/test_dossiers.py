@@ -356,7 +356,8 @@ def test_list_and_search(svc, fake_pdf):
     rows = svc.list(None)
     assert [r["id"] for r in rows] == [b, a]
     ra = rows[1]
-    assert ra["nb_articles"] == 3 and ra["fob_total"] == 100000 and ra["devise"] == "XOF"
+    # case 22 arrondie à l'unité par défaut : 3 × 33 334 (FOB attestés 33 333,34 / 33 333,33)
+    assert ra["nb_articles"] == 3 and ra["fob_total"] == 100002 and ra["devise"] == "XOF"
     assert rows[0]["nb_articles"] is None
     assert set(ra) >= {"id", "rfcv_number", "filename", "status", "created_by", "created_at",
                        "declared_at", "error", "nb_articles", "fob_total", "devise"}

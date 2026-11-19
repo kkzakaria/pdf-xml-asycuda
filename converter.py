@@ -42,7 +42,8 @@ def convert_pdf_to_xml(
     fob_mode: str = "prorata",
     fret_impose: float = None,
     assurance_imposee: float = None,
-    designation: str = None
+    designation: str = None,
+    fob_exact: bool = False
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -65,6 +66,7 @@ def convert_pdf_to_xml(
         assurance_imposee: assurance totale imposée (XOF)
         designation: désignation courte appliquée à tous les articles (après le profil)
         banque: code banque (case 28) à la place du banque_code du profil (disp prioritaire)
+        fob_exact: case 22 au centime ; par défaut FOB arrondi à l'unité supérieure par article
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -107,7 +109,8 @@ def convert_pdf_to_xml(
             register_chassis=register_chassis,
             fob_mode=fob_mode,
             fret_impose=fret_impose,
-            assurance_imposee=assurance_imposee
+            assurance_imposee=assurance_imposee,
+            fob_exact=fob_exact
         )
         rfcv_data = parser.parse()
         if parser.chassis_conflicts:
@@ -293,6 +296,10 @@ Exemples d'utilisation:
     profile_group.add_argument('--fob-mode', choices=['prorata', 'uniforme'], default='prorata',
                                help='Répartition du FOB révisé : prorata (défaut) ou uniforme '
                                     '(même valeur pour chaque article). Avec --fob-revise.')
+    profile_group.add_argument('--fob-exact', action='store_true',
+                               help="Case 22 au centime. Par défaut, FOB de chaque article arrondi à "
+                                    "l'unité supérieure (total = somme des articles), comme les "
+                                    "déclarations de production Karta.")
     profile_group.add_argument('--fret-impose', type=float, default=None, metavar='MONTANT',
                                help='Fret total imposé (devise du RFCV), réparti sur les articles. Un seul fichier.')
     profile_group.add_argument('--assurance-imposee', type=float, default=None, metavar='MONTANT',
@@ -482,6 +489,7 @@ Exemples d'utilisation:
             banque=args.banque,
             corps=args.corps,
             register_chassis=args.enregistrer_chassis,
+            fob_exact=args.fob_exact,
         )
 
         # Exécuter le traitement batch
@@ -568,7 +576,8 @@ Exemples d'utilisation:
             fob_mode=args.fob_mode,
             fret_impose=args.fret_impose,
             assurance_imposee=args.assurance_imposee,
-            designation=args.designation
+            designation=args.designation,
+            fob_exact=args.fob_exact
         )
         sys.exit(0 if success else 1)
 
