@@ -516,6 +516,17 @@ python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transi
 ```
 API : champ `disp=true` (conversion unitaire et batch).
 
+### Banque du dossier (`--banque CODE`)
+
+La banque de domiciliation varie selon le dossier (FDI, champ 18) : `--banque CODE` met ce code en
+case 28 (`Fcx_28b`, `Financial/Bank/Code`) au lieu du `banque_code` du profil (fichier unique et
+batch, réglage « Banque (case 28) » de l'application web). Si `--disp` est aussi donné, `DISP` est
+prioritaire.
+
+```bash
+python converter.py rfcv.pdf --taux-douane 592.945 --profil profils/djam-dks.ini --dossier 31917 --banque SGBCI
+```
+
 ### Valeurs imposées et désignation (fichier unique)
 
 Mêmes réglages que l'application web, pour un seul fichier (refusés en batch) :
@@ -524,6 +535,7 @@ Mêmes réglages que l'application web, pour un seul fichier (refusés en batch)
 |---|---|
 | `--fob-revise MONTANT` | FOB total révisé (devise du RFCV) ; l'assurance par formule est recalculée |
 | `--fob-mode prorata\|uniforme` | répartition du FOB révisé : au prorata (défaut) ou même valeur par article |
+| `--fob-exact` | case 22 au centime, sans arrondi (aussi en batch ; web : « FOB exact (sans arrondi) ») |
 | `--fret-impose MONTANT` | fret total imposé (devise du RFCV) |
 | `--assurance-imposee MONTANT` | assurance totale imposée (XOF), au lieu de la formule ou du RFCV |
 | `--designation TEXTE` | désignation courte de tous les articles (ex. `MOTO`), appliquée après le profil |
@@ -534,9 +546,23 @@ python converter.py rfcv.pdf --taux-douane 596.302 --profil profils/karta-transi
 ```
 Pour des réglages égaux, les fichiers sont identiques octet pour octet à ceux de l'application web.
 
+**FOB arrondi (case 22).** Par défaut, comme les déclarations de production Karta (en attendant une
+décision de la direction), le FOB de chaque article est arrondi à l'unité **supérieure** de la devise,
+après la révision éventuelle du FOB : 9 569,67 USD -> 9 570 ; 68,01 -> 69. Le total de la case 22 est
+la somme des articles arrondis (31287 : 215 × 69 = 14 835). Montants nationaux, assurance par formule,
+CIF et valeur statistique sont calculés sur les montants arrondis ; un montant entier est inchangé ;
+une assurance imposée ou attestée est conservée. `--fob-exact` rétablit le montant exact au centime.
+
+Avec l'arrondi actif, le FOB révisé (`--fob-revise`) est réparti en **unités entières** (plus grand
+reste, au prorata des FOB RFCV ou à parts égales en `uniforme`) : chaque article est entier et la
+somme est exactement le total révisé (15 963 309 sur 320 articles -> 211 × 49 885 + 109 × 49 886) ;
+un total révisé avec centimes est d'abord arrondi à l'unité supérieure. Avec `--fob-exact`, la
+répartition se fait au centime.
+
 ## ♻️ RFCV annulé : libérer ses châssis
 
 Une conversion ne fait que contrôler les châssis (`data/chassis_registry.db`) : elle n'écrit rien
+(c'est aussi le défaut de la bibliothèque : `RFCVParser(..., register_chassis=False)`)
 et signale en avertissement les doublons (RFCV d'origine). L'enregistrement a lieu à la déclaration
 (application web, « Déclaré dans SYDAM ») ou avec `--enregistrer-chassis` en ligne de commande ;
 dans ce cas un second RFCV qui reprend les mêmes châssis est refusé (doublon, HTTP 409). Quand la société d'inspection annule un
@@ -598,6 +624,7 @@ Règles relevées sur des déclarations réelles (production 28923, 28928, 31287
 | Champ | Règle |
 |---|---|
 | Conversion en XOF | taux douanier `taux_douane` (et non le taux du RFCV, case 17) |
+| FOB case 22 (`Item_price`, `Total_invoice`) | arrondi à l'unité supérieure par article, total = Σ articles (sauf `--fob-exact`) |
 | `Summary_declaration` | n° de connaissement / CMR |
 | `Free_text_1`, `Marks2_of_packages` | `CH: <VIN>` (VIN lu dans le RFCV) |
 | `Number_of_packages` | colis répartis à parts égales sur les articles avec châssis, reste aux premiers |

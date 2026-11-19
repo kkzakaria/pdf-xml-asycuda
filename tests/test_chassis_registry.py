@@ -208,6 +208,7 @@ class TestRFCVParserRegistryIntegration:
             taux_douane=573.139,
             registry=isolated_registry,
             force_reprocess=False,
+            register_chassis=True,
         )
         parser._rfcv_number = "CI-2025-002"
         return parser

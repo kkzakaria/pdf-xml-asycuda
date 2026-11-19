@@ -162,3 +162,26 @@ class TestDisp:
         gen.generate()
         root = ET.fromstring(ET.tostring(gen.root))
         assert root.findtext("Financial/Bank/Code") == "DISP"
+
+
+class TestBanque:
+    def test_banque_overrides_profile_bank(self):
+        d = apply_profile(make_data(), load_profile(str(PROFILE_FILE)), banque="SGBC")
+        assert d.financial.bank.code == "SGBC"                     # au lieu de BDU1 du profil
+        assert d.financial.deferred_payment_ref == "2600537M"
+
+    def test_without_profile(self):
+        assert apply_profile(make_data(), None, banque="SGBC").financial.bank.code == "SGBC"
+
+    def test_disp_keeps_priority(self):
+        d = apply_profile(make_data(), load_profile(str(PROFILE_FILE)), banque="SGBC", disp=True)
+        assert d.financial.bank.code == "DISP"
+
+
+def test_djam_dks_profile():
+    p = load_profile(str(PROFILE_FILE.parent / "djam-dks.ini"))
+    assert (p.bureau_code, p.bureau_nom) == ("CIAB1", "ABIDJAN-PORT")
+    assert (p.declarant_code, p.declarant_nom) == ("00522W", "DJAM DKS Transit")
+    assert p.declarant_adresse == "05 BP 1021 Abidjan 05"
+    assert p.declarant_representant == "KOFFI ANIS NAOMI"
+    assert (p.reference_prefixe, p.banque_code, p.compte, p.emplacement) == ("DJAM", "NSIA", "2600522W", "AIRE")

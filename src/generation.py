@@ -42,12 +42,14 @@ class GenerationSettings:
     rapport_paiement: Optional[str] = None
     takikro: bool = False
     disp: bool = False
+    banque: str | None = None           # case 28 : remplace banque_code du profil (DISP prioritaire)
     fob_revise: Optional[Amount] = None
     fob_mode: str = "prorata"
     fret: Optional[Amount] = None
     assurance_mode: str = "formule"     # "formule" | "rfcv" | "imposee"
     assurance: Optional[Amount] = None  # requis si "imposee"
     designation: Optional[str] = None
+    fob_exact: bool = False             # case 22 au centime (défaut : arrondie à l'unité, comme Karta)
 
     def to_dict(self) -> dict:
         """Dictionnaire sérialisable en JSON (stockage en base)."""
@@ -88,6 +90,7 @@ def _parser_options(settings: GenerationSettings, nb_articles: int) -> dict:
         "fob_revise": total(settings.fob_revise),
         "fob_mode": settings.fob_mode,
         "fret_impose": total(settings.fret),
+        "fob_exact": settings.fob_exact,
     }
 
 
@@ -106,7 +109,8 @@ def generate(pdf_path: Path, settings: GenerationSettings, out_dir: Path, stem: 
                          "registre par défaut du dépôt")
     common = {"taux_douane": settings.taux_douane, "rapport_paiement": settings.rapport_paiement,
               "registry": registry, "register_chassis": False}
-    reference = RFCVParser(str(pdf_path), **common).parse()
+    # Référence au même arrondi de la case 22 : l'arrondi n'est pas un écart de réglage
+    reference = RFCVParser(str(pdf_path), **common, fob_exact=settings.fob_exact).parse()
     options = _parser_options(settings, len(reference.items))
 
     parser = RFCVParser(str(pdf_path), **common, **options)
@@ -114,9 +118,10 @@ def generate(pdf_path: Path, settings: GenerationSettings, out_dir: Path, stem: 
 
     # Même condition que la CLI (converter.convert_pdf_to_xml)
     s = settings
-    if s.profile or s.dossier or s.manifeste or s.nationalite_transport or s.takikro or s.disp:
+    if s.profile or s.dossier or s.manifeste or s.nationalite_transport or s.takikro or s.disp or s.banque:
         apply_profile(rfcv_data, s.profile, dossier=s.dossier, manifeste=s.manifeste,
-                      nationalite_transport=s.nationalite_transport, takikro=s.takikro, disp=s.disp)
+                      nationalite_transport=s.nationalite_transport, takikro=s.takikro, disp=s.disp,
+                      banque=s.banque)
     if s.designation:
         apply_designation(rfcv_data, s.designation)
 

@@ -56,7 +56,7 @@ def test_check_only_never_writes(registry, tmp_path):
 
 
 def test_check_only_reports_conflicts_instead_of_raising(registry, tmp_path):
-    parse_text(MULTILINE_TEXT, registry, tmp_path)  # enregistre (défaut)
+    parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=True)  # enregistre
     p = parse_text_parser(MULTILINE_TEXT.replace("RCSA6099999", "RCSA6099998"), registry, tmp_path,
                           register_chassis=False)  # ne lève pas
     assert {c["first_rfcv_number"] for c in p.chassis_conflicts} == {"RCSA6099999"}
@@ -79,7 +79,9 @@ def test_imposed_freight_and_insurance_per_article_reference_case(registry, tmp_
 
 
 def test_imposed_freight_recomputes_formula_insurance(registry, tmp_path):
-    d = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0, fret_impose=10000)
+    # fob_exact : formule sur le FOB attesté 100 000 (arrondi par défaut : tests/test_fob_arrondi.py)
+    d = parse_text(MULTILINE_TEXT, registry, tmp_path, register_chassis=False, taux_douane=1.0, fret_impose=10000,
+                   fob_exact=True)
     assert d.valuation.insurance.amount_national == math.ceil(2500 + (100000 + 10000) * 0.0015)
 
 

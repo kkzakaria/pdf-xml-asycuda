@@ -64,8 +64,10 @@ class BatchConfig:
     insurance_mode: str = "formule"              # 'formule' ou 'rfcv'
     takikro: bool = False                        # dossiers terrestres de Takikro (company_profile.TAKIKRO)
     disp: bool = False                           # case 28 : banque DISP (dispense de domiciliation)
+    banque: str | None = None                    # case 28 : code banque au lieu du profil (disp prioritaire)
     register_chassis: bool = False               # enregistrer les châssis (sinon contrôle des doublons seul)
     corps: bool = False                          # corps SYDAM corps_<nom>.txt à côté de chaque XML
+    fob_exact: bool = False                      # case 22 au centime (défaut : arrondie à l'unité)
     # Données de dossier, une par fichier (même ordre que input_paths)
     dossiers: List[Optional[str]] = field(default_factory=list)
     manifestes: List[Optional[str]] = field(default_factory=list)
@@ -160,8 +162,10 @@ class BatchProcessor:
             "insurance_mode": cfg.insurance_mode,
             "takikro": cfg.takikro,
             "disp": cfg.disp,
+            "banque": cfg.banque,
             "corps": cfg.corps,
             "register_chassis": cfg.register_chassis,
+            "fob_exact": cfg.fob_exact,
             "dossier": pick(cfg.dossiers),
             "manifeste": pick(cfg.manifestes),
             "nationalite_transport": pick(cfg.nationalites_transport),
@@ -173,7 +177,8 @@ class BatchProcessor:
                              insurance_mode: str = "formule", dossier: Optional[str] = None,
                              manifeste: Optional[str] = None, nationalite_transport: Optional[str] = None,
                              takikro: bool = False, disp: bool = False, corps: bool = False,
-                             register_chassis: bool = False) -> BatchResult:
+                             register_chassis: bool = False, banque: str | None = None,
+                             fob_exact: bool = False) -> BatchResult:
         """
         Traite un seul fichier PDF (méthode statique pour multiprocessing)
 
@@ -188,8 +193,10 @@ class BatchProcessor:
             dossier, manifeste, nationalite_transport: données du dossier (optionnel)
             takikro: dossier terrestre de Takikro
             disp: case 28 = DISP (dispense de domiciliation)
+            banque: case 28 = ce code banque au lieu du profil (disp prioritaire)
             corps: générer aussi le corps SYDAM à côté du XML
             register_chassis: enregistrer les châssis (sinon contrôle des doublons seul)
+            fob_exact: case 22 au centime (défaut : FOB arrondi à l'unité supérieure par article)
 
         Returns:
             Résultat du traitement
@@ -213,12 +220,14 @@ class BatchProcessor:
             # de doublons est best-effort (SQLite sérialisera les écritures, mais deux workers
             # peuvent passer le check_extracted simultanément sur le même châssis).
             parser = RFCVParser(str(pdf_path), taux_douane=taux_douane, chassis_config=chassis_config,
-                                insurance_mode=insurance_mode, register_chassis=register_chassis)
+                                insurance_mode=insurance_mode, register_chassis=register_chassis,
+                                fob_exact=fob_exact)
             rfcv_data = parser.parse()
             result.chassis_conflicts = list(parser.chassis_conflicts)
-            if profile or dossier or manifeste or nationalite_transport or takikro or disp:
+            if profile or dossier or manifeste or nationalite_transport or takikro or disp or banque:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                              nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)
+                              nationalite_transport=nationalite_transport, takikro=takikro, disp=disp,
+                              banque=banque)
 
             # Générer le XML
             generator = XMLGenerator(rfcv_data)

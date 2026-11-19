@@ -60,6 +60,7 @@ def apply_profile(
     nationalite_transport: str | None = None,
     takikro: bool = False,
     disp: bool = False,
+    banque: str | None = None,
 ) -> RFCVData:
     """
     Complète la déclaration avec le profil société et les données du dossier.
@@ -67,7 +68,9 @@ def apply_profile(
     Le rapport de paiement passé au parser (rapport_paiement) reste prioritaire sur le
     compte du profil pour Financial/Deffered_payment_reference.
     takikro=True applique en dernier les règles du passage terrestre de Takikro (TAKIKRO).
-    disp=True met le code banque (case 28) à DISP, dispense de domiciliation, à la place du profil.
+    banque : code banque du dossier (case 28, banque de domiciliation du FDI), à la place du
+    banque_code du profil. disp=True met le code banque à DISP (dispense de domiciliation) et
+    reste prioritaire sur banque et sur le profil.
     """
     p = profile or CompanyProfile()
     ident, fin, trans = rfcv_data.identification, rfcv_data.financial, rfcv_data.transport
@@ -93,6 +96,9 @@ def apply_profile(
         if p.banque_code:
             fin.bank = fin.bank or Bank()
             fin.bank.code = p.banque_code
+        if banque:
+            fin.bank = fin.bank or Bank()
+            fin.bank.code = banque
         if disp:
             fin.bank = fin.bank or Bank()
             fin.bank.code = DISP

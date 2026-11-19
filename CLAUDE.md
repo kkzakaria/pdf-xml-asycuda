@@ -177,7 +177,22 @@ profile: offices `CITKK` (clearance + border, names left to ASYCUDA), `Summary_d
 item `Kind_of_packages_code` = `PK` (box 31).
 
 `--disp` (API `disp=true`): `Financial/Bank/Code` = `DISP` (box 28, dispense de domiciliation),
-overriding the profile `banque_code`.
+overriding the profile `banque_code`. `--banque CODE` (CLI single + batch, `GenerationSettings.banque`,
+web app "Banque (case 28)"): the dossier's domiciliation bank (FDI field 18) instead of the profile
+`banque_code`; `--disp` keeps priority when both are given.
+
+Box 22 FOB rounded by default like Karta's production declarations (pending a management
+decision): `RFCVParser._round_fob_to_unit`, in `_finalize` after FOB revision and HS grouping, before
+the proportional distribution and `enrich_for_asycuda`. Rule from production pairs: each declared
+article's FOB rounded UP to the currency unit (31287: 68.01 USD -> 69; 31917: 9 569.67 -> 9 570),
+case-22 total = Σ rounded articles (31287: 215 × 69 = 14 835, not ⌈14 622.15⌉), integers unchanged;
+national amounts, formula insurance (recomputed; imposed/attested insurance kept), CIF and statistical
+value follow from the rounded amounts. `--fob-exact` (CLI single + batch, `GenerationSettings.fob_exact`,
+web app "FOB exact (sans arrondi)", `RFCVParser(fob_exact=True)`) keeps the exact amount (cents).
+Tests asserting cents on fictitious RFCVs pass `fob_exact=True`.
+With rounding active, `--fob-revise` is distributed in WHOLE currency units (largest remainder,
+prorata of RFCV article FOBs, or `distribute_evenly` for `uniforme`), so Σ articles = revised total
+exactly (a revised total with cents is first rounded up to the unit); `fob_exact=True` distributes in cents.
 
 Single-file only (rejected in batch, spec §5.7): `--fob-revise` with `--fob-mode prorata|uniforme`,
 `--fret-impose` (total, RFCV currency), `--assurance-imposee` (total, XOF), `--designation` (applied with
@@ -219,7 +234,13 @@ real declarations (production 28923/28928/31287, ASYCUDA export 28926).
 - `Value_item` = `freight+0+insurance+0-0` (thousands with `,`)
 - `Value_details` = `Total_cost` = Σ (freight + insurance)
 - Packages spread evenly over chassis articles, remainder to the first ones
-- `Summary_declaration` = bill of lading; `Free_text_1` = `CH: <VIN>`
+- `Summary_declaration` = bill of lading; `Free_text_1` = `CH: <VIN>` (chassis articles),
+  `<invoice no> DU <invoice date>` (articles without chassis, production 31917)
+- Box 41 `Supplementary_unit`: chassis articles `QA`=1 + `40`=1; articles without chassis `QA` =
+  article net weight (production 31917), nothing if no net weight
+- `Mode_of_payment`: `rfcv_format_2026.payment_mode_label` (both formats; legacy line starts with
+  the box 9 country, stripped); `Package_type` (legacy) = nomenclature name of the package code;
+  `Place_of_loading` = box "Lieu de chargement" UN/LOCODE + `LOCODE_NAMES` (unknown code: no name)
 
 ### Article Grouping
 
@@ -261,7 +282,10 @@ API_PROFILES_DIR=profils      # company profiles (*.ini), copied into the Docker
 ## Chassis Registry Caution
 
 A conversion only CHECKS VINs against `data/chassis_registry.db` ("registered" = declared in SYDAM):
-it writes nothing by default (CLI warns on duplicates, API passes `register_chassis=False`).
+it writes nothing by default: `RFCVParser(register_chassis=False)` is the library default (check only,
+duplicates in `chassis_conflicts`), the CLI warns on duplicates, the API passes `register_chassis=False`.
+A script calling `RFCVParser(pdf).parse()` never writes to the registry; recording must pass
+`register_chassis=True` explicitly (tests asserting registration or `DuplicateChassisError` do so).
 Recording happens at declaration (web app "Déclaré dans SYDAM") or with CLI `--enregistrer-chassis`,
 which registers and raises `DuplicateChassisError` (HTTP 409 route mapping) on a duplicate unless `force_reprocess`.
 In tests and experiments, pass `registry=ChassisRegistry(tmp_path / "registry.db")` to

@@ -38,10 +38,11 @@ class RFCVParser:
         registry: Optional[ChassisRegistry] = None,
         insurance_mode: str = "formule",
         fob_revise: Optional[float] = None,
-        register_chassis: bool = True,
+        register_chassis: bool = False,
         fob_mode: str = "prorata",
         fret_impose: Optional[float] = None,
         assurance_imposee: Optional[float] = None,
+        fob_exact: bool = False,
     ):
         """
         Initialise le parser
@@ -58,6 +59,13 @@ class RFCVParser:
                            comme les déclarations de production (28923, 28928, 31287).
                            'rfcv' = assurance attestée en case 21 du RFCV × taux douanier
                            (repli sur la formule si le RFCV n'en porte pas).
+            register_chassis: False (défaut) = contrôle seul : aucune écriture dans le registre, les
+                           doublons sont exposés dans chassis_conflicts ; True = enregistre les
+                           châssis et lève DuplicateChassisError sur un doublon (sauf force_reprocess).
+                           À passer explicitement par les appelants qui enregistrent.
+            fob_exact: False (défaut) = FOB de la case 22 arrondi à l'unité supérieure de la
+                           devise, article par article, comme les déclarations de production
+                           Karta (voir _round_fob_to_unit) ; True = montant exact, au centime.
         """
         if insurance_mode not in ("rfcv", "formule"):
             raise ValueError(f"insurance_mode invalide : {insurance_mode!r} (attendu 'rfcv' ou 'formule')")
@@ -76,6 +84,7 @@ class RFCVParser:
             raise ValueError(f"assurance_imposee doit être > 0 : {assurance_imposee!r}")
         self.fret_impose = fret_impose
         self.assurance_imposee = assurance_imposee
+        self.fob_exact = fob_exact
         # Vrai si l'assurance retenue vient de la formule (à recalculer après un FOB révisé)
         self._insurance_from_formula = False
         self.is_format_2026 = False
@@ -138,6 +147,9 @@ class RFCVParser:
     def _parse_format_legacy(self, rfcv_data: RFCVData) -> None:
         """Format RFCV historique (nombres 1 234,56, code SH à points)."""
         rfcv_data.property = self._parse_property()
+        if rfcv_data.property.package_type:
+            # Libellé du RFCV (« PACKAGES ») -> nom de la nomenclature SYDAM du code des articles
+            rfcv_data.property.package_type = self._map_package_type(rfcv_data.property.package_type)[1]
         rfcv_data.identification = self._parse_identification()
         self._rfcv_number = rfcv_data.identification.rfcv_number if rfcv_data.identification else None
         rfcv_data.exporter = self._parse_exporter()
@@ -211,8 +223,7 @@ class RFCVParser:
 
         rfcv_data.financial = Financial(
             transaction_code1='0', transaction_code2='1',
-            mode_of_payment=('COMPTE DE PAIEMENT' if h["payment_mode"] and 'compte' in h["payment_mode"].lower()
-                             else h["payment_mode"]),
+            mode_of_payment=fmt2026.payment_mode_label(h["payment_mode"]),
             deferred_payment_ref=self.rapport_paiement or None,
             invoice_number=h["invoice_number"], invoice_date=h["invoice_date"],
             invoice_amount=None,  # case 18 non utilisée par ASYCUDA
@@ -300,8 +311,14 @@ class RFCVParser:
         """
         Remplace le FOB attesté par le FOB révisé (devise du RFCV).
 
-        Le total est réparti sur les articles au prorata de leur FOB RFCV, au centime, par la
-        méthode du plus grand reste (Σ articles = total révisé). L'assurance par formule est
+        Le total est réparti sur les articles au prorata de leur FOB RFCV ('prorata') ou à parts
+        égales ('uniforme'), par la méthode du plus grand reste (Σ articles = total révisé) :
+        - arrondi actif (fob_exact False, défaut) : répartition en UNITÉS entières de la devise,
+          chaque article est entier et Σ articles = total révisé exactement (l'arrondi par article
+          de la case 22 ne change alors plus rien) ; un total révisé comportant des centimes est
+          d'abord arrondi à l'unité supérieure (15 963 308,40 -> 15 963 309) ;
+        - fob_exact True : répartition au centime, total révisé conservé tel quel.
+        L'assurance par formule est
         recalculée sur le FOB révisé (y compris en mode 'rfcv' quand la formule a servi de repli) ;
         une assurance attestée (case 21) est conservée. Fret, poids et colis sont inchangés.
         """
@@ -310,28 +327,72 @@ class RFCVParser:
         if not items or fob_rfcv <= 0:
             logger.warning("FOB révisé ignoré : aucun FOB d'article à répartir")
             return
-        total_cents = round(self.fob_revise * 100)
+        # Unité de répartition : 100 = unité entière (arrondi case 22 actif), 1 = centime (fob_exact)
+        step = 1 if self.fob_exact else 100
+        fob_total = self.fob_revise if self.fob_exact else self._fob_unit(self.fob_revise)
+        total_steps = round(fob_total * 100) // step
         if self.fob_mode == "uniforme":
-            cents = distribute_evenly(total_cents, len(items))
+            shares = distribute_evenly(total_steps, len(items))
         else:
-            cents = ProportionalCalculator().distribute_proportionally(
-                total_amount=total_cents,
+            shares = ProportionalCalculator().distribute_proportionally(
+                total_amount=total_steps,
                 item_fobs=[i.tarification.item_price for i in items],
                 fob_total=fob_rfcv)
-        for item, c in zip(items, cents):
-            item.tarification.item_price = c / 100
+        for item, n in zip(items, shares):
+            amount = n * step / 100
+            item.tarification.item_price = amount
             if item.valuation_item:
-                item.valuation_item.total_cost = c / 100
-        logger.info(f"FOB révisé : {fob_rfcv:,.2f} -> {self.fob_revise:,.2f} ({len(items)} articles)")
+                item.valuation_item.total_cost = amount
+        logger.info(f"FOB révisé : {fob_rfcv:,.2f} -> {fob_total:,.2f} ({len(items)} articles)")
 
         val, fin = rfcv_data.valuation, rfcv_data.financial
         if val is None:
             return
         rate = fin.exchange_rate if fin and fin.exchange_rate else None
         if val.invoice:
-            val.invoice.amount_foreign = self.fob_revise
-            val.invoice.amount_national = self.fob_revise * rate if rate else val.invoice.amount_national
-        val.total_invoice = self.fob_revise
+            val.invoice.amount_foreign = fob_total
+            val.invoice.amount_national = fob_total * rate if rate else val.invoice.amount_national
+        val.total_invoice = fob_total
+
+    @staticmethod
+    def _fob_unit(value: float) -> float:
+        """FOB arrondi à l'unité SUPÉRIEURE de la devise (au centime près : 3,0000001 -> 3)."""
+        cents = round(value * 100)
+        return float(-(-cents // 100))
+
+    def _round_fob_to_unit(self, rfcv_data: RFCVData) -> bool:
+        """
+        Case 22 arrondie comme les déclarations de production Karta : FOB de chaque article
+        arrondi à l'unité supérieure (31287 : 68,01 USD -> 69 ; 31917 : 9 569,67 -> 9 570), total
+        = Σ des articles arrondis (31287 : 215 × 69 = 14 835 et non ⌈14 622,15⌉ = 14 623).
+        Montants entiers inchangés. Renvoie True si un montant a changé.
+        """
+        val, fin = rfcv_data.valuation, rfcv_data.financial
+        items = [i for i in rfcv_data.items if i.tarification and i.tarification.item_price is not None]
+        changed = False
+        for item in items:
+            unit = self._fob_unit(item.tarification.item_price)
+            if unit != item.tarification.item_price:
+                item.tarification.item_price = unit
+                changed = True
+        if val is None:
+            return changed
+        old_total = val.total_invoice
+        if changed:
+            total = float(sum(i.tarification.item_price for i in items))
+        elif old_total is not None:
+            total = self._fob_unit(old_total)        # articles entiers : total seul arrondi
+        else:
+            return False
+        if total == old_total and not changed:
+            return False
+        rate = fin.exchange_rate if fin and fin.exchange_rate else None
+        val.total_invoice = total
+        if val.invoice:
+            val.invoice.amount_foreign = total
+            val.invoice.amount_national = total * rate if rate else val.invoice.amount_national
+        logger.info(f"FOB arrondi à l'unité (case 22) : {old_total} -> {total}")
+        return True
 
     @staticmethod
     def _formula_insurance(fob: float, freight: float, rate: float) -> CurrencyAmount:
@@ -428,6 +489,18 @@ class RFCVParser:
             # Ajouter uniquement au premier article
             rfcv_data.items[0].previous_document_reference = prev_doc_ref
 
+            # Case 44 (Free_text_1) des articles sans châssis : « <facture> DU <date> »
+            # (les articles avec châssis gardent « CH: <VIN> »)
+            for item in rfcv_data.items:
+                if not (item.packages and item.packages.chassis_number) and not item.free_text_1:
+                    item.free_text_1 = prev_doc_ref
+
+        # Case 22 : FOB arrondi à l'unité (sauf fob_exact), après révision et regroupement,
+        # avant la répartition du fret / de l'assurance et les montants calculés
+        if not self.fob_exact and self._round_fob_to_unit(rfcv_data):
+            # assurance par formule recalculée sur le FOB arrondi (imposée/attestée conservée)
+            self._apply_imposed_amounts(rfcv_data, fob_revised=True)
+
         # Enrichir ValuationItem.invoice avec les données de devise pour chaque item
         if rfcv_data.financial and rfcv_data.financial.currency_code and rfcv_data.financial.exchange_rate:
             for item in rfcv_data.items:
@@ -452,6 +525,10 @@ class RFCVParser:
         # Champs calculés attendus par ASYCUDA (colis par article, CIF, valeur statistique,
         # éléments de la valeur, totaux) — voir asycuda_enrichment
         enrich_for_asycuda(rfcv_data)
+
+        # Case 41 : unité d'apurement des articles sans châssis = poids net de l'article
+        # (après la répartition des poids)
+        self._add_clearance_unit_by_weight(rfcv_data)
 
         # NOTE: La répartition du nombre de colis est maintenant gérée par le regroupement d'articles
         # Le nombre de colis (section 24) est stocké comme quantité du premier article du premier groupe
@@ -725,8 +802,13 @@ class RFCVParser:
         if voyage:
             transport.voyage_number = voyage
 
-        # P1.6 + P4.2: Lieu de chargement - non utilisé (mis à null dans XML)
-        # Note: loading_place_code et loading_place_name ne sont plus extraits
+        # Case 27 : lieu de chargement (UN/LOCODE) ; nom connu seulement, jamais inventé.
+        # Sensible à la casse et sur la même ligne : champ vide -> rien.
+        loading = re.search(r'Lieu\s*de\s*chargement\s*:[ \t]*([A-Z]{5})\b', self.text)
+        if loading:
+            transport.loading_place_code = loading.group(1)
+            transport.loading_place_name = fmt2026.LOCODE_NAMES.get(loading.group(1))
+            transport.loading_location = loading.group(1)
 
         # P1.6: Lieu de déchargement
         unloading = self._extract_field(r'Lieu\s*de\s*déchargement:\s*([A-Z]{5})')
@@ -756,10 +838,19 @@ class RFCVParser:
         """Parse les informations financières"""
         financial = Financial()
 
-        # Mode de paiement
-        payment_mode = self._extract_field(r'10\.\s*Mode de Paiement[:\s]+(.*?)(?:\n|$)')
+        # Mode de paiement (case 10) : ligne sous l'en-tête, qui commence par le pays de provenance
+        # (case 9, colonne voisine) : « Chine Paiement sur compte bancaire »
+        payment_mode = self._extract_field(r'10\.\s*Mode de Paiement[^\n]*\n([^\n]+)')
         if payment_mode:
-            financial.mode_of_payment = payment_mode
+            mode = re.search(r'\bPaiement\b.*', payment_mode, re.IGNORECASE)
+            if mode:
+                payment_mode = mode.group(0)
+            else:
+                country = next((name for name in sorted(fmt2026.COUNTRY_CODES, key=len, reverse=True)
+                                if payment_mode.lower().startswith(name.lower() + ' ')), None)
+                if country:
+                    payment_mode = payment_mode[len(country):].strip()
+            financial.mode_of_payment = fmt2026.payment_mode_label(payment_mode.strip())
 
         # Rapport de paiement (Deffered_payment_reference)
         # Fourni en paramètre si disponible (numéro de quittance du Trésor)
@@ -1609,6 +1700,26 @@ class RFCVParser:
                     f"Article avec châssis {item.packages.chassis_number}: "
                     f"unités supplémentaires (QA=1, 40=1), valuation_method=40"
                 )
+
+
+    @staticmethod
+    def _add_clearance_unit_by_weight(rfcv_data: RFCVData) -> None:
+        """
+        Case 41 des articles sans châssis : unité d'apurement QA = poids net de l'article (kg),
+        comme la déclaration de production 31917 (marchandise générale). Les articles avec châssis
+        gardent QA = 1 et 40 = 1 (_add_supplementary_units_for_chassis). Poids net absent ou nul : rien.
+        """
+        for item in rfcv_data.items:
+            if item.packages and item.packages.chassis_number:
+                continue
+            weight = item.valuation_item.net_weight if item.valuation_item else None
+            if not weight:
+                continue
+            if not item.tarification:
+                item.tarification = Tarification()
+            quantity = int(weight) if float(weight).is_integer() else weight  # « 15986 » comme SYDAM
+            item.tarification.supplementary_units = [
+                SupplementaryUnit(code='QA', name="Unité d'apurement", quantity=quantity)]
 
 
 def parse_rfcv(pdf_path: str, taux_douane: Optional[float] = None) -> RFCVData:

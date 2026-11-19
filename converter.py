@@ -35,13 +35,15 @@ def convert_pdf_to_xml(
     nationalite_transport: str = None,
     takikro: bool = False,
     disp: bool = False,
+    banque: str | None = None,
     fob_revise: float = None,
     corps: bool = False,
     register_chassis: bool = False,
     fob_mode: str = "prorata",
     fret_impose: float = None,
     assurance_imposee: float = None,
-    designation: str = None
+    designation: str = None,
+    fob_exact: bool = False
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -63,6 +65,8 @@ def convert_pdf_to_xml(
         fret_impose: fret total imposé (devise du RFCV)
         assurance_imposee: assurance totale imposée (XOF)
         designation: désignation courte appliquée à tous les articles (après le profil)
+        banque: code banque (case 28) à la place du banque_code du profil (disp prioritaire)
+        fob_exact: case 22 au centime ; par défaut FOB arrondi à l'unité supérieure par article
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -105,7 +109,8 @@ def convert_pdf_to_xml(
             register_chassis=register_chassis,
             fob_mode=fob_mode,
             fret_impose=fret_impose,
-            assurance_imposee=assurance_imposee
+            assurance_imposee=assurance_imposee,
+            fob_exact=fob_exact
         )
         rfcv_data = parser.parse()
         if parser.chassis_conflicts:
@@ -117,9 +122,10 @@ def convert_pdf_to_xml(
                   " (détail d'un châssis : python registre.py chercher <VIN>)", file=sys.stderr)
 
         # Constantes société (profil) et données du dossier, absentes du RFCV
-        if profile or dossier or manifeste or nationalite_transport or takikro or disp:
+        if profile or dossier or manifeste or nationalite_transport or takikro or disp or banque:
             apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
-                          nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)
+                          nationalite_transport=nationalite_transport, takikro=takikro, disp=disp,
+                          banque=banque)
 
         # Désignation courte (même ordre que generation.generate : après le profil)
         if designation:
@@ -290,6 +296,10 @@ Exemples d'utilisation:
     profile_group.add_argument('--fob-mode', choices=['prorata', 'uniforme'], default='prorata',
                                help='Répartition du FOB révisé : prorata (défaut) ou uniforme '
                                     '(même valeur pour chaque article). Avec --fob-revise.')
+    profile_group.add_argument('--fob-exact', action='store_true',
+                               help="Case 22 au centime. Par défaut, FOB de chaque article arrondi à "
+                                    "l'unité supérieure (total = somme des articles), comme les "
+                                    "déclarations de production Karta.")
     profile_group.add_argument('--fret-impose', type=float, default=None, metavar='MONTANT',
                                help='Fret total imposé (devise du RFCV), réparti sur les articles. Un seul fichier.')
     profile_group.add_argument('--assurance-imposee', type=float, default=None, metavar='MONTANT',
@@ -310,6 +320,9 @@ Exemples d'utilisation:
                              "fichier d'écriture de l'agent SYDAM")
     profile_group.add_argument('--disp', action='store_true',
                                help='Case 28 : code banque DISP (dispense de domiciliation) au lieu de la banque du profil')
+    profile_group.add_argument('--banque', default=None, metavar='CODE',
+                               help='Case 28 : code de la banque de domiciliation du dossier (FDI, champ 18), '
+                                    'au lieu de banque_code du profil. --disp reste prioritaire.')
 
     parser.add_argument(
         '--rapport-paiement',
@@ -473,8 +486,10 @@ Exemples d'utilisation:
             insurance_mode="rfcv" if args.assurance_rfcv else "formule",
             takikro=args.takikro,
             disp=args.disp,
+            banque=args.banque,
             corps=args.corps,
             register_chassis=args.enregistrer_chassis,
+            fob_exact=args.fob_exact,
         )
 
         # Exécuter le traitement batch
@@ -554,13 +569,15 @@ Exemples d'utilisation:
             nationalite_transport=args.nationalite_transport,
             takikro=args.takikro,
             disp=args.disp,
+            banque=args.banque,
             fob_revise=args.fob_revise,
             corps=args.corps,
             register_chassis=args.enregistrer_chassis,
             fob_mode=args.fob_mode,
             fret_impose=args.fret_impose,
             assurance_imposee=args.assurance_imposee,
-            designation=args.designation
+            designation=args.designation,
+            fob_exact=args.fob_exact
         )
         sys.exit(0 if success else 1)
 
