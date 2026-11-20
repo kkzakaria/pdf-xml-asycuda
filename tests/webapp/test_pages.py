@@ -497,3 +497,11 @@ async def test_page_vide(client, as_user):
 async def test_recherche_garde_le_filtre(client, as_user):
     r = await client.get("/", params={"statut": "genere", "q": "6099"})
     assert 'name="statut" value="genere"' in r.text and 'value="6099"' in r.text
+
+
+async def test_page_depot(client, as_user):
+    r = await client.get("/nouveau")
+    assert 'type="file"' in r.text and 'name="fichiers"' in r.text and "multiple" in r.text
+    assert 'accept="application/pdf,.pdf"' in r.text
+    assert "Glissez vos PDF RFCV ici" in r.text and "/static/depot.js" in r.text
+    assert (await client.get("/static/depot.js")).status_code == 200

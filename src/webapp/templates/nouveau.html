@@ -1,21 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Nouveau · Génération XML & corps{% endblock %}
+{% import "_ui.html" as ui %}
+{% import "_icones.html" as ic %}
+{% block title %}Déposer des RFCV{% endblock %}
+{% block head %}<script src="/static/depot.js" defer></script>{% endblock %}
 {% block content %}
-<h1>Nouveaux dossiers</h1>
-{% if errors %}
-<div class="erreur">
-  <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+<div class="flex flex-col gap-1">
+  <p class="m-0 text-[13px] text-encre-2">Nouveaux dossiers</p>
+  <h1 class="m-0 text-3xl font-extrabold tracking-tight text-karta-nuit">Déposer des RFCV</h1>
 </div>
-{% endif %}
-{% if created %}
-<div class="succes">
-  <p>Dossiers créés :</p>
-  <ul>{% for id, name in created %}<li><a href="/dossiers/{{ id }}">{{ name }}</a></li>{% endfor %}</ul>
+
+<div class="flex flex-col gap-5 max-w-[960px]">
+  {% if errors %}
+  {% call ui.alerte("erreur", "Dépôt incomplet") %}
+  <ul class="m-0 pl-4">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  {% endcall %}
+  {% endif %}
+  {% if created %}
+  {% call ui.alerte("succes", "Dossiers créés") %}
+  <ul class="m-0 pl-4">{% for id, name in created %}<li><a href="/dossiers/{{ id }}">{{ name }}</a></li>{% endfor %}</ul>
+  {% endcall %}
+  {% endif %}
+
+  <form method="post" action="/nouveau" enctype="multipart/form-data" class="flex flex-col gap-4">
+    <label id="zone-depot" for="fichiers"
+           class="relative flex flex-col items-center justify-center gap-3.5 px-6 py-12 rounded-[20px] border-2 border-dashed border-[#A9ADE8] bg-white text-center cursor-pointer focus-within:border-karta-bleu">
+      <span class="flex items-center justify-center size-16 rounded-[18px] bg-karta-pale text-karta-bleu">{{ ic.icone("fichier", 30) }}</span>
+      <span class="text-[17px] font-bold text-karta-nuit">Glissez vos PDF RFCV ici</span>
+      <span class="text-sm text-encre-2">ou <span class="text-karta-bleu font-semibold underline">parcourez vos fichiers</span> · plusieurs fichiers acceptés</span>
+      <input id="fichiers" type="file" name="fichiers" accept="application/pdf,.pdf" multiple required
+             class="absolute inset-0 opacity-0 cursor-pointer">
+    </label>
+    <ul id="fichiers-choisis" class="m-0 p-0 list-none bg-white border border-bord rounded-2xl text-sm" hidden></ul>
+    <div class="flex flex-wrap items-center gap-3.5">
+      {{ ui.bouton("Déposer", id="deposer", icone="depot") }}
+      <span class="text-[13px] text-encre-2">Chaque PDF devient un dossier en brouillon, à régler puis générer.</span>
+    </div>
+  </form>
 </div>
-{% endif %}
-<form method="post" action="/nouveau" enctype="multipart/form-data">
-  <p>Chaque PDF RFCV déposé devient un dossier en brouillon.</p>
-  <input type="file" name="fichiers" accept="application/pdf,.pdf" multiple required>
-  <button type="submit">Déposer</button>
-</form>
 {% endblock %}
