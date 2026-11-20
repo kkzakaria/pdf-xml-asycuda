@@ -603,3 +603,37 @@ def test_accessibilite_contraste_et_cibles():
     assert "h-9" not in liste and "outline-none" not in liste
     assert "focus-within:ring" in liste
     assert "focus-within:ring" in (gabarits / "nouveau.html").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------------ petits défauts (revue finale)
+async def test_bandeau_fige_gris(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await client.post(f"/dossiers/{d}/abandonner")
+    page = (await client.get(f"/dossiers/{d}")).text
+    m = re.search(r'<div class="[^"]*alerte-(\w+)[^"]*"[^>]*>(?:(?!</div>).)*Brouillon abandonné', page, re.S)
+    assert m and m.group(1) == "neutre"
+
+
+async def test_badge_admin_rouge_karta(client, as_user):
+    as_user(CHEF)
+    page = (await client.get("/")).text
+    badge = re.search(r'<span class="([^"]*)">ADMIN</span>', page)
+    assert badge and "karta-rouge" in badge.group(1) and "erreur" not in badge.group(1)
+
+
+async def test_filtre_inconnu_et_recherche(client, as_user, fake_pdf):
+    await new_dossier(client)
+    await new_dossier(client, "b.pdf", OTHER_TEXT)
+    r = await client.get("/", params={"statut": "zzz", "q": "6088888"})
+    assert r.status_code == 200 and "RCSA6088888" in r.text and "RCSA6099999" not in r.text
+
+
+def test_depot_filtre_les_pdf_glisses():
+    js = (ROOT / "src" / "webapp" / "static" / "depot.js").read_text(encoding="utf-8")
+    assert "new DataTransfer()" in js and "estPdf" in js
+
+
+def test_script_css_multi_plateforme():
+    script = (ROOT / "scripts" / "css.sh").read_text(encoding="utf-8")
+    for plateforme in ("linux-x64", "linux-arm64", "macos-arm64", "macos-x64"):
+        assert f"tailwindcss-{plateforme}" in script

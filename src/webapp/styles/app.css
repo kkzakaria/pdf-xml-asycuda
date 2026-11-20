@@ -20,6 +20,7 @@
   --color-karta-bleu-fonce: #11117A;
   --color-karta-nuit: #12127E;
   --color-karta-rouge: #FF2B52;
+  --color-karta-rouge-fonce: #C8002E;   /* texte rouge Karta lisible (≥ 4,5:1 sur fond clair) */
   --color-karta-pale: #ECEDFF;
 
   --color-fond: #F4F5FB;

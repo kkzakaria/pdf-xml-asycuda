@@ -39,11 +39,27 @@
   ["dragleave", "drop"].forEach(function (type) {
     zone.addEventListener(type, function () { zone.classList.remove("border-karta-bleu", "bg-karta-pale"); });
   });
+  function estPdf(f) {
+    return f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+  }
+
+  // Glisser-déposer : seuls les PDF sont retenus, comme le filtre « accept » du sélecteur
   zone.addEventListener("drop", function (e) {
     e.preventDefault();
-    if (e.dataTransfer && e.dataTransfer.files.length) {
-      champ.files = e.dataTransfer.files;
-      afficher();
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+    var pdfs = new DataTransfer();
+    var ecartes = [];
+    Array.prototype.forEach.call(e.dataTransfer.files, function (f) {
+      if (estPdf(f)) pdfs.items.add(f); else ecartes.push(f.name);
+    });
+    champ.files = pdfs.files;
+    afficher();
+    if (ecartes.length) {
+      var avis = document.createElement("li");
+      avis.className = "px-4 py-3 border-t border-[#EEF0F7] first:border-t-0 text-erreur";
+      avis.textContent = "Ignoré (pas un PDF) : " + ecartes.join(", ");
+      liste.appendChild(avis);
+      liste.hidden = false;
     }
   });
 })();
