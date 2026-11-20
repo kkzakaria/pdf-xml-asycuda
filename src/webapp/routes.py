@@ -30,6 +30,7 @@ from generation_summary import FOB_MODES, fmt_montant  # noqa: E402
 
 from . import config, db  # noqa: E402
 from .auth import User, current_user, require_admin  # noqa: E402
+from .presentation import etapes_dossier, statut_affiche  # noqa: E402
 from .dossiers import (RFCV_ILLISIBLE, DeclarationRefusee, DossierFige, DossierIntrouvable,  # noqa: E402
                        DossierService)
 
@@ -52,6 +53,8 @@ def _paire_sh(message: str):
 
 
 _env.filters["paire_sh"] = _paire_sh
+_env.globals["statut_affiche"] = statut_affiche
+_env.globals["etapes_dossier"] = etapes_dossier
 templates = Jinja2Templates(env=_env)
 
 STATUTS = {"brouillon": "Brouillon", "declare": "Déclaré", "annule": "Annulé", "abandonne": "Abandonné"}
