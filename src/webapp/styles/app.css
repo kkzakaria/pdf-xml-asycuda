@@ -57,6 +57,16 @@
   :focus-visible { outline: 3px solid var(--color-karta-bleu); outline-offset: 2px; }
 }
 
+/* Focus des champs : bordure bleue + halo léger, à la place du contour épais.
+   .champ-nu : champ sans bordure dans un cadre qui porte lui-même le halo (recherche). */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  border-color: var(--color-karta-bleu);
+  box-shadow: 0 0 0 3px rgb(27 27 168 / .18);
+}
+input[type="checkbox"]:focus-visible { box-shadow: none; outline: 2px solid var(--color-karta-bleu); outline-offset: 2px; }
+.champ-nu:focus-visible { outline: none; box-shadow: none; }
+
 /* Hors couche : l'emporte sur les classes de couleur des boutons */
 button:disabled { cursor: not-allowed; background: #F0F1F6; color: #8A8EAE; border-color: var(--color-bord-champ); }
 
