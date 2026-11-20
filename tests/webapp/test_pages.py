@@ -637,3 +637,9 @@ def test_script_css_multi_plateforme():
     script = (ROOT / "scripts" / "css.sh").read_text(encoding="utf-8")
     for plateforme in ("linux-x64", "linux-arm64", "macos-arm64", "macos-x64"):
         assert f"tailwindcss-{plateforme}" in script
+
+
+async def test_menu_lateral_fixe(client, as_user):
+    page = (await client.get("/")).text
+    aside = re.search(r'<aside class="([^"]*)"', page).group(1).split()
+    assert {"md:sticky", "md:top-0", "md:h-screen", "md:overflow-y-auto"} <= set(aside)
