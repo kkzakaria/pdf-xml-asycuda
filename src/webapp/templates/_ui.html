@@ -1,0 +1,85 @@
+{# Composants communs (maquettes Karta). Usage : {% import "_ui.html" as ui %} #}
+{% import "_icones.html" as ic %}
+
+{% set _BOUTONS = {
+  "primaire": "bg-karta-bleu text-white hover:bg-karta-bleu-fonce border border-transparent",
+  "secondaire": "bg-white text-karta-nuit border border-bord-champ hover:bg-fond",
+  "succes": "bg-succes text-white hover:brightness-95 border border-transparent",
+  "danger": "bg-white text-erreur border border-erreur hover:bg-erreur-fond",
+  "discret": "bg-transparent text-encre-2 border border-transparent hover:bg-fond",
+} %}
+{% set _BOUTON_BASE = "inline-flex items-center justify-center gap-2 min-h-11 px-4 rounded-xl text-sm font-bold no-underline cursor-pointer disabled:cursor-not-allowed disabled:bg-[#F0F1F6] disabled:text-[#8A8EAE] disabled:border-bord-champ" %}
+
+{% macro bouton(libelle, type="submit", variante="primaire", id=None, disabled=False, icone=None, attrs="", classe="") -%}
+<button type="{{ type }}"{% if id %} id="{{ id }}"{% endif %} class="{{ _BOUTON_BASE }} {{ _BOUTONS[variante] }} {{ classe }}"{% if disabled %} disabled{% endif %} {{ attrs | safe }}>
+  {%- if icone %}{{ ic.icone(icone, 16) }}{% endif %}{{ libelle }}</button>
+{%- endmacro %}
+
+{% macro lien_bouton(href, libelle, variante="secondaire", icone=None, classe="") -%}
+<a href="{{ href }}" class="{{ _BOUTON_BASE }} {{ _BOUTONS[variante] }} hover:no-underline {{ classe }}">
+  {%- if icone %}{{ ic.icone(icone, 16) }}{% endif %}{{ libelle }}</a>
+{%- endmacro %}
+
+{% set _PASTILLES = {
+  "brouillon": ("bg-karta-pale text-karta-bleu", "bg-karta-bleu"),
+  "genere": ("bg-genere-fond text-genere-texte", "bg-[#E08600]"),
+  "declare": ("bg-succes-fond text-[#0B6A39]", "bg-[#12A150]"),
+  "echec": ("bg-erreur-fond text-erreur", None),
+  "annule": ("bg-[#F0F1F6] text-encre-2", None),
+  "abandonne": ("bg-[#F0F1F6] text-encre-2 italic", None),
+} %}
+{% macro pastille(code, libelle) -%}
+{% set style = _PASTILLES.get(code, _PASTILLES["annule"]) %}
+<span class="statut statut-{{ code }} inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap {{ style[0] }}">
+  {%- if code == "echec" %}{{ ic.icone("erreur", 12) }}{% elif style[1] %}<span class="size-1.5 rounded-full {{ style[1] }}"></span>{% endif %}{{ libelle }}</span>
+{%- endmacro %}
+
+{% set _ALERTES = {
+  "succes": ("bg-succes-fond border-succes-bord text-succes-texte", "succes"),
+  "avertissement": ("bg-alerte-fond border-alerte-bord text-alerte-texte", "alerte"),
+  "erreur": ("bg-erreur-fond border-erreur-bord text-erreur-texte", "erreur"),
+  "bloquante": ("bg-erreur-fond border-erreur-bord text-erreur-texte", "alerte"),
+  "info": ("bg-karta-pale border-[#C4C7EA] text-karta-nuit", "info"),
+} %}
+{# Alerte : le contenu (caller) suit le titre ; role="alert" pour les erreurs. #}
+{% macro alerte(niveau, titre=None, classe="") -%}
+{% set style = _ALERTES[niveau] %}
+<div class="{{ 'erreur ' if niveau in ('erreur', 'bloquante') else '' }}alerte-{{ niveau }} flex gap-3 items-start rounded-2xl border px-5 py-4 text-sm {{ style[0] }} {{ classe }}"{% if niveau in ('erreur', 'bloquante') %} role="alert"{% endif %}>
+  {{ ic.icone(style[1], 20, "mt-0.5") }}
+  <div class="flex flex-col gap-1 min-w-0">
+    {% if titre %}<strong class="text-[15px]">{{ titre }}</strong>{% endif %}
+    {% if caller %}{{ caller() }}{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro carte_montant(libelle, valeur, detail="", sombre=False) -%}
+<div class="flex flex-col gap-1.5 rounded-2xl px-5 py-4 {{ 'bg-karta-nuit text-white' if sombre else 'bg-white border border-bord' }}">
+  <span class="text-xs font-bold tracking-wider uppercase {{ 'text-[#A7ABE6]' if sombre else 'text-encre-2' }}">{{ libelle }}</span>
+  <span class="text-2xl font-extrabold tabular-nums {{ '' if sombre else 'text-karta-nuit' }}">{{ valeur }}</span>
+  {% if detail %}<span class="text-xs {{ 'text-[#CDD0F7]' if sombre else 'text-encre-3' }}">{{ detail }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% set CHAMP = "h-11 w-full px-3 rounded-[10px] border border-bord-champ bg-white text-sm text-encre focus:border-karta-bleu" %}
+
+{% macro champ(name, label, value="", hint=None, required=False, inputmode=None, placeholder=None, id=None, type="text", classe="") -%}
+<label class="flex flex-col gap-1.5 text-[13px] font-semibold text-[#3A3F66] {{ classe }}">
+  <span>{{ label }}{% if hint %} <small class="font-medium text-encre-3">{{ hint }}</small>{% endif %}</span>
+  <input type="{{ type }}" name="{{ name }}"{% if id %} id="{{ id }}"{% endif %} value="{{ value }}" class="{{ CHAMP }}"
+    {%- if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}>
+</label>
+{%- endmacro %}
+
+{% macro case(name, label, checked=False, mise_en_avant=False) -%}
+<label class="case inline-flex items-center gap-2.5 min-h-11 px-3.5 rounded-[10px] text-sm {{ 'bg-karta-pale text-karta-nuit font-semibold' if mise_en_avant else 'text-[#3A3F66]' }}">
+  <input type="checkbox" name="{{ name }}" value="1" class="size-[18px] accent-karta-bleu"{% if checked %} checked{% endif %}> {{ label }}</label>
+{%- endmacro %}
+
+{# Cadre de tableau défilant sur petit écran #}
+{% macro cadre(classe="") -%}
+<section class="bg-white border border-bord rounded-2xl overflow-x-auto shadow-[0_1px_2px_rgba(18,18,126,.04),0_8px_24px_-12px_rgba(18,18,126,.12)] {{ classe }}">{{ caller() }}</section>
+{%- endmacro %}
+
+{% set TH = "text-left px-3 py-3.5 text-xs font-bold uppercase tracking-wider text-encre-2 bg-[#F8F9FD]" %}
+{% set TD = "px-3 py-3.5 border-t border-[#EEF0F7] align-top" %}

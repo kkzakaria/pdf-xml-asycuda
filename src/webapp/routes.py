@@ -121,8 +121,13 @@ def _get_dossier(svc: DossierService, dossier_id: int) -> dict:
         raise HTTPException(status_code=404, detail=f"Dossier {dossier_id} introuvable")
 
 
+# Entrée de menu active selon l'écran
+_MENU_ACTIF = {"dossiers.html": "dossiers", "dossier.html": "dossiers", "nouveau.html": "nouveau",
+               "chassis.html": "chassis"}
+
+
 def _render(request: Request, name: str, user: User, status_code: int = 200, headers=None, **context):
-    context.update(user=user)
+    context.update(user=user, active=_MENU_ACTIF.get(name))
     return templates.TemplateResponse(request, name, context, status_code=status_code, headers=headers)
 
 

@@ -17,7 +17,7 @@ async def test_valid_token_gives_user(client, make_token, webapp_settings):
     s = webapp_settings()
     r = await client.get("/", headers={HEADER: make_token(email="Op@Karta.ci")})
     assert r.status_code == 200
-    assert "Connecté : op@karta.ci" in r.text
+    assert 'title="op@karta.ci"' in r.text      # carte utilisateur du menu
     # cookie CF_Authorization accepté aussi
     client.cookies.set("CF_Authorization", make_token(email="b@karta.ci"))
     r = await client.get("/")
@@ -103,7 +103,7 @@ async def test_dev_user_mode(client, webapp_settings):
     webapp_settings(access_aud="", dev_user="dev@karta.ci", admins=["dev@karta.ci"])
     r = await client.get("/")
     assert r.status_code == 200
-    assert "Connecté : dev@karta.ci" in r.text
+    assert 'title="dev@karta.ci"' in r.text
 
 
 def test_both_dev_and_aud_refused(tmp_path):

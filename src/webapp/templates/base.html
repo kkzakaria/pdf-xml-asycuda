@@ -1,26 +1,50 @@
+{% import "_icones.html" as ic %}
 <!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Génération XML & corps{% endblock %}</title>
+  <title>{% block title %}Génération XML & corps{% endblock %} · Karta Transit</title>
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="/static/img/logo-karta-transit.jpg">
   <script src="/static/htmx.min.js" defer></script>
+  {% block head %}{% endblock %}
 </head>
-<body>
-<header class="entete">
-  <a class="appli" href="/">Génération XML & corps</a>
-  <nav>
-    <a href="/">Dossiers</a>
-    <a href="/nouveau">Nouveau</a>
-    {% if user.is_admin %}<a href="/chassis">Châssis</a>{% endif %}
-  </nav>
-  <span class="utilisateur">Connecté : {{ user.email }}{% if user.is_admin %} (administrateur){% endif %}</span>
-</header>
-<main>
-<div id="erreur-reseau" class="erreur" role="alert" hidden><p>Session expirée ou erreur réseau : rechargez la page.</p></div>
-{% block content %}{% endblock %}
-</main>
+<body class="min-h-screen">
+<div class="min-h-screen flex flex-wrap">
+  {% set nav = [("dossiers", "/", "dossier", "Dossiers"), ("nouveau", "/nouveau", "depot", "Déposer des RFCV")] %}
+  <aside class="flex flex-col gap-1.5 w-full md:w-[248px] md:min-h-screen shrink-0 bg-menu border-b md:border-b-0 md:border-r border-bord px-4 py-5 md:py-6">
+    <a href="/" class="flex justify-center px-3 pb-2 md:mb-5" aria-label="Accueil — Karta Transit">
+      <img src="/static/img/logo-karta-transit.jpg" alt="Karta Transit" class="w-28 md:w-[150px] h-auto">
+    </a>
+    <p class="hidden md:block mx-3 mb-2 text-[11px] font-bold tracking-[.12em] uppercase text-encre-3">Génération XML &amp; corps</p>
+    <nav aria-label="Menu principal" class="flex flex-wrap md:flex-col gap-1.5">
+      {% for cle, href, icone, libelle in nav %}
+      <a href="{{ href }}" class="flex items-center gap-3 min-h-11 px-3.5 rounded-[10px] text-sm no-underline {{ 'bg-karta-bleu !text-white font-semibold' if active == cle else 'text-[#3A3F66] font-medium hover:bg-fond' }}"{% if active == cle %} aria-current="page"{% endif %}>
+        {{ ic.icone(icone) }}{{ libelle }}</a>
+      {% endfor %}
+      {% if user.is_admin %}
+      <a href="/chassis" class="flex items-center gap-3 min-h-11 px-3.5 rounded-[10px] text-sm no-underline {{ 'bg-karta-bleu !text-white font-semibold' if active == 'chassis' else 'text-[#3A3F66] font-medium hover:bg-fond' }}"{% if active == 'chassis' %} aria-current="page"{% endif %}>
+        {{ ic.icone("chassis") }}Châssis
+        <span class="ml-auto text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-erreur-fond text-erreur">ADMIN</span></a>
+      {% endif %}
+    </nav>
+    <div class="md:mt-auto mt-2 flex items-center gap-2.5 p-3.5 rounded-xl bg-white border border-bord">
+      <span class="flex items-center justify-center size-9 shrink-0 rounded-full bg-karta-rouge text-white text-[13px] font-bold" aria-hidden="true">{{ user.email[:2] | upper }}</span>
+      <span class="flex flex-col min-w-0">
+        <span class="text-[13px] font-semibold text-encre truncate" title="{{ user.email }}">{{ user.email }}</span>
+        <span class="text-[11px] text-encre-3">{{ "Administrateur" if user.is_admin else "Opérateur" }}</span>
+      </span>
+    </div>
+  </aside>
+
+  <main class="flex-1 min-w-0 basis-[560px] px-4 sm:px-10 py-7 flex flex-col gap-6">
+    <div id="erreur-reseau" class="erreur flex gap-3 items-start rounded-2xl border px-5 py-4 text-sm bg-erreur-fond border-erreur-bord text-erreur-texte" role="alert" hidden>
+      {{ ic.icone("erreur", 20) }}<p class="m-0">Session expirée ou erreur réseau : rechargez la page.</p>
+    </div>
+    {% block content %}{% endblock %}
+  </main>
+</div>
 <script>
   // Requête htmx sans réponse (session Access expirée, réseau coupé) ou réponse en erreur
   (function () {

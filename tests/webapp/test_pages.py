@@ -306,7 +306,7 @@ async def test_static_and_layout(client, as_user):
     assert r.status_code == 200
     r = await client.get("/")
     assert "Génération XML &amp; corps" in r.text or "Génération XML & corps" in r.text
-    assert "Connecté : op@karta.ci" in r.text and 'href="/chassis"' not in r.text
+    assert 'title="op@karta.ci"' in r.text and 'href="/chassis"' not in r.text
     assert "https://" not in re.sub(r"<a [^>]*>", "", r.text)              # aucun script externe
 
 
@@ -453,3 +453,26 @@ async def test_currency_label_before_first_generation(client, as_user, fake_pdf)
     page = (await client.get(f"/dossiers/{d}")).text
     assert "devise du RFCV : devise du RFCV" not in page
     assert "(devise du RFCV)" in page
+
+
+# ------------------------------------------------------------------ mise en page Karta
+async def test_menu_lateral(client, as_user):
+    r = await client.get("/")
+    assert '/static/img/logo-karta-transit.jpg' in r.text
+    assert re.search(r'<a [^>]*href="/"[^>]*aria-current="page"', r.text)
+    assert 'href="/nouveau"' in r.text and "Déposer des RFCV" in r.text
+    assert OP in r.text and "Opérateur" in r.text
+
+
+async def test_menu_chassis_admin_seulement(client, as_user):
+    page = (await client.get("/")).text
+    assert 'href="/chassis"' not in page and "ADMIN" not in page
+    as_user(CHEF)
+    page = (await client.get("/")).text
+    assert 'href="/chassis"' in page and "ADMIN" in page and "Administrateur" in page
+
+
+async def test_menu_actif_suit_la_page(client, as_user):
+    page = (await client.get("/nouveau")).text
+    assert re.search(r'<a [^>]*href="/nouveau"[^>]*aria-current="page"', page)
+    assert not re.search(r'<a [^>]*href="/"[^>]*aria-current="page"', page)
