@@ -15,8 +15,9 @@ Par article (montants nationaux arrondis à l'unité) :
                                   châssis, le reste aux premiers articles (423 / 35 -> 3×13 + 32×12)
 
 Global :
-  - Total_cost = Value_details  = Σ (fret + assurance)
-  - Total_CIF                   = Σ CIF articles
+  - Total_cost = Value_details  = Σ (fret + assurance) ; dossier sans châssis (Karta 31476,
+                                  32722) : round(fret total × taux) + assurance
+  - Total_CIF                   = Σ CIF articles ; sans châssis : round(FOB total × taux) + Total_cost
   - Gs_external_freight nat.    = round(fret total × taux)
 """
 
@@ -45,6 +46,21 @@ def distribute_evenly(total: int, count: int) -> list:
     return [base + 1 if i < rest else base for i in range(count)]
 
 
+def _totals_from_global_amounts(val, rate: float, total_cost: int, total_cif: int) -> tuple:
+    """
+    Dossier sans châssis : totaux calculés sur les montants GLOBAUX, comme Karta (31476, 32722) :
+    Total_cost = round(fret total × taux) + assurance ; Total_CIF = round(FOB total × taux) + Total_cost.
+    31476 : 1 814 766 + 10 615 = 1 825 381 (Σ articles : 1 825 382). Montant manquant : Σ articles.
+    """
+    freight = val.external_freight.amount_foreign if val.external_freight else None
+    insurance = val.insurance.amount_national if val.insurance else None
+    fob = val.invoice.amount_foreign if val.invoice and val.invoice.amount_foreign is not None else val.total_invoice
+    if freight is None or insurance is None or fob is None:
+        return total_cost, total_cif
+    cost = round(freight * rate) + round(insurance)
+    return cost, round(fob * rate) + cost
+
+
 def enrich_for_asycuda(rfcv_data: RFCVData) -> RFCVData:
     items = rfcv_data.items
     if not items:
@@ -61,14 +77,21 @@ def enrich_for_asycuda(rfcv_data: RFCVData) -> RFCVData:
         if vi is None or tarif is None or tarif.item_price is None or rate is None:
             continue
 
-        inv_nat = round(tarif.item_price * rate)
+        # Montants nationaux déjà arrondis par ligne RFCV (sommés au regroupement) : conservés
+        if vi.invoice and vi.invoice.amount_national is not None:
+            inv_nat = round(vi.invoice.amount_national)
+        else:
+            inv_nat = round(tarif.item_price * rate)
         if vi.invoice:
             vi.invoice.amount_national = float(inv_nat)
 
         efr_nat = 0
-        if vi.external_freight and vi.external_freight.amount_foreign is not None:
-            efr_nat = round(vi.external_freight.amount_foreign * rate)
-            vi.external_freight.amount_national = float(efr_nat)
+        freight = vi.external_freight
+        if freight and freight.amount_national is not None:
+            efr_nat = round(freight.amount_national)
+        elif freight and freight.amount_foreign is not None:
+            efr_nat = round(freight.amount_foreign * rate)
+            freight.amount_national = float(efr_nat)
 
         ins_nat = 0
         if vi.insurance and vi.insurance.amount_national is not None:
@@ -94,6 +117,8 @@ def enrich_for_asycuda(rfcv_data: RFCVData) -> RFCVData:
 
     val = rfcv_data.valuation
     if val is not None and rate is not None:
+        if not any(i.packages and i.packages.chassis_number for i in items):
+            total_cost, total_cif = _totals_from_global_amounts(val, rate, total_cost, total_cif)
         val.total_cost = float(total_cost)
         val.total_cif = float(total_cif)
         rfcv_data.value_details = float(total_cost)

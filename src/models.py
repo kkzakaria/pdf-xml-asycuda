@@ -238,6 +238,7 @@ class ValuationItem:
 class Item:
     """Article de la déclaration"""
     rfcv_line_number: Optional[int] = None  # Numéro de ligne article dans le RFCV (pour doc 2500)
+    rfcv_quantity: Optional[float] = None   # Quantité de la ligne RFCV (colis par article, sans châssis)
     attached_documents: List[AttachedDocument] = field(default_factory=list)
     packages: Optional[Package] = None
     incoterms_code: Optional[str] = None

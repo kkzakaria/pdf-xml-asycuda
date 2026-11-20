@@ -259,7 +259,7 @@ class RFCVParser:
             self._build_item(
                 line_number=r["n"], raw_description=r["description"], hs_code_clean=r["hs"],
                 origin_code=r["origin"], fob=r["fob"], taxable=r["taxable"],
-                kind_code=kind_code, kind_name=kind_name,
+                kind_code=kind_code, kind_name=kind_name, quantity=r["qty"],
                 designation=fmt2026.short_designation(r["description"]))
             for r in rows
         ]
@@ -457,9 +457,23 @@ class RFCVParser:
                 overwrite=self.force_reprocess,
             )
 
-        # Regrouper les articles sans châssis par code HS
-        # Seul le premier article du premier groupe aura quantité = total_packages
-        # Tous les autres articles auront quantité = 0
+        # Case 22 : FOB de chaque LIGNE RFCV arrondi à l'unité (sauf fob_exact), après révision et
+        # AVANT le regroupement (31476, code 6309 : ⌈681,50⌉ + ⌈507,50⌉ + ⌈725⌉ = 1915 chez Karta)
+        if not self.fob_exact and self._round_fob_to_unit(rfcv_data):
+            # assurance par formule recalculée sur le FOB arrondi (imposée/attestée conservée)
+            self._apply_imposed_amounts(rfcv_data, fob_revised=True)
+
+        # Répartition FRET, ASSURANCE, POIDS BRUT, POIDS NET ligne par ligne, au prorata du FOB
+        # (méthode du reste le plus grand), AVANT le regroupement : l'article regroupé porte la
+        # somme de ses lignes, comme Karta (32722, 6309 : 358 + 391 = 749 USD de fret)
+        rfcv_data = ProportionalCalculator().apply_to_rfcv(rfcv_data)
+        self._split_weights_per_line_without_chassis(rfcv_data)
+        # Montants nationaux (XOF) arrondis LIGNE par LIGNE, sommés ensuite par le regroupement
+        # (31476, 6309 : 412 557 + 307 300 + 438 568 = 1 158 425 chez Karta, et non
+        # round(1 915 × 604,922) = 1 158 426)
+        self._set_line_national_amounts(rfcv_data)
+
+        # Regrouper les articles sans châssis par code HS (colis : voir item_grouper)
         if rfcv_data.items and rfcv_data.property:
             total_packages = rfcv_data.property.total_packages
             rfcv_data.items = group_items_by_hs_code(rfcv_data.items, total_packages)
@@ -489,38 +503,13 @@ class RFCVParser:
             # Ajouter uniquement au premier article
             rfcv_data.items[0].previous_document_reference = prev_doc_ref
 
-            # Case 44 (Free_text_1) des articles sans châssis : « <facture> DU <date> »
-            # (les articles avec châssis gardent « CH: <VIN> »)
-            for item in rfcv_data.items:
-                if not (item.packages and item.packages.chassis_number) and not item.free_text_1:
-                    item.free_text_1 = prev_doc_ref
-
-        # Case 22 : FOB arrondi à l'unité (sauf fob_exact), après révision et regroupement,
-        # avant la répartition du fret / de l'assurance et les montants calculés
-        if not self.fob_exact and self._round_fob_to_unit(rfcv_data):
-            # assurance par formule recalculée sur le FOB arrondi (imposée/attestée conservée)
-            self._apply_imposed_amounts(rfcv_data, fob_revised=True)
-
-        # Enrichir ValuationItem.invoice avec les données de devise pour chaque item
-        if rfcv_data.financial and rfcv_data.financial.currency_code and rfcv_data.financial.exchange_rate:
-            for item in rfcv_data.items:
-                if item.valuation_item and item.tarification and item.tarification.item_price:
-                    # Utiliser item_price (valeur FOB de l'item) pour créer Item_Invoice
-                    fob_value = item.tarification.item_price
-                    rate_value = rfcv_data.financial.exchange_rate
-                    item.valuation_item.invoice = CurrencyAmount(
-                        amount_foreign=fob_value,
-                        amount_national=fob_value * rate_value if fob_value and rate_value else None,
-                        currency_code=rfcv_data.financial.currency_code,
-                        currency_name=None,  # <null/> au niveau article, comme en production
-                        currency_rate=rate_value
-                    )
-
-        # Appliquer les calculs de répartition proportionnelle
-        # Distribue FRET, ASSURANCE, POIDS BRUT, POIDS NET sur les articles
-        # proportionnellement à leur FOB en utilisant la méthode du reste le plus grand
-        calculator = ProportionalCalculator()
-        rfcv_data = calculator.apply_to_rfcv(rfcv_data)
+            # Case 44 (Free_text_1) : « <facture> DU <date> » sur le premier article SANS châssis
+            # seulement, comme Karta (31476, 32722 : les articles suivants n'ont rien) ; les
+            # articles avec châssis gardent « CH: <VIN> »
+            first_goods = next((i for i in rfcv_data.items
+                                if not (i.packages and i.packages.chassis_number)), None)
+            if first_goods is not None and not first_goods.free_text_1:
+                first_goods.free_text_1 = prev_doc_ref
 
         # Champs calculés attendus par ASYCUDA (colis par article, CIF, valeur statistique,
         # éléments de la valeur, totaux) — voir asycuda_enrichment
@@ -1338,6 +1327,7 @@ class RFCVParser:
                 origin_code=match.group(5),
                 fob=self._parse_number(match.group(8)),
                 taxable=self._parse_number(match.group(9)),
+                quantity=self._parse_number(match.group(2)),
                 kind_code=kind_code,
                 kind_name=kind_name,
                 commercial_description=commercial_description,
@@ -1371,6 +1361,7 @@ class RFCVParser:
         kind_name: str,
         commercial_description: Optional[str] = None,
         designation: Optional[str] = None,
+        quantity: Optional[float] = None,
     ) -> Item:
         """
         Construit un article à partir d'une ligne RFCV (commun aux deux formats).
@@ -1385,6 +1376,7 @@ class RFCVParser:
         """
         item = Item()
         item.rfcv_line_number = line_number
+        item.rfcv_quantity = quantity
 
         chassis_info = HSCodeAnalyzer.requires_chassis(hs_code_clean, raw_description)
         chassis_number = None
@@ -1701,6 +1693,50 @@ class RFCVParser:
                     f"unités supplémentaires (QA=1, 40=1), valuation_method=40"
                 )
 
+
+    @staticmethod
+    def _set_line_national_amounts(rfcv_data: RFCVData) -> None:
+        """
+        Item_Invoice (FOB × taux) et fret national (fret × taux) de chaque ligne, arrondis à l'unité.
+        """
+        fin = rfcv_data.financial
+        if not (fin and fin.currency_code and fin.exchange_rate):
+            return
+        rate = fin.exchange_rate
+        for item in rfcv_data.items:
+            vi, tarif = item.valuation_item, item.tarification
+            if vi is None or tarif is None or not tarif.item_price:
+                continue
+            vi.invoice = CurrencyAmount(
+                amount_foreign=tarif.item_price,
+                amount_national=float(round(tarif.item_price * rate)),
+                currency_code=fin.currency_code,
+                currency_name=None,  # <null/> au niveau article, comme en production
+                currency_rate=rate)
+            freight = vi.external_freight
+            if freight and freight.amount_foreign is not None:
+                freight.amount_national = float(round(freight.amount_foreign * rate))
+
+    @staticmethod
+    def _split_weights_per_line_without_chassis(rfcv_data: RFCVData) -> None:
+        """
+        Dossier sans aucun châssis : poids brut et net répartis à PARTS ÉGALES entre les lignes du
+        RFCV (partie entière), le reste sur la première ligne, comme Karta. 31476 (7 lignes,
+        18 000 kg brut, 17 179 net) : 2 571 par ligne, 2 574 et 2 455 sur la première ;
+        l'article 6309 (3 lignes) porte 3 × 2 571 = 7 713. Les dossiers avec châssis gardent la
+        répartition au prorata du FOB.
+        """
+        items, val = rfcv_data.items, rfcv_data.valuation
+        if not items or val is None or any(i.packages and i.packages.chassis_number for i in items):
+            return
+        for total, attr in ((val.gross_weight, "gross_weight"), (val.net_weight, "net_weight")):
+            if total is None:
+                continue
+            base, rest = divmod(round(total), len(items))
+            for index, item in enumerate(items):
+                if item.valuation_item is None:
+                    item.valuation_item = ValuationItem()
+                setattr(item.valuation_item, attr, float(base + rest if index == 0 else base))
 
     @staticmethod
     def _add_clearance_unit_by_weight(rfcv_data: RFCVData) -> None:

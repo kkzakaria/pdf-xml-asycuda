@@ -284,7 +284,8 @@ class TestSamplePdf:
         assert data.items[0].packages.number_of_packages is None or data.items[0].tarification
 
     def test_insurance_formula(self, data):
-        assert data.valuation.insurance.amount_national == 16926  # ceil(2500 + 16 683,65 × 576,42 × 0,0015)
+        # FOB arrondi par ligne : 35 × ⌈362,39⌉ = 12 705 ; ceil(2500 + 16 705 × 576,42 × 0,0015)
+        assert data.valuation.insurance.amount_national == 16944
 
     def test_insurance_attested_converted_to_xof(self, registry):
         d = RFCVParser(str(SAMPLE_PDF), taux_douane=576.42, registry=registry, insurance_mode="rfcv").parse()

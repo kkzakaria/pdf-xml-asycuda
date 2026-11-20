@@ -30,7 +30,7 @@ TRANSPORT_MODES = {"maritime": "1", "ferroviaire": "2", "route": "3", "routier":
 
 # UN/LOCODE -> nom (Place_of_loading/Name) pour les lieux rencontrés
 LOCODE_NAMES = {"TGLFW": "LOME", "CNNSA": "NANSHA", "CNSHA": "SHANGHAI", "CNNGB": "NINGBO",
-                "CNSZX": "SHENZHEN", "CNTAO": "QINGDAO", "CNTXG": "TIANJIN", "CIABJ": "ABIDJAN",
+                "CNSZX": "SHENZHEN", "CNTAO": "QINGDAO", "CNTXG": "TIANJINXINGANG", "CIABJ": "ABIDJAN",
                 "GHTEM": "TEMA", "BJCOO": "COTONOU", "AEJEA": "JEBEL ALI"}
 
 # Libellé SYDAM du mode de paiement (case 10 du RFCV « Paiement sur compte bancaire »)

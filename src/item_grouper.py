@@ -5,9 +5,11 @@ Regroupe les articles sans châssis ayant le même code HS en un seul article
 Règles de regroupement :
 - Les articles avec numéro de châssis ne sont JAMAIS regroupés
 - Les articles sans châssis avec le même code HS attesté sont regroupés
-- Seul le PREMIER article du PREMIER groupe aura comme quantité le nombre de colis total (section 24)
-- Tous les autres articles auront une quantité de 0
-- La quantité est modifiée dans SupplementaryUnit.quantity
+- L'article regroupé porte la somme des valeurs de ses lignes (FOB, fret, assurance, poids),
+  réparties AVANT le regroupement, ligne par ligne, comme Karta
+- Colis (Packages/Number_of_packages) : dossier sans châssis dont les quantités des lignes RFCV
+  totalisent les colis (section 24) -> somme des quantités des lignes de l'article ; sinon,
+  regroupement effectif -> total sur le premier article, 0 sur les autres
 
 Le code HS utilisé pour le regroupement est le "Code SH Attesté" extrait de la
 section "26. Articles" du RFCV (ex: "8703.23.19.00" → "87032319")
@@ -24,9 +26,9 @@ from collections import defaultdict
 
 # Support both relative and absolute imports
 try:
-    from .models import Item, Package, SupplementaryUnit
+    from .models import Item, Package, SupplementaryUnit, CurrencyAmount
 except ImportError:
-    from models import Item, Package, SupplementaryUnit
+    from models import Item, Package, SupplementaryUnit, CurrencyAmount
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +40,10 @@ def group_items_by_hs_code(items: List[Item], total_packages: Optional[float] = 
     Workflow :
     1. Séparer les articles avec châssis (non regroupables) et sans châssis (regroupables)
     2. Regrouper les articles sans châssis par code HS complet (commodity_code)
-    3. Garder un article par groupe
-    4. Le premier article du premier groupe : quantité = total_packages
-    5. Tous les autres articles : quantité = 0
-    6. Recombiner les deux listes (avec châssis + regroupés)
+    3. Garder un article par groupe, portant la somme des valeurs du groupe
+    4. Colis : quantités des lignes RFCV si elles totalisent total_packages (sans châssis),
+       sinon total sur le premier article du premier groupe et 0 ailleurs
+    5. Recombiner les deux listes (avec châssis + regroupés)
 
     Args:
         items: Liste d'articles extraits du RFCV
@@ -102,64 +104,43 @@ def group_items_by_hs_code(items: List[Item], total_packages: Optional[float] = 
     # Vérifier si un regroupement réel a lieu (au moins un groupe avec 2+ articles)
     has_actual_grouping = any(len(group_items) > 1 for group_items in groups.values())
 
-    if not has_actual_grouping:
-        logger.info("Tous les codes HS sont différents → aucun regroupement nécessaire")
-        # Pas de regroupement : retourner tous les articles sans modification
-        final_items = items_with_chassis + items_without_chassis
-        logger.info(f"Résultat : {len(items)} articles → {len(final_items)} articles (inchangé)")
-        return final_items
-
-    logger.info("Regroupement effectif détecté → application des règles de quantité")
-
-    # Étape 3 : Créer un article représentatif par groupe
+    # Étape 3 : un article représentatif par groupe, portant les valeurs de tout le groupe
+    # (FOB, fret, assurance, poids, quantités : sinon seul le premier article serait déclaré)
     grouped_items = []
-    is_first_group = True
-
     for hs_code, group_items in groups.items():
-        if not group_items:
-            continue
-
-        # Prendre le premier article comme représentant du groupe
         representative = group_items[0]
-        num_items_in_group = len(group_items)
-
-        # Mettre la quantité selon la règle :
-        # - Premier article du premier groupe : quantité = total_packages (si fourni)
-        # - Tous les autres : quantité = 0 (si total_packages fourni)
-        # - Si total_packages est None : ne pas modifier les quantités
-        if total_packages is not None:
-            if is_first_group:
-                _set_item_quantity(representative, total_packages)
-                logger.info(f"  Groupe HS {hs_code} (PREMIER): {num_items_in_group} articles → 1 article "
-                           f"(quantité = {total_packages})")
-                is_first_group = False
-            else:
-                _set_item_quantity(representative, 0.0)
-                if num_items_in_group > 1:
-                    logger.info(f"  Groupe HS {hs_code}: {num_items_in_group} articles → 1 article (quantité = 0)")
-                else:
-                    logger.debug(f"  Groupe HS {hs_code}: 1 article (quantité = 0)")
-        else:
-            # total_packages non fourni : ne pas modifier les quantités
-            if num_items_in_group > 1:
-                logger.info(f"  Groupe HS {hs_code}: {num_items_in_group} articles → 1 article (quantité inchangée)")
-            else:
-                logger.debug(f"  Groupe HS {hs_code}: 1 article (quantité inchangée)")
-
-        # La ligne regroupée porte la valeur de tous les articles du groupe
-        # (sinon seul le FOB du premier article serait déclaré)
-        if num_items_in_group > 1:
+        if len(group_items) > 1:
             _sum_group_values(representative, group_items)
-
+            logger.info(f"  Groupe HS {hs_code}: {len(group_items)} articles → 1 article")
         grouped_items.append(representative)
 
-    # Étape 4 : Recombiner les deux listes
-    # Articles avec châssis en premier, puis articles regroupés
+    # Étape 4 : colis (case 31)
+    # - dossier sans châssis dont les quantités des lignes RFCV totalisent les colis (case 24) :
+    #   chaque article reçoit la somme des quantités de ses lignes, comme Karta
+    #   (31476 : 9404 = 35, 9403 = 70 + 49, 6309 = 94 + 70 + 100) ;
+    # - sinon, regroupement effectif : total sur le premier article, 0 ailleurs ;
+    # - sinon : quantités inchangées (réparties par l'enrichissement ASYCUDA).
+    if total_packages is not None:
+        if not items_with_chassis and _quantities_match(grouped_items, total_packages):
+            for item in grouped_items:
+                _set_item_quantity(item, item.rfcv_quantity)
+            logger.info("Colis par article = quantités des lignes RFCV")
+        elif has_actual_grouping:
+            for index, item in enumerate(grouped_items):
+                _set_item_quantity(item, total_packages if index == 0 else 0.0)
+
+    # Étape 5 : articles avec châssis en premier, puis articles regroupés
     final_items = items_with_chassis + grouped_items
-
     logger.info(f"Résultat regroupement : {len(items)} articles → {len(final_items)} articles finaux")
-
     return final_items
+
+
+def _quantities_match(items: List[Item], total_packages: float) -> bool:
+    """Vrai si chaque article a une quantité RFCV entière et que leur somme vaut le total des colis."""
+    quantities = [i.rfcv_quantity for i in items]
+    if not quantities or any(q is None or q < 0 or not float(q).is_integer() for q in quantities):
+        return False
+    return abs(sum(quantities) - float(total_packages)) < 1e-6
 
 
 def _sum_values(values: List[Optional[float]]) -> Optional[float]:
@@ -167,8 +148,26 @@ def _sum_values(values: List[Optional[float]]) -> Optional[float]:
     return round(sum(present), 2) if present else None
 
 
+def _sum_amount(amounts: List[Optional[CurrencyAmount]]) -> Optional[CurrencyAmount]:
+    """Somme de montants répartis par ligne (fret, assurance) : devise et taux du premier."""
+    present = [a for a in amounts if a is not None]
+    if not present:
+        return None
+    first = present[0]
+    return CurrencyAmount(
+        amount_national=_sum_values([a.amount_national for a in present]),
+        amount_foreign=_sum_values([a.amount_foreign for a in present]),
+        currency_code=first.currency_code, currency_name=first.currency_name,
+        currency_rate=first.currency_rate)
+
+
 def _sum_group_values(representative: Item, group_items: List[Item]) -> None:
-    """Additionne FOB (item_price) et valeurs taxables / coûts du groupe sur l'article retenu."""
+    """
+    Additionne sur l'article retenu les valeurs du groupe : FOB (item_price), coûts / CIF, fret,
+    assurance et poids déjà répartis par ligne RFCV, quantités des lignes.
+    """
+    quantities = [i.rfcv_quantity for i in group_items]
+    representative.rfcv_quantity = None if any(q is None for q in quantities) else round(sum(quantities), 6)
     if representative.tarification:
         representative.tarification.item_price = _sum_values(
             [i.tarification.item_price if i.tarification else None for i in group_items])
@@ -177,6 +176,12 @@ def _sum_group_values(representative: Item, group_items: List[Item]) -> None:
             [i.valuation_item.total_cost if i.valuation_item else None for i in group_items])
         representative.valuation_item.total_cif = _sum_values(
             [i.valuation_item.total_cif if i.valuation_item else None for i in group_items])
+        vis = [i.valuation_item for i in group_items if i.valuation_item]
+        representative.valuation_item.invoice = _sum_amount([v.invoice for v in vis])
+        representative.valuation_item.external_freight = _sum_amount([v.external_freight for v in vis])
+        representative.valuation_item.insurance = _sum_amount([v.insurance for v in vis])
+        representative.valuation_item.gross_weight = _sum_values([v.gross_weight for v in vis])
+        representative.valuation_item.net_weight = _sum_values([v.net_weight for v in vis])
 
 
 def _has_chassis_number(item: Item) -> bool:
