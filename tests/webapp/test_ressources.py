@@ -66,3 +66,13 @@ async def test_statiques_versionnes_par_contenu(client, operateur, tmp_path, mon
     m2 = re.search(r'href="/static/app\.css\?v=([0-9a-f]{8,})"', page2)
     assert m2 and m2.group(1) != m1.group(1)
     assert re.search(r'src="/static/htmx\.min\.js\?v=[0-9a-f]{8,}"', page2)
+
+
+def test_focus_recherche_un_seul_cadre():
+    """Barre de recherche : un seul indicateur de focus (halo du cadre), pas de contour du champ en plus."""
+    liste = (WEBAPP / "templates" / "dossiers.html").read_text(encoding="utf-8")
+    champ = re.search(r'<input id="q"[^>]*class="([^"]*)"', liste).group(1).split()
+    assert "champ-nu" in champ
+    styles = (WEBAPP / "styles" / "app.css").read_text(encoding="utf-8")
+    assert ".champ-nu:focus-visible" in styles
+    assert "input:focus-visible" in styles          # même halo pour tous les champs

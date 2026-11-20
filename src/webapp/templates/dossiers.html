@@ -10,10 +10,10 @@
   </div>
   <form class="recherche ml-auto flex flex-wrap items-center gap-2.5" method="get" action="/">
     <label for="q" class="sr-only">N° RFCV ou VIN</label>
-    <div class="flex items-center gap-2 h-11 px-3.5 rounded-xl border border-bord-champ bg-white min-w-[260px] focus-within:border-karta-bleu focus-within:ring-2 focus-within:ring-karta-bleu">
+    <div class="flex items-center gap-2 h-11 px-3.5 rounded-xl border border-bord-champ bg-white min-w-[260px] focus-within:border-karta-bleu focus-within:ring-[3px] focus-within:ring-karta-bleu/20">
       <span class="text-encre-3">{{ ic.icone("recherche", 16) }}</span>
       <input id="q" name="q" type="search" value="{{ q }}" placeholder="Rechercher un N° RFCV ou un VIN"
-             class="w-full border-0 bg-transparent text-sm">
+             class="champ-nu w-full border-0 bg-transparent text-sm">
     </div>
     {% if statut %}<input type="hidden" name="statut" value="{{ statut }}">{% endif %}
     {{ ui.bouton("Rechercher", variante="secondaire") }}
