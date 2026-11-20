@@ -382,7 +382,7 @@ async def test_abandon_and_reopen_pages(client, as_user, fake_pdf):
     assert "Abandonné" in page and 'name="taux_douane"' not in page and "Rouvrir" not in page
     assert (await client.post(f"/dossiers/{d}/abandonner")).status_code == 409
     liste = (await client.get("/")).text
-    assert 'class="abandonne"' in liste and "Abandonné" in liste
+    assert 'class="abandonne ' in liste and "Abandonné" in liste
     assert (await client.post(f"/dossiers/{d}/reouvrir")).status_code == 403
     as_user(CHEF)
     assert "Rouvrir" in (await client.get(f"/dossiers/{d}")).text
@@ -476,3 +476,24 @@ async def test_menu_actif_suit_la_page(client, as_user):
     page = (await client.get("/nouveau")).text
     assert re.search(r'<a [^>]*href="/nouveau"[^>]*aria-current="page"', page)
     assert not re.search(r'<a [^>]*href="/"[^>]*aria-current="page"', page)
+
+
+async def test_page_filtres(client, as_user, fake_pdf):
+    await new_dossier(client)
+    r = await client.get("/", params={"statut": "declare"})
+    assert r.status_code == 200
+    assert re.search(r'<a [^>]*href="/\?statut=declare"[^>]*aria-current="true"', r.text)
+    assert "RCSA6099999" not in r.text                                   # brouillon filtré
+    r = await client.get("/", params={"statut": "zzz"})
+    assert r.status_code == 200 and "RCSA6099999" in r.text              # filtre inconnu : tous
+    assert re.search(r'<a [^>]*href="/"[^>]*aria-current="true"', r.text)
+
+
+async def test_page_vide(client, as_user):
+    r = await client.get("/")
+    assert "Aucun dossier" in r.text and 'href="/nouveau"' in r.text
+
+
+async def test_recherche_garde_le_filtre(client, as_user):
+    r = await client.get("/", params={"statut": "genere", "q": "6099"})
+    assert 'name="statut" value="genere"' in r.text and 'value="6099"' in r.text

@@ -625,3 +625,41 @@ def test_events_listing(svc, fake_pdf):
     globaux = svc.recent_events()
     assert [e["action"] for e in globaux] == ["rfcv_annule"]
     assert "6099999" in globaux[0]["detail"]
+
+
+# ------------------------------------------------------------------ filtre par statut (refonte)
+def _texte(rfcv: str, prefixe: str) -> str:
+    texte = MULTILINE_TEXT.replace("RCSA6099999", rfcv)
+    for i, vin in enumerate(VINS):
+        texte = texte.replace(vin, f"{prefixe}{i:014d}")
+    return texte
+
+
+@pytest.fixture
+def quatre_dossiers(svc, fake_pdf):
+    brouillon = svc.create(OP, "a.pdf", pdf_bytes(_texte("RCSA6000001", "AAA")))
+    genere = svc.create(OP, "b.pdf", pdf_bytes(_texte("RCSA6000002", "BBB")))
+    gen(svc, genere)
+    declare = svc.create(OP, "c.pdf", pdf_bytes(_texte("RCSA6000003", "CCC")))
+    gen(svc, declare)
+    svc.declare(OP, declare)
+    abandonne = svc.create(OP, "d.pdf", pdf_bytes(_texte("RCSA6000004", "DDD")))
+    svc.abandon(OP, abandonne)
+    return {"brouillon": brouillon, "genere": genere, "declare": declare, "abandonne": abandonne}
+
+
+def test_list_filtre_statut(svc, quatre_dossiers):
+    ids = lambda statut: {r["id"] for r in svc.list(None, statut=statut)}  # noqa: E731
+    d = quatre_dossiers
+    assert ids("brouillon") == {d["brouillon"]}
+    assert ids("genere") == {d["genere"]}
+    assert ids("declare") == {d["declare"]}
+    assert ids("clos") == {d["abandonne"]}
+    assert ids("inconnu") == ids(None) == ids("") == set(d.values())
+    assert {r["id"]: r["has_generation"] for r in svc.list(None)} == {
+        d["brouillon"]: False, d["genere"]: True, d["declare"]: True, d["abandonne"]: False}
+
+
+def test_list_filtre_et_recherche(svc, quatre_dossiers):
+    assert [r["id"] for r in svc.list("6000002", statut="genere")] == [quatre_dossiers["genere"]]
+    assert svc.list("6000002", statut="declare") == []

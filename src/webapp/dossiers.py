@@ -85,6 +85,20 @@ def _same_rfcv(a: Optional[str], b: Optional[str]) -> bool:
     return bool(na) and na == nb
 
 
+# Filtres de la liste des dossiers (clé -> libellé)
+FILTRES_STATUT = {"brouillon": "Brouillons", "genere": "Générés", "declare": "Déclarés",
+                  "clos": "Annulés / abandonnés"}
+
+
+def _filtre_statut(status: str, has_generation: bool, error: str | None) -> str:
+    """Filtre auquel appartient un dossier."""
+    if status in ("annule", "abandonne"):
+        return "clos"
+    if status == "declare":
+        return "declare"
+    return "genere" if has_generation and not error else "brouillon"
+
+
 class DossierService:
     def __init__(self, conn: sqlite3.Connection, settings: WebappSettings, registry: ChassisRegistry):
         if registry is None:
@@ -564,8 +578,12 @@ class DossierService:
         self.conn.commit()
 
     # -------------------------------------------------------------- liste
-    def list(self, search: str | None = None) -> list[dict]:
-        """Dossiers du plus récent au plus ancien ; recherche par n° RFCV (normalisé) ou VIN."""
+    def list(self, search: str | None = None, statut: str | None = None) -> list[dict]:
+        """
+        Dossiers du plus récent au plus ancien ; recherche par n° RFCV (normalisé) ou VIN ;
+        filtre ``statut`` (FILTRES_STATUT) : brouillon (sans génération réussie ou en échec),
+        genere (brouillon généré sans erreur), declare, clos (annulé ou abandonné). Inconnu : aucun.
+        """
         rows = self.conn.execute("SELECT * FROM dossiers ORDER BY created_at DESC, id DESC").fetchall()
         gens: dict[int, list[Summary]] = {}
         for g in self.conn.execute("SELECT dossier_id, summary_json FROM generations "
@@ -583,6 +601,8 @@ class DossierService:
                 if not (rfcv_ok or vin_ok):
                     continue
             latest = summaries[0] if summaries else None
+            if statut in FILTRES_STATUT and _filtre_statut(r["status"], latest is not None, r["error"]) != statut:
+                continue
             out.append({
                 "id": r["id"], "rfcv_number": r["rfcv_number"], "filename": r["filename"],
                 "status": r["status"], "created_by": r["created_by"], "created_at": r["created_at"],
@@ -590,5 +610,6 @@ class DossierService:
                 "nb_articles": latest.nb_articles if latest else None,
                 "fob_total": latest.fob_total if latest else None,
                 "devise": latest.devise if latest else None,
+                "has_generation": latest is not None,
             })
         return out
