@@ -61,7 +61,32 @@ L'application tourne avec un seul worker uvicorn (le verrou de déclaration est 
 - `dossiers-miroir/` : miroir incrémental de `data/webapp/dossiers/` (`rsync -a`, sans `--delete`). Les fichiers d'un dossier ne sont jamais réécrits : chaque nuit seuls les nouveaux fichiers sont copiés et rien n'est retiré du miroir ;
 - si la variable `BACKUP_REMOTE` est définie (destination rsync, par exemple `sauvegarde@nas:/sauvegardes/generation/`), une copie de tout `data/sauvegardes/` hors du serveur. Le script sort en erreur si cette copie échoue.
 
-**La copie hors serveur est indispensable** : `data/sauvegardes/` est sur le même disque que les données et ne protège pas d'une perte du disque ou de la VM.
+**La copie hors serveur est indispensable** (R2 ou rsync, ci-dessous) : `data/sauvegardes/` est sur le même disque que les données et ne protège pas d'une perte du disque ou de la VM.
+
+### Copie hors serveur sur Cloudflare R2 (retenue pour Karta)
+
+`sauvegarde-r2.sh`, lancé sur l'hôte par l'utilisateur qui gère le compose (membre du groupe `docker`, sans `sudo`) :
+
+1. exécute `sauvegarde.sh` dans le conteneur (copie locale ci-dessus) ;
+2. envoie `data/sauvegardes/` vers R2 avec rclone, dans un conteneur jetable (`rclone/rclone`, rien à installer sur l'hôte). `rclone copy` ne supprime jamais rien sur R2.
+
+Mise en place :
+
+1. Bucket `karta-generation-backups`, avec des règles de cycle de vie : copies des bases (`generation/webapp-*`, `generation/chassis_registry-*`) supprimées après 90 jours ; les fichiers des dossiers (`generation/dossiers-miroir/`) sont conservés.
+2. Tableau de bord Cloudflare > R2 > Manage API tokens > Create Account API token : permission **Object Read & Write**, limitée au bucket `karta-generation-backups`. Noter l'Access Key ID, le Secret Access Key et l'endpoint S3 (`https://<id du compte>.r2.cloudflarestorage.com`).
+3. Sur la VM, à côté de `docker-compose.yml`, créer `r2.env` (droits 600, ignoré par git) :
+   ```
+   RCLONE_CONFIG_R2_ACCESS_KEY_ID=<Access Key ID>
+   RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=<Secret Access Key>
+   RCLONE_CONFIG_R2_ENDPOINT=https://<id du compte>.r2.cloudflarestorage.com
+   ```
+4. Lancer une fois à la main, puis ajouter au `crontab -e` de cet utilisateur :
+   ```
+   0 2 * * * BACKUP_R2=karta-generation-backups/generation /opt/generation/deploy/serveur/sauvegarde-r2.sh >> /opt/generation/deploy/serveur/sauvegarde.log 2>&1
+   ```
+5. Restauration : `docker run --rm --env-file r2.env -e RCLONE_CONFIG_R2_TYPE=s3 -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare -v /tmp/restauration:/r rclone/rclone:1.68.2 copy r2:karta-generation-backups/generation /r`.
+
+### Copie hors serveur par rsync (NAS ou autre serveur)
 
 Le script s'exécute sur l'hôte (VM ou LXC), qui porte la clé SSH vers la destination :
 

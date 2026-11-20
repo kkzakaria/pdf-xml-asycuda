@@ -97,3 +97,6 @@ data/chassis_registry.db
 # Corps SYDAM générés (données réelles de déclaration)
 corps*.txt
 *_CORPS_SYDAM.txt
+
+# Déploiement serveur : identifiants R2
+deploy/serveur/r2.env
