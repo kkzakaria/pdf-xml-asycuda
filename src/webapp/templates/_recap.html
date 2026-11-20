@@ -4,6 +4,10 @@
 {% if htmx %}
 <div id="erreurs-reglages" hx-swap-oob="true"></div>
 {% with oob=True %}{% include "_etapes.html" %}{% include "_statut.html" %}{% include "_historique.html" %}{% endwith %}
+{% if not fige and latest %}
+{{ ui.bouton("Régénérer", id="generer", icone="regenerer", classe="min-h-12 px-6 text-[15px]", attrs='hx-swap-oob="true"') }}
+<span id="derniere-generation" hx-swap-oob="true" class="ml-auto text-xs text-encre-3">Dernière génération : n° {{ latest.n }}</span>
+{% endif %}
 {% endif %}
 {% if htmx and message %}{% call ui.alerte("erreur", message) %}{% endcall %}{% endif %}
 {% if dossier.error %}
@@ -86,7 +90,7 @@
     {{ ui.lien_bouton("/dossiers/" ~ dossier.id ~ "/fichiers/" ~ latest.n ~ "/pdf", "PDF d'origine", "discret", "fichier") }}
   </div>
 </div>
-{% elif not dossier.error %}
+{% elif not dossier.error and not fige %}
 <div class="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[#C4C7EA] bg-white px-6 py-8 text-center">
   <span class="flex items-center justify-center size-14 rounded-2xl bg-karta-pale text-karta-bleu">{{ ic.icone("fichier", 26) }}</span>
   <strong class="text-base text-karta-nuit">Pas encore généré</strong>

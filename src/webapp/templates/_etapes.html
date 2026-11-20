@@ -5,7 +5,7 @@
   "actif": "bg-karta-bleu border-karta-bleu text-white",
   "erreur": "bg-erreur-fond border-erreur-bord text-erreur",
   "a_faire": "bg-white border-bord text-encre-3",
-  "inactif": "bg-[#F0F1F6] border-[#F0F1F6] text-[#8A8EAE]",
+  "inactif": "bg-[#F0F1F6] border-[#F0F1F6] text-encre-2",
 } %}
 <ol id="etapes" aria-label="Étapes du dossier" class="m-0 p-0 list-none flex flex-wrap gap-2"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% for e in etapes_dossier(dossier.status, summary is not none, dossier.error, summary.bloquante if summary else False) %}

@@ -302,8 +302,7 @@ async def test_every_webapp_route_requires_user():
 async def test_static_and_layout(client, as_user):
     r = await client.get("/static/htmx.min.js")
     assert r.status_code == 200 and 'version:"1.9.12"' in r.text
-    r = await client.get("/static/app.css")
-    assert r.status_code == 200
+    # /static/app.css est compilé (scripts/css.sh, étape « css » du Dockerfile) : les tests n'en dépendent pas
     r = await client.get("/")
     assert "Génération XML &amp; corps" in r.text or "Génération XML & corps" in r.text
     assert 'title="op@karta.ci"' in r.text and 'href="/chassis"' not in r.text
@@ -577,3 +576,30 @@ async def test_generation_htmx_met_a_jour_pastille(client, as_user, fake_pdf):
     r = await generate(client, d)
     m = re.search(r'<span[^>]*id="statut-dossier"[^>]*hx-swap-oob="true"[^>]*>(.*?)</span>\s*</span>', r.text, re.S)
     assert m and "Généré" in m.group(0)
+
+
+# ------------------------------------------------------------------ revue finale
+async def test_dossier_abandonne_sans_invitation_a_generer(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await client.post(f"/dossiers/{d}/abandonner")
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "Pas encore généré" not in page and "lancez la génération" not in page
+
+
+async def test_generation_htmx_met_a_jour_bouton_generer(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    m = re.search(r'<button[^>]*id="generer"[^>]*>', r.text)
+    assert m and 'hx-swap-oob="true"' in m.group(0)
+    assert "Régénérer" in r.text[m.start():m.start() + 2000]
+    assert re.search(r'id="derniere-generation"[^>]*hx-swap-oob="true"[^>]*>[^<]*n° 1', r.text)
+
+
+def test_accessibilite_contraste_et_cibles():
+    gabarits = Path(ROOT / "src" / "webapp" / "templates")
+    texte = "".join(p.read_text(encoding="utf-8") for p in gabarits.glob("*.html"))
+    assert "#8A8EAE" not in texte                         # gris 3,2:1 : sous le seuil de 4,5:1
+    liste = (gabarits / "dossiers.html").read_text(encoding="utf-8")
+    assert "h-9" not in liste and "outline-none" not in liste
+    assert "focus-within:ring" in liste
+    assert "focus-within:ring" in (gabarits / "nouveau.html").read_text(encoding="utf-8")

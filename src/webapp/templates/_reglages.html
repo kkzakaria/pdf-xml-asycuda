@@ -12,7 +12,7 @@
 {% set LEGENDE = "mb-3 text-xs font-bold tracking-[.08em] uppercase text-encre-2" %}
 <div class="flex items-center gap-2.5 mb-4">
   <h2 class="m-0 text-[17px] font-bold text-karta-nuit">Réglages</h2>
-  {% if latest %}<span class="ml-auto text-xs text-encre-3">Dernière génération : n° {{ latest.n }}</span>{% endif %}
+  <span id="derniere-generation" class="ml-auto text-xs text-encre-3">{% if latest %}Dernière génération : n° {{ latest.n }}{% endif %}</span>
 </div>
 <div id="erreurs-reglages">
 {% if form_errors %}

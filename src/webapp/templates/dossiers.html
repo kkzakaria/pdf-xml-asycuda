@@ -10,10 +10,10 @@
   </div>
   <form class="recherche ml-auto flex flex-wrap items-center gap-2.5" method="get" action="/">
     <label for="q" class="sr-only">N° RFCV ou VIN</label>
-    <div class="flex items-center gap-2 h-11 px-3.5 rounded-xl border border-bord-champ bg-white min-w-[260px] focus-within:border-karta-bleu">
+    <div class="flex items-center gap-2 h-11 px-3.5 rounded-xl border border-bord-champ bg-white min-w-[260px] focus-within:border-karta-bleu focus-within:ring-2 focus-within:ring-karta-bleu">
       <span class="text-encre-3">{{ ic.icone("recherche", 16) }}</span>
       <input id="q" name="q" type="search" value="{{ q }}" placeholder="Rechercher un N° RFCV ou un VIN"
-             class="w-full border-0 bg-transparent text-sm outline-none">
+             class="w-full border-0 bg-transparent text-sm">
     </div>
     {% if statut %}<input type="hidden" name="statut" value="{{ statut }}">{% endif %}
     {{ ui.bouton("Rechercher", variante="secondaire") }}
@@ -26,7 +26,7 @@
   {% set suite = ("&q=" ~ q | urlencode) if q else "" %}
   {% for cle, libelle in [("", "Tous")] + (filtres.items() | list) %}
   {% set href = "/" ~ (("?statut=" ~ cle ~ suite) if cle else (("?q=" ~ q | urlencode) if q else "")) %}
-  <a href="{{ href }}" class="inline-flex items-center h-9 px-3.5 rounded-full border text-[13px] no-underline {{ 'bg-karta-bleu border-karta-bleu !text-white font-semibold' if statut == cle else 'bg-white border-bord-champ text-[#3A3F66] font-medium hover:border-karta-bleu' }}"{% if statut == cle %} aria-current="true"{% endif %}>{{ libelle }}</a>
+  <a href="{{ href }}" class="inline-flex items-center min-h-11 px-4 rounded-full border text-[13px] no-underline {{ 'bg-karta-bleu border-karta-bleu !text-white font-semibold' if statut == cle else 'bg-white border-bord-champ text-[#3A3F66] font-medium hover:border-karta-bleu' }}"{% if statut == cle %} aria-current="true"{% endif %}>{{ libelle }}</a>
   {% endfor %}
 </nav>
 
@@ -39,9 +39,9 @@
   <tbody>
   {% for d in dossiers %}
   {% set clos = d.status in ("abandonne", "annule") %}
-  <tr class="{{ 'abandonne text-[#8A8EAE]' if d.status == 'abandonne' else ('text-[#8A8EAE]' if clos else '') }}">
+  <tr class="{{ 'abandonne text-encre-2' if d.status == 'abandonne' else ('text-encre-2' if clos else '') }}">
     <td class="{{ ui.TD }} pl-5">
-      <a href="/dossiers/{{ d.id }}" class="font-bold no-underline {{ 'line-through !text-[#8A8EAE]' if d.status == 'abandonne' else ('!text-[#8A8EAE]' if clos else '') }}">{{ d.rfcv_number or ("Dossier " ~ d.id) }}</a>
+      <a href="/dossiers/{{ d.id }}" class="font-bold no-underline {{ 'line-through !text-encre-2' if d.status == 'abandonne' else ('!text-encre-2' if clos else '') }}">{{ d.rfcv_number or ("Dossier " ~ d.id) }}</a>
       <div class="text-xs text-encre-3 break-all">{{ d.filename }}</div></td>
     <td class="{{ ui.TD }} whitespace-nowrap">{{ d.created_at[:16] | replace("T", " ") }}
       <div class="text-xs text-encre-3">{{ d.created_by }}</div></td>
