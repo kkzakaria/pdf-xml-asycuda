@@ -3,7 +3,7 @@
 <div id="recap" aria-live="polite" class="flex flex-col gap-4">
 {% if htmx %}
 <div id="erreurs-reglages" hx-swap-oob="true"></div>
-{% with oob=True %}{% include "_etapes.html" %}{% include "_historique.html" %}{% endwith %}
+{% with oob=True %}{% include "_etapes.html" %}{% include "_statut.html" %}{% include "_historique.html" %}{% endwith %}
 {% endif %}
 {% if htmx and message %}{% call ui.alerte("erreur", message) %}{% endcall %}{% endif %}
 {% if dossier.error %}

@@ -9,10 +9,7 @@
   <div class="flex flex-col gap-1.5 min-w-0">
     <div class="flex flex-wrap items-center gap-3">
       <h1 class="m-0 text-3xl font-extrabold tracking-tight text-karta-nuit">{{ dossier.rfcv_number or "RFCV non lu" }}</h1>
-      {{ ui.pastille(*statut_affiche(dossier.status, summary is not none, dossier.error)) }}
-      {% if summary and summary.cases.get("Fcx_Aa") == "CITKK" %}
-      <span class="px-2.5 py-1 rounded-full bg-karta-pale text-karta-bleu text-xs font-bold">Takikro</span>
-      {% endif %}
+      {% include "_statut.html" %}
     </div>
     <p class="meta m-0 text-[13px] text-encre-2">Dossier {{ dossier.id }} · {{ dossier.filename }} · déposé le {{ dossier.created_at[:16] | replace("T", " ") }}
       par {{ dossier.created_by }}

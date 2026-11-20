@@ -570,3 +570,10 @@ async def test_fiche_cartes_montants(client, as_user, fake_pdf):
     for libelle in ("FOB", "Fret", "Assurance", "CIF"):
         assert f">{libelle}</span>" in r.text
     assert "Génération n° 1 réussie" in r.text
+
+
+async def test_generation_htmx_met_a_jour_pastille(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    m = re.search(r'<span[^>]*id="statut-dossier"[^>]*hx-swap-oob="true"[^>]*>(.*?)</span>\s*</span>', r.text, re.S)
+    assert m and "Généré" in m.group(0)

@@ -1,0 +1,8 @@
+{# Pastille de statut de l'en-tête ; en réponse htmx, remplacée hors cible. #}
+{% import "_ui.html" as ui %}
+<span id="statut-dossier" class="inline-flex flex-wrap items-center gap-2"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {{ ui.pastille(*statut_affiche(dossier.status, summary is not none, dossier.error)) }}
+  {% if summary and summary.cases.get("Fcx_Aa") == "CITKK" %}
+  <span class="px-2.5 py-1 rounded-full bg-karta-pale text-karta-bleu text-xs font-bold">Takikro</span>
+  {% endif %}
+</span>
