@@ -75,8 +75,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# Scripts (for development only)
+# Scripts (for development only) ; css.sh sert à l'étape « css » du Dockerfile
 scripts/
+!scripts/css.sh
 
 # Config (use .env.example as template)
 config/
