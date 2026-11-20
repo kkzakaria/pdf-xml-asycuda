@@ -323,7 +323,7 @@ async def test_cross_site_post_rejected(client, as_user, fake_pdf):
     r = await client.post("/nouveau", headers={"Origin": "https://evil.example"},
                           files=[("fichiers", ("x.pdf", pdf_bytes(OTHER_TEXT), "application/pdf"))])
     assert r.status_code == 403
-    assert "Brouillon" in (await client.get(f"/dossiers/{d}")).text          # rien déclaré
+    assert "statut-genere" in (await client.get(f"/dossiers/{d}")).text      # rien déclaré (brouillon généré)
     # GET non concerné, même depuis un autre site
     r = await client.get(f"/dossiers/{d}", headers={"Sec-Fetch-Site": "cross-site",
                                                     "Origin": "https://evil.example"})
@@ -505,3 +505,68 @@ async def test_page_depot(client, as_user):
     assert 'accept="application/pdf,.pdf"' in r.text
     assert "Glissez vos PDF RFCV ici" in r.text and "/static/depot.js" in r.text
     assert (await client.get("/static/depot.js")).status_code == 200
+
+
+# ------------------------------------------------------------------ fiche dossier (refonte)
+def etat_etape(html, libelle):
+    m = re.search(r'<li[^>]*data-etat="([a-z_]+)"[^>]*>(?:(?!</li>).)*' + re.escape(libelle), html, re.S)
+    assert m, f"étape « {libelle} » absente"
+    return m.group(1)
+
+
+async def test_fiche_etapes_avant_generation(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert 'id="etapes"' in page
+    assert etat_etape(page, "Réglages et génération") == "actif"
+    assert etat_etape(page, "Vérification") == "a_faire"
+    assert "Pas encore généré" in page
+
+
+async def test_generation_htmx_met_a_jour_etapes(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    assert 'id="recap"' in r.text
+    assert re.search(r'<ol[^>]*id="etapes"[^>]*hx-swap-oob="true"', r.text)
+    assert etat_etape(r.text, "Vérification") == "actif"
+    assert etat_etape(r.text, "Réglages et génération") == "fait"
+
+
+async def test_generation_erreur_saisie_htmx(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d, taux_douane="abc")
+    assert r.headers.get("HX-Retarget") == "#reglages"
+    assert "Taux douanier" in r.text and 'id="recap"' not in r.text
+
+
+async def test_bouton_declarer_desactive_puis_vert(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "disabled" in declare_button(page) and "Générer le dossier avant de le déclarer" in page
+    r = await generate(client, d)
+    bouton = declare_button(r.text)
+    assert "disabled" not in bouton and "bg-succes" in bouton
+
+
+async def test_dossier_abandonne_etapes_inactives(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await client.post(f"/dossiers/{d}/abandonner")
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "Brouillon abandonné" in page and 'id="generer"' not in page
+    assert etat_etape(page, "Vérification") == "inactif"
+
+
+async def test_indicateur_generation(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert re.search(r'id="generation-en-cours"[^>]*class="[^"]*htmx-indicator', page)
+    assert "environ 20 s pour 300 motos" in page
+    assert re.search(r'id="recap"[^>]*aria-live="polite"', page)
+
+
+async def test_fiche_cartes_montants(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    for libelle in ("FOB", "Fret", "Assurance", "CIF"):
+        assert f">{libelle}</span>" in r.text
+    assert "Génération n° 1 réussie" in r.text

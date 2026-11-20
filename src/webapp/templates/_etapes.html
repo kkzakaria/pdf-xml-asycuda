@@ -1,0 +1,16 @@
+{# Barre d'étapes du dossier ; en réponse htmx, remplacée hors cible (hx-swap-oob). #}
+{% import "_icones.html" as ic %}
+{% set _ETAPE = {
+  "fait": "bg-succes-fond border-succes-fond text-[#0B6A39]",
+  "actif": "bg-karta-bleu border-karta-bleu text-white",
+  "erreur": "bg-erreur-fond border-erreur-bord text-erreur",
+  "a_faire": "bg-white border-bord text-encre-3",
+  "inactif": "bg-[#F0F1F6] border-[#F0F1F6] text-[#8A8EAE]",
+} %}
+<ol id="etapes" aria-label="Étapes du dossier" class="m-0 p-0 list-none flex flex-wrap gap-2"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for e in etapes_dossier(dossier.status, summary is not none, dossier.error, summary.bloquante if summary else False) %}
+  <li data-etat="{{ e.etat }}" class="flex items-center gap-2 px-3.5 py-2 rounded-full border text-[13px] font-bold {{ _ETAPE[e.etat] }}"{% if e.etat == "actif" %} aria-current="step"{% endif %}>
+    {%- if e.etat == "fait" %}{{ ic.icone("valider", 14) }}{% elif e.etat == "erreur" %}{{ ic.icone("erreur", 14) }}{% endif %}
+    {{ e.numero }}. {{ e.libelle }}</li>
+  {% endfor %}
+</ol>

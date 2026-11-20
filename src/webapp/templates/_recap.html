@@ -1,104 +1,108 @@
-<div id="recap">
-{% if htmx %}<div id="erreurs-reglages" hx-swap-oob="true"></div>{% endif %}
-{% if htmx and message %}<div class="erreur" role="alert"><p>{{ message }}</p></div>{% endif %}
-{% if dossier.error %}
-<div class="erreur" role="alert"><p>{{ dossier.error }}</p></div>
+{% import "_ui.html" as ui %}
+{% import "_icones.html" as ic %}
+<div id="recap" aria-live="polite" class="flex flex-col gap-4">
+{% if htmx %}
+<div id="erreurs-reglages" hx-swap-oob="true"></div>
+{% with oob=True %}{% include "_etapes.html" %}{% include "_historique.html" %}{% endwith %}
 {% endif %}
+{% if htmx and message %}{% call ui.alerte("erreur", message) %}{% endcall %}{% endif %}
+{% if dossier.error %}
+{% call ui.alerte("erreur", "La génération a échoué") %}
+  <span>{{ dossier.error }}</span>
+  <span class="text-[#8E3B4D]">Rien n'a été déclaré.{% if summary %} La génération précédente reste téléchargeable.{% endif %}</span>
+{% endcall %}
+{% endif %}
+
 {% if summary %}
 {% set dev = summary.devise or "devise du RFCV" %}
-<h2>Récapitulatif{% if latest %} — génération n°{{ latest.n }}{% if dossier.error and not fige %} (précédente — la dernière tentative a échoué){% endif %}{% endif %}</h2>
+{% if summary.bloquante %}
+{% call ui.alerte("bloquante", "Bloquant : corriger puis régénérer") %}
+  <span>La déclaration est impossible tant que l'alerte bloquante ci-dessous n'est pas levée.</span>
+{% endcall %}
+{% elif not dossier.error %}
+{% call ui.alerte("succes", "Génération n° " ~ latest.n ~ " réussie") %}
+  <span>{{ summary.nb_articles }} articles, {{ summary.colis | montant }} colis, {{ summary.nb_vin }} VIN.{% if not summary.alertes %} Aucune alerte.{% endif %}</span>
+{% endcall %}
+{% endif %}
+
+<h2 class="m-0 text-[17px] font-bold text-karta-nuit">Récapitulatif{% if latest %} — génération n°{{ latest.n }}{% if dossier.error and not fige %} (précédente — la dernière tentative a échoué){% endif %}{% endif %}</h2>
 
 {% if summary.alertes %}
-<ul class="alertes">
+<ul class="alertes m-0 p-0 list-none flex flex-col gap-2">
   {% for a in summary.alertes %}
-  <li class="{{ 'alerte-bloquante' if a.bloquante else 'alerte-avertissement' }}">
-    <strong>{{ "Bloquant" if a.bloquante else "À vérifier" }} :</strong> {{ a.message }}
-    {% if a.code == "code_sh_inhabituel" and user.is_admin %}{% set paire = a.message | paire_sh %}{% if paire %}
-    <form method="post" action="/chassis/code-sh-normal" class="en-ligne">
-      <input type="hidden" name="designation" value="{{ paire[0] }}">
-      <input type="hidden" name="hs_code" value="{{ paire[1] }}">
-      <input type="hidden" name="retour" value="/dossiers/{{ dossier.id }}">
-      <button type="submit">Marquer ce code SH comme normal</button>
-    </form>{% endif %}{% endif %}</li>
+  <li class="{{ 'alerte-bloquante bg-erreur-fond border-erreur-bord text-erreur-texte' if a.bloquante else 'alerte-avertissement bg-alerte-fond border-alerte-bord text-alerte-texte' }} flex gap-3 items-start rounded-2xl border px-5 py-3.5 text-sm">
+    {{ ic.icone("alerte", 18, "mt-0.5") }}
+    <div class="flex flex-col gap-2 min-w-0">
+      <span><strong>{{ "Bloquant" if a.bloquante else "À vérifier" }} :</strong> {{ a.message }}</span>
+      {% if a.code == "code_sh_inhabituel" and user.is_admin %}{% set paire = a.message | paire_sh %}{% if paire %}
+      <form method="post" action="/chassis/code-sh-normal" class="en-ligne">
+        <input type="hidden" name="designation" value="{{ paire[0] }}">
+        <input type="hidden" name="hs_code" value="{{ paire[1] }}">
+        <input type="hidden" name="retour" value="/dossiers/{{ dossier.id }}">
+        {{ ui.bouton("Marquer ce code SH comme normal", variante="secondaire") }}
+      </form>{% endif %}{% endif %}
+    </div>
+  </li>
   {% endfor %}
 </ul>
 {% endif %}
 
-<table class="totaux">
-  <thead><tr><th></th><th class="nombre">Total</th><th>Par article</th></tr></thead>
-  <tbody>
-    <tr><th>Articles</th><td class="nombre">{{ summary.nb_articles }}</td><td></td></tr>
-    <tr><th>FOB (case 22, {{ dev }})</th><td class="nombre">{{ summary.fob_total | montant }} {{ dev }}</td>
-      <td>{{ summary.valeurs_articles.get("fob") | valeurs }}</td></tr>
-    <tr><th>Fret ({{ dev }})</th><td class="nombre">{{ summary.fret_total | montant }} {{ dev }}</td>
-      <td>{{ summary.valeurs_articles.get("fret") | valeurs }}</td></tr>
-    <tr><th>Assurance (XOF)</th><td class="nombre">{{ summary.assurance_total | montant }} XOF</td>
-      <td>{{ summary.valeurs_articles.get("assurance") | valeurs }}</td></tr>
-    <tr><th>CIF (XOF)</th><td class="nombre">{{ summary.cif_total | montant }} XOF</td>
-      <td>{{ summary.valeurs_articles.get("cif") | valeurs }}</td></tr>
-    <tr><th>Colis (case 6)</th><td class="nombre">{{ summary.colis | montant }}</td><td></td></tr>
-    <tr><th>Poids brut / net (kg)</th><td class="nombre">{{ summary.poids_brut | montant }} / {{ summary.poids_net | montant }}</td><td></td></tr>
-    <tr><th>VIN</th><td class="nombre">{{ summary.nb_vin }}</td><td></td></tr>
-  </tbody>
-</table>
+<div class="totaux grid grid-cols-1 sm:grid-cols-2 gap-3">
+  {{ ui.carte_montant("FOB", (summary.fob_total | montant) ~ " " ~ dev, summary.valeurs_articles.get("fob") | valeurs) }}
+  {{ ui.carte_montant("Fret", (summary.fret_total | montant) ~ " " ~ dev, summary.valeurs_articles.get("fret") | valeurs) }}
+  {{ ui.carte_montant("Assurance", (summary.assurance_total | montant) ~ " XOF", summary.valeurs_articles.get("assurance") | valeurs) }}
+  {{ ui.carte_montant("CIF", (summary.cif_total | montant) ~ " XOF", summary.valeurs_articles.get("cif") | valeurs, sombre=True) }}
+</div>
 
-<h3>Cases clés du corps</h3>
-<table class="cases">
-  {% for key, label in cases %}
-  <tr><th>{{ label }}</th><td><code>{{ summary.cases.get(key, "") }}</code></td></tr>
+<dl class="m-0 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+  {% for libelle, valeur in [("Articles", summary.nb_articles), ("Colis (case 6)", summary.colis | montant),
+                             ("Poids brut / net (kg)", (summary.poids_brut | montant) ~ " / " ~ (summary.poids_net | montant)),
+                             ("VIN", summary.nb_vin)] %}
+  <div class="flex flex-col gap-0.5 rounded-xl bg-white border border-bord px-3 py-2.5">
+    <dt class="text-[11px] text-encre-2">{{ libelle }}</dt><dd class="m-0 font-bold tabular-nums">{{ valeur }}</dd></div>
   {% endfor %}
-</table>
+</dl>
+
+{% call ui.cadre() %}
+  <h3 class="m-0 px-5 py-3.5 border-b border-[#EEF0F7] text-[15px] font-bold text-karta-nuit">Cases clés du corps</h3>
+  <table class="cases w-full border-collapse text-sm">
+    {% for key, label in cases %}
+    <tr><th class="{{ ui.TD }} pl-5 text-left font-medium text-encre-2">{{ label }}</th><td class="{{ ui.TD }} pr-5"><code class="font-mono font-semibold">{{ summary.cases.get(key, "") }}</code></td></tr>
+    {% endfor %}
+  </table>
+{% endcall %}
 
 {% if summary.ecarts %}
-<h3>Écarts par rapport au RFCV</h3>
-<ul>{% for e in summary.ecarts %}<li>{{ e }}</li>{% endfor %}</ul>
+{% call ui.alerte("avertissement", "Écarts par rapport au RFCV") %}
+  <ul class="m-0 pl-4">{% for e in summary.ecarts %}<li>{{ e }}</li>{% endfor %}</ul>
+{% endcall %}
 {% endif %}
 
-<h3>Fichiers</h3>
-<ul class="fichiers">
-  <li><a href="/dossiers/{{ dossier.id }}/fichiers/{{ latest.n }}/xml">XML ASYCUDA</a></li>
-  <li><a href="/dossiers/{{ dossier.id }}/fichiers/{{ latest.n }}/corps">Corps SYDAM</a></li>
-  <li><a href="/dossiers/{{ dossier.id }}/fichiers/{{ latest.n }}/pdf">PDF d'origine</a></li>
-</ul>
-{% else %}
-<p>Aucune génération pour l'instant.</p>
+<div class="flex flex-col gap-2">
+  <h3 class="m-0 text-[15px] font-bold text-karta-nuit">Fichiers</h3>
+  <div class="fichiers flex flex-wrap gap-2.5">
+    {{ ui.lien_bouton("/dossiers/" ~ dossier.id ~ "/fichiers/" ~ latest.n ~ "/xml", "XML ASYCUDA", "secondaire", "telecharger") }}
+    {{ ui.lien_bouton("/dossiers/" ~ dossier.id ~ "/fichiers/" ~ latest.n ~ "/corps", "Corps SYDAM", "secondaire", "telecharger") }}
+    {{ ui.lien_bouton("/dossiers/" ~ dossier.id ~ "/fichiers/" ~ latest.n ~ "/pdf", "PDF d'origine", "discret", "fichier") }}
+  </div>
+</div>
+{% elif not dossier.error %}
+<div class="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[#C4C7EA] bg-white px-6 py-8 text-center">
+  <span class="flex items-center justify-center size-14 rounded-2xl bg-karta-pale text-karta-bleu">{{ ic.icone("fichier", 26) }}</span>
+  <strong class="text-base text-karta-nuit">Pas encore généré</strong>
+  <span class="max-w-[340px] text-sm text-encre-2">Vérifiez les réglages puis lancez la génération. Le récapitulatif, les contrôles et les fichiers apparaîtront ici.</span>
+</div>
 {% endif %}
 
 {% if not fige %}
-<form method="post" action="/dossiers/{{ dossier.id }}/declarer" class="declarer"
+<form method="post" action="/dossiers/{{ dossier.id }}/declarer" class="declarer flex flex-col gap-2 pt-1"
       onsubmit="return confirm('Confirmer : ce dossier a été déclaré dans SYDAM ? Ses châssis seront enregistrés.')">
-  <button type="submit" id="declarer"{% if not can_declare %} disabled{% endif %}>Déclaré dans SYDAM</button>
-  {% if not summary %}<small>Générer le dossier avant de le déclarer.</small>
-  {% elif dossier.error %}<small>La dernière génération a échoué : régénérer avant de déclarer.</small>
-  {% elif summary.bloquante %}<small>Alerte bloquante : corriger puis régénérer.</small>
-  {% elif rfcv_illisible %}<small>{{ rfcv_illisible }}.</small>{% endif %}
+  {% if can_declare %}<p class="m-0 text-[13px] text-[#3A3F66]">Vérifiez le récapitulatif, saisissez le XML dans SYDAM, puis confirmez ici.</p>{% endif %}
+  {{ ui.bouton("Déclaré dans SYDAM", id="declarer", variante="succes", disabled=not can_declare, icone="valider", classe="min-h-12 text-[15px]") }}
+  {% if not summary %}<small class="text-[13px] text-encre-2">Générer le dossier avant de le déclarer.</small>
+  {% elif dossier.error %}<small class="text-[13px] text-erreur">La dernière génération a échoué : régénérer avant de déclarer.</small>
+  {% elif summary.bloquante %}<small class="text-[13px] text-erreur">Alerte bloquante : corriger puis régénérer.</small>
+  {% elif rfcv_illisible %}<small class="text-[13px] text-erreur">{{ rfcv_illisible }}.</small>{% endif %}
 </form>
-{% endif %}
-
-{% if generations %}
-<h3>Historique des générations</h3>
-<table class="historique">
-  <thead><tr><th>Génération</th><th>Le</th><th>Par</th><th>Fichiers</th></tr></thead>
-  <tbody>
-  {% for g in generations %}
-  <tr><td>Génération {{ g.n }}</td><td>{{ g.created_at[:16] | replace("T", " ") }}</td><td>{{ g.created_by }}</td>
-    <td><a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/xml">XML</a>
-      · <a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/corps">corps</a></td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endif %}
-
-{% if events %}
-<h3>Historique du dossier</h3>
-<table class="historique">
-  <thead><tr><th>Le</th><th>Par</th><th>Action</th><th>Détail</th></tr></thead>
-  <tbody>
-  {% for e in events %}
-  <tr><td>{{ e.at[:16] | replace("T", " ") }}</td><td>{{ e.email }}</td>
-    <td>{{ ACTIONS.get(e.action, e.action) }}</td><td>{{ e.detail or "" }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
 {% endif %}
 </div>

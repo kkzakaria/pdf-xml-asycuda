@@ -56,6 +56,9 @@
   :focus-visible { outline: 3px solid var(--color-karta-bleu); outline-offset: 2px; }
 }
 
+/* Hors couche : l'emporte sur les classes de couleur des boutons */
+button:disabled { cursor: not-allowed; background: #F0F1F6; color: #8A8EAE; border-color: var(--color-bord-champ); }
+
 /* Indicateur htmx : masqué hors requête */
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: flex; }

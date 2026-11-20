@@ -1,0 +1,33 @@
+{# Historiques des générations et du dossier ; en réponse htmx, remplacés hors cible. #}
+{% import "_ui.html" as ui %}
+<div id="historique" class="flex flex-col gap-6"{% if oob %} hx-swap-oob="true"{% endif %}>
+{% if generations %}
+{% call ui.cadre() %}
+  <h2 class="m-0 px-5 py-4 border-b border-[#EEF0F7] text-[15px] font-bold text-karta-nuit">Historique des générations</h2>
+  <table class="historique w-full min-w-[640px] border-collapse text-sm">
+    <thead><tr><th class="{{ ui.TH }} pl-5">Génération</th><th class="{{ ui.TH }}">Le</th><th class="{{ ui.TH }}">Par</th><th class="{{ ui.TH }} pr-5">Fichiers</th></tr></thead>
+    <tbody>
+    {% for g in generations %}
+    <tr><td class="{{ ui.TD }} pl-5 font-semibold">Génération {{ g.n }}</td><td class="{{ ui.TD }}">{{ g.created_at[:16] | replace("T", " ") }}</td><td class="{{ ui.TD }}">{{ g.created_by }}</td>
+      <td class="{{ ui.TD }} pr-5"><a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/xml">XML</a>
+        · <a href="/dossiers/{{ dossier.id }}/fichiers/{{ g.n }}/corps">corps</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endcall %}
+{% endif %}
+{% if events %}
+{% call ui.cadre() %}
+  <h2 class="m-0 px-5 py-4 border-b border-[#EEF0F7] text-[15px] font-bold text-karta-nuit">Historique du dossier</h2>
+  <table class="historique w-full min-w-[640px] border-collapse text-sm">
+    <thead><tr><th class="{{ ui.TH }} pl-5">Le</th><th class="{{ ui.TH }}">Par</th><th class="{{ ui.TH }}">Action</th><th class="{{ ui.TH }} pr-5">Détail</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+    <tr><td class="{{ ui.TD }} pl-5 whitespace-nowrap">{{ e.at[:16] | replace("T", " ") }}</td><td class="{{ ui.TD }}">{{ e.email }}</td>
+      <td class="{{ ui.TD }}">{{ ACTIONS.get(e.action, e.action) }}</td><td class="{{ ui.TD }} pr-5 text-encre-2">{{ e.detail or "" }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endcall %}
+{% endif %}
+</div>
