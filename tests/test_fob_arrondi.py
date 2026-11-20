@@ -279,11 +279,11 @@ def test_webapp_settings_template_has_checkbox():
     assert 'case("fob_exact", "FOB exact (sans arrondi)")' in html
 
 
-def test_grouped_articles_rounded_after_grouping(registry, tmp_path):
-    # même code SH sans châssis : un article déclaré (Σ 800,40 + 199,60 = 1 000,00), arrondi
-    # après regroupement (choix : aucun dossier Karta ne départage encore les deux lectures)
+def test_grouped_articles_rounded_per_rfcv_line_before_grouping(registry, tmp_path):
+    # même code SH sans châssis : chaque LIGNE RFCV est arrondie avant le regroupement, comme
+    # Karta (31476, 6309 : ⌈681,50⌉ + ⌈507,50⌉ + ⌈725⌉ = 1 915) : ⌈800,40⌉ + ⌈199,60⌉ = 1 001
     text = (legacy_text("800,40", "199,60", "1 000,00")
             .replace(f"MOTORCYCLE {'LZSPCJLG5P1234567'} 8711.20.90.00", "FAN BLADES 8414.90.10.00"))
     data = parse_text(text, registry, tmp_path, register_chassis=False, taux_douane=RATE)
-    assert prices(data) == [1000.0]
-    assert data.valuation.total_invoice == 1000.0
+    assert prices(data) == [1001.0]
+    assert data.valuation.total_invoice == 1001.0

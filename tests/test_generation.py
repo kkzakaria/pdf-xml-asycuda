@@ -276,7 +276,7 @@ def test_fret_per_article_in_rfcv_currency(registry, tmp_path):
     assert s.devise == "USD"
     assert s.fret_total == 2000 * s.nb_articles
     assert s.valeurs_articles["fret"] == [(2000.0, s.nb_articles)]
-    assert s.valeurs_articles["fob"] == [(12684.0, 1)]      # 12 683,65 arrondi à l'unité (case 22)
+    assert s.valeurs_articles["fob"] == [(12705.0, 1)]      # 35 lignes × ⌈362,39⌉ = 35 × 363 (case 22)
 
 
 def test_generate_requires_registry(fake_pdf, tmp_path):
