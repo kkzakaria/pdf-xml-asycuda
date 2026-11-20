@@ -7,6 +7,7 @@ Les routes qui lisent un PDF ou génèrent sont synchrones (exécutées dans le 
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -55,6 +56,29 @@ def _paire_sh(message: str):
 
 _env.filters["paire_sh"] = _paire_sh
 _env.globals["statut_affiche"] = statut_affiche
+_VERSIONS_STATIQUES: dict[str, tuple[tuple[int, int], str]] = {}
+
+
+def static_url(chemin: str) -> str:
+    """
+    Adresse d'un fichier statique avec une version tirée de son contenu (« /static/app.css?v=… ») :
+    Cloudflare (cache « aggressive ») et les navigateurs gardent les .css / .js en cache, une
+    nouvelle version doit changer d'adresse. Empreinte recalculée si le fichier change.
+    """
+    fichier = STATIC_DIR / chemin
+    try:
+        st = fichier.stat()
+    except OSError:
+        return f"/static/{chemin}"
+    cle = (st.st_mtime_ns, st.st_size)
+    connu = _VERSIONS_STATIQUES.get(str(fichier))
+    if connu is None or connu[0] != cle:
+        connu = (cle, hashlib.sha256(fichier.read_bytes()).hexdigest()[:12])
+        _VERSIONS_STATIQUES[str(fichier)] = connu
+    return f"/static/{chemin}?v={connu[1]}"
+
+
+_env.globals["static_url"] = static_url
 _env.globals["etapes_dossier"] = etapes_dossier
 templates = Jinja2Templates(env=_env)
 

@@ -28,7 +28,7 @@ def test_templates_sans_url_externe():
 async def test_base_lie_css_local(client, operateur):
     r = await client.get("/")
     assert r.status_code == 200
-    assert 'href="/static/app.css"' in r.text
+    assert re.search(r'href="/static/app\.css(\?v=[0-9a-f]+)?"', r.text)
     assert "fonts.googleapis" not in r.text and "cdn." not in r.text
 
 
@@ -47,3 +47,22 @@ def test_entree_tailwind_declare_le_theme():
     assert "--color-karta-bleu: #1B1BA8" in entree
     assert '@source "../templates"' in entree
     assert "/static/fonts/" in entree
+
+
+@pytest.mark.asyncio
+async def test_statiques_versionnes_par_contenu(client, operateur, tmp_path, monkeypatch):
+    """Cloudflare et les navigateurs gardent les .css en cache : l'adresse change avec le contenu."""
+    from webapp import routes
+    css = tmp_path / "app.css"
+    css.write_text("a{}")
+    monkeypatch.setattr(routes, "STATIC_DIR", tmp_path)
+    for nom in ("htmx.min.js",):
+        (tmp_path / nom).write_text("x")
+    page1 = (await client.get("/")).text
+    m1 = re.search(r'href="/static/app\.css\?v=([0-9a-f]{8,})"', page1)
+    assert m1, "lien CSS sans version"
+    css.write_text("a{color:red}")
+    page2 = (await client.get("/")).text
+    m2 = re.search(r'href="/static/app\.css\?v=([0-9a-f]{8,})"', page2)
+    assert m2 and m2.group(1) != m1.group(1)
+    assert re.search(r'src="/static/htmx\.min\.js\?v=[0-9a-f]{8,}"', page2)

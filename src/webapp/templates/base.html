@@ -5,9 +5,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Génération XML & corps{% endblock %} · Karta Transit</title>
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="icon" href="/static/img/logo-karta-transit.jpg">
-  <script src="/static/htmx.min.js" defer></script>
+  <link rel="stylesheet" href="{{ static_url('app.css') }}">
+  <link rel="icon" href="{{ static_url('img/logo-karta-transit.jpg') }}">
+  <script src="{{ static_url('htmx.min.js') }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen">
@@ -15,7 +15,7 @@
   {% set nav = [("dossiers", "/", "dossier", "Dossiers"), ("nouveau", "/nouveau", "depot", "Déposer des RFCV")] %}
   <aside class="flex flex-col gap-1.5 w-full md:w-[248px] md:sticky md:top-0 md:h-screen md:overflow-y-auto shrink-0 bg-menu border-b md:border-b-0 md:border-r border-bord px-4 py-5 md:py-6">
     <a href="/" class="flex justify-center px-3 pb-2 md:mb-5" aria-label="Accueil — Karta Transit">
-      <img src="/static/img/logo-karta-transit.jpg" alt="Karta Transit" class="w-28 md:w-[150px] h-auto">
+      <img src="{{ static_url('img/logo-karta-transit.jpg') }}" alt="Karta Transit" class="w-28 md:w-[150px] h-auto">
     </a>
     <p class="hidden md:block mx-3 mb-2 text-[11px] font-bold tracking-[.12em] uppercase text-encre-3">Génération XML &amp; corps</p>
     <nav aria-label="Menu principal" class="flex flex-wrap md:flex-col gap-1.5">
