@@ -35,6 +35,10 @@
         <span class="text-[13px] font-semibold text-encre truncate" title="{{ user.email }}">{{ user.email }}</span>
         <span class="text-[11px] text-encre-3">{{ "Administrateur" if user.is_admin else "Opérateur" }}</span>
       </span>
+      {% if deconnexion %}
+      <a href="{{ deconnexion }}" class="ml-auto flex items-center justify-center size-11 shrink-0 rounded-[10px] !text-encre-2 hover:bg-fond hover:!text-erreur" title="Se déconnecter" aria-label="Se déconnecter">
+        {{ ic.icone("sortie") }}<span class="sr-only">Se déconnecter</span></a>
+      {% endif %}
     </div>
   </aside>
 

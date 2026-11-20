@@ -155,7 +155,10 @@ _MENU_ACTIF = {"dossiers.html": "dossiers", "dossier.html": "dossiers", "nouveau
 
 
 def _render(request: Request, name: str, user: User, status_code: int = 200, headers=None, **context):
-    context.update(user=user, active=_MENU_ACTIF.get(name))
+    # Déconnexion : point de sortie de Cloudflare Access sur le domaine de l'application
+    # (efface la session Access) ; sans Access (développement), pas de lien.
+    deconnexion = "/cdn-cgi/access/logout" if config.get_settings().access_aud else None
+    context.update(user=user, active=_MENU_ACTIF.get(name), deconnexion=deconnexion)
     return templates.TemplateResponse(request, name, context, status_code=status_code, headers=headers)
 
 

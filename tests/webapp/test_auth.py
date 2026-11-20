@@ -194,3 +194,18 @@ def test_record_user_throttled(webapp_settings, monkeypatch):
     monkeypatch.setattr(auth.db, "upsert_user", lambda conn, email: calls.append(email))
     auth.record_user("a@karta.ci", s)          # l'échec n'a pas compté comme une visite
     assert calls[-1] == "a@karta.ci" and len(calls) == 4
+
+
+@pytest.mark.asyncio
+async def test_lien_deconnexion_access(client, make_token, webapp_settings):
+    """Avec Cloudflare Access : lien « Se déconnecter » vers la déconnexion Access de l'application."""
+    webapp_settings()
+    r = await client.get("/", headers={HEADER: make_token(email="op@karta.ci")})
+    assert 'href="/cdn-cgi/access/logout"' in r.text and "Se déconnecter" in r.text
+
+
+@pytest.mark.asyncio
+async def test_pas_de_deconnexion_en_developpement(client, webapp_settings):
+    webapp_settings(access_aud="", dev_user="dev@karta.ci")
+    r = await client.get("/")
+    assert "/cdn-cgi/access/logout" not in r.text
