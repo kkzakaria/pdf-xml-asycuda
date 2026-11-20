@@ -196,10 +196,19 @@ async def test_mark_hs_known_silences_alert(client, as_user, fake_pdf):
                                                            "retour": "https://evil.example/"})
     assert r.status_code == 303 and r.headers["location"].startswith("/chassis")
     page = (await client.get("/chassis")).text
-    assert page[page.index("<h2>Codes SH habituels</h2>"):].count(m.group(2)) == 1
+    assert page[page.index(">Codes SH habituels</h2>"):].count(m.group(2)) == 1
     assert page[page.index("Dernières actions"):].count("Code SH habituel") == 1     # une seule fois au journal
     await generer(client, d)
     assert "jamais déclaré" not in (await client.get(f"/dossiers/{d}")).text
     # champs vides : message, pas d'erreur 500
     r = await client.post("/chassis/code-sh-normal", data={"designation": "", "hs_code": ""})
     assert r.status_code == 422
+
+
+async def test_chassis_mise_en_page(client, as_user):
+    as_user(CHEF)
+    page = (await client.get("/chassis")).text
+    assert 'action="/chassis/annuler"' in page and 'name="rfcv"' in page and 'name="motif"' in page
+    assert 'name="vin"' in page and "Rechercher un châssis" in page
+    assert "Historique des annulations" in page and "Codes SH habituels" in page
+    assert re.search(r'<a [^>]*href="/chassis"[^>]*aria-current="page"', page)
