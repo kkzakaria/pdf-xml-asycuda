@@ -130,3 +130,16 @@ cd deploy/serveur && docker compose up -d --build
 ```
 
 Les données (`data/`) sont conservées.
+
+La construction de l'image compile aussi le CSS de l'interface (étape `css` du `Dockerfile` : CLI Tailwind épinglé, somme SHA-256 vérifiée ; accès sortant à github.com nécessaire pendant la construction).
+
+## Développer l'interface
+
+Le CSS (`src/webapp/static/app.css`) est généré, non versionné. Après une modification des gabarits (`src/webapp/templates/`) ou de `src/webapp/styles/app.css` :
+
+```
+scripts/css.sh            # une fois
+scripts/css.sh --watch    # recompile à chaque modification
+```
+
+Sans ce fichier, les pages restent utilisables mais sans mise en forme.

@@ -302,11 +302,10 @@ async def test_every_webapp_route_requires_user():
 async def test_static_and_layout(client, as_user):
     r = await client.get("/static/htmx.min.js")
     assert r.status_code == 200 and 'version:"1.9.12"' in r.text
-    r = await client.get("/static/app.css")
-    assert r.status_code == 200
+    # /static/app.css est compilé (scripts/css.sh, étape « css » du Dockerfile) : les tests n'en dépendent pas
     r = await client.get("/")
     assert "Génération XML &amp; corps" in r.text or "Génération XML & corps" in r.text
-    assert "Connecté : op@karta.ci" in r.text and 'href="/chassis"' not in r.text
+    assert 'title="op@karta.ci"' in r.text and 'href="/chassis"' not in r.text
     assert "https://" not in re.sub(r"<a [^>]*>", "", r.text)              # aucun script externe
 
 
@@ -323,7 +322,7 @@ async def test_cross_site_post_rejected(client, as_user, fake_pdf):
     r = await client.post("/nouveau", headers={"Origin": "https://evil.example"},
                           files=[("fichiers", ("x.pdf", pdf_bytes(OTHER_TEXT), "application/pdf"))])
     assert r.status_code == 403
-    assert "Brouillon" in (await client.get(f"/dossiers/{d}")).text          # rien déclaré
+    assert "statut-genere" in (await client.get(f"/dossiers/{d}")).text      # rien déclaré (brouillon généré)
     # GET non concerné, même depuis un autre site
     r = await client.get(f"/dossiers/{d}", headers={"Sec-Fetch-Site": "cross-site",
                                                     "Origin": "https://evil.example"})
@@ -382,7 +381,7 @@ async def test_abandon_and_reopen_pages(client, as_user, fake_pdf):
     assert "Abandonné" in page and 'name="taux_douane"' not in page and "Rouvrir" not in page
     assert (await client.post(f"/dossiers/{d}/abandonner")).status_code == 409
     liste = (await client.get("/")).text
-    assert 'class="abandonne"' in liste and "Abandonné" in liste
+    assert 'class="abandonne ' in liste and "Abandonné" in liste
     assert (await client.post(f"/dossiers/{d}/reouvrir")).status_code == 403
     as_user(CHEF)
     assert "Rouvrir" in (await client.get(f"/dossiers/{d}")).text
@@ -453,3 +452,188 @@ async def test_currency_label_before_first_generation(client, as_user, fake_pdf)
     page = (await client.get(f"/dossiers/{d}")).text
     assert "devise du RFCV : devise du RFCV" not in page
     assert "(devise du RFCV)" in page
+
+
+# ------------------------------------------------------------------ mise en page Karta
+async def test_menu_lateral(client, as_user):
+    r = await client.get("/")
+    assert '/static/img/logo-karta-transit.jpg' in r.text
+    assert re.search(r'<a [^>]*href="/"[^>]*aria-current="page"', r.text)
+    assert 'href="/nouveau"' in r.text and "Déposer des RFCV" in r.text
+    assert OP in r.text and "Opérateur" in r.text
+
+
+async def test_menu_chassis_admin_seulement(client, as_user):
+    page = (await client.get("/")).text
+    assert 'href="/chassis"' not in page and "ADMIN" not in page
+    as_user(CHEF)
+    page = (await client.get("/")).text
+    assert 'href="/chassis"' in page and "ADMIN" in page and "Administrateur" in page
+
+
+async def test_menu_actif_suit_la_page(client, as_user):
+    page = (await client.get("/nouveau")).text
+    assert re.search(r'<a [^>]*href="/nouveau"[^>]*aria-current="page"', page)
+    assert not re.search(r'<a [^>]*href="/"[^>]*aria-current="page"', page)
+
+
+async def test_page_filtres(client, as_user, fake_pdf):
+    await new_dossier(client)
+    r = await client.get("/", params={"statut": "declare"})
+    assert r.status_code == 200
+    assert re.search(r'<a [^>]*href="/\?statut=declare"[^>]*aria-current="true"', r.text)
+    assert "RCSA6099999" not in r.text                                   # brouillon filtré
+    r = await client.get("/", params={"statut": "zzz"})
+    assert r.status_code == 200 and "RCSA6099999" in r.text              # filtre inconnu : tous
+    assert re.search(r'<a [^>]*href="/"[^>]*aria-current="true"', r.text)
+
+
+async def test_page_vide(client, as_user):
+    r = await client.get("/")
+    assert "Aucun dossier" in r.text and 'href="/nouveau"' in r.text
+
+
+async def test_recherche_garde_le_filtre(client, as_user):
+    r = await client.get("/", params={"statut": "genere", "q": "6099"})
+    assert 'name="statut" value="genere"' in r.text and 'value="6099"' in r.text
+
+
+async def test_page_depot(client, as_user):
+    r = await client.get("/nouveau")
+    assert 'type="file"' in r.text and 'name="fichiers"' in r.text and "multiple" in r.text
+    assert 'accept="application/pdf,.pdf"' in r.text
+    assert "Glissez vos PDF RFCV ici" in r.text and "/static/depot.js" in r.text
+    assert (await client.get("/static/depot.js")).status_code == 200
+
+
+# ------------------------------------------------------------------ fiche dossier (refonte)
+def etat_etape(html, libelle):
+    m = re.search(r'<li[^>]*data-etat="([a-z_]+)"[^>]*>(?:(?!</li>).)*' + re.escape(libelle), html, re.S)
+    assert m, f"étape « {libelle} » absente"
+    return m.group(1)
+
+
+async def test_fiche_etapes_avant_generation(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert 'id="etapes"' in page
+    assert etat_etape(page, "Réglages et génération") == "actif"
+    assert etat_etape(page, "Vérification") == "a_faire"
+    assert "Pas encore généré" in page
+
+
+async def test_generation_htmx_met_a_jour_etapes(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    assert 'id="recap"' in r.text
+    assert re.search(r'<ol[^>]*id="etapes"[^>]*hx-swap-oob="true"', r.text)
+    assert etat_etape(r.text, "Vérification") == "actif"
+    assert etat_etape(r.text, "Réglages et génération") == "fait"
+
+
+async def test_generation_erreur_saisie_htmx(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d, taux_douane="abc")
+    assert r.headers.get("HX-Retarget") == "#reglages"
+    assert "Taux douanier" in r.text and 'id="recap"' not in r.text
+
+
+async def test_bouton_declarer_desactive_puis_vert(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "disabled" in declare_button(page) and "Générer le dossier avant de le déclarer" in page
+    r = await generate(client, d)
+    bouton = declare_button(r.text)
+    assert "disabled" not in bouton and "bg-succes" in bouton
+
+
+async def test_dossier_abandonne_etapes_inactives(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await client.post(f"/dossiers/{d}/abandonner")
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "Brouillon abandonné" in page and 'id="generer"' not in page
+    assert etat_etape(page, "Vérification") == "inactif"
+
+
+async def test_indicateur_generation(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert re.search(r'id="generation-en-cours"[^>]*class="[^"]*htmx-indicator', page)
+    assert "environ 20 s pour 300 motos" in page
+    assert re.search(r'id="recap"[^>]*aria-live="polite"', page)
+
+
+async def test_fiche_cartes_montants(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    for libelle in ("FOB", "Fret", "Assurance", "CIF"):
+        assert f">{libelle}</span>" in r.text
+    assert "Génération n° 1 réussie" in r.text
+
+
+async def test_generation_htmx_met_a_jour_pastille(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    m = re.search(r'<span[^>]*id="statut-dossier"[^>]*hx-swap-oob="true"[^>]*>(.*?)</span>\s*</span>', r.text, re.S)
+    assert m and "Généré" in m.group(0)
+
+
+# ------------------------------------------------------------------ revue finale
+async def test_dossier_abandonne_sans_invitation_a_generer(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await client.post(f"/dossiers/{d}/abandonner")
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "Pas encore généré" not in page and "lancez la génération" not in page
+
+
+async def test_generation_htmx_met_a_jour_bouton_generer(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    m = re.search(r'<button[^>]*id="generer"[^>]*>', r.text)
+    assert m and 'hx-swap-oob="true"' in m.group(0)
+    assert "Régénérer" in r.text[m.start():m.start() + 2000]
+    assert re.search(r'id="derniere-generation"[^>]*hx-swap-oob="true"[^>]*>[^<]*n° 1', r.text)
+
+
+def test_accessibilite_contraste_et_cibles():
+    gabarits = Path(ROOT / "src" / "webapp" / "templates")
+    texte = "".join(p.read_text(encoding="utf-8") for p in gabarits.glob("*.html"))
+    assert "#8A8EAE" not in texte                         # gris 3,2:1 : sous le seuil de 4,5:1
+    liste = (gabarits / "dossiers.html").read_text(encoding="utf-8")
+    assert "h-9" not in liste and "outline-none" not in liste
+    assert "focus-within:ring" in liste
+    assert "focus-within:ring" in (gabarits / "nouveau.html").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------------ petits défauts (revue finale)
+async def test_bandeau_fige_gris(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    await client.post(f"/dossiers/{d}/abandonner")
+    page = (await client.get(f"/dossiers/{d}")).text
+    m = re.search(r'<div class="[^"]*alerte-(\w+)[^"]*"[^>]*>(?:(?!</div>).)*Brouillon abandonné', page, re.S)
+    assert m and m.group(1) == "neutre"
+
+
+async def test_badge_admin_rouge_karta(client, as_user):
+    as_user(CHEF)
+    page = (await client.get("/")).text
+    badge = re.search(r'<span class="([^"]*)">ADMIN</span>', page)
+    assert badge and "karta-rouge" in badge.group(1) and "erreur" not in badge.group(1)
+
+
+async def test_filtre_inconnu_et_recherche(client, as_user, fake_pdf):
+    await new_dossier(client)
+    await new_dossier(client, "b.pdf", OTHER_TEXT)
+    r = await client.get("/", params={"statut": "zzz", "q": "6088888"})
+    assert r.status_code == 200 and "RCSA6088888" in r.text and "RCSA6099999" not in r.text
+
+
+def test_depot_filtre_les_pdf_glisses():
+    js = (ROOT / "src" / "webapp" / "static" / "depot.js").read_text(encoding="utf-8")
+    assert "new DataTransfer()" in js and "estPdf" in js
+
+
+def test_script_css_multi_plateforme():
+    script = (ROOT / "scripts" / "css.sh").read_text(encoding="utf-8")
+    for plateforme in ("linux-x64", "linux-arm64", "macos-arm64", "macos-x64"):
+        assert f"tailwindcss-{plateforme}" in script

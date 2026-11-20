@@ -1,0 +1,24 @@
+{# Icônes trait (style des maquettes), couleur = currentColor ; décoratives (aria-hidden). #}
+{% macro icone(nom, taille=18, classe="") -%}
+<svg width="{{ taille }}" height="{{ taille }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" class="shrink-0 {{ classe }}">
+{%- if nom == "dossier" %}<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+{%- elif nom == "depot" %}<path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/>
+{%- elif nom == "chassis" %}<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/>
+{%- elif nom == "recherche" %}<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+{%- elif nom == "plus" %}<path d="M12 5v14M5 12h14"/>
+{%- elif nom == "telecharger" %}<path d="M12 4v12"/><path d="m6 10 6 6 6-6"/><path d="M4 20h16"/>
+{%- elif nom == "valider" %}<path d="m5 12 5 5L20 7"/>
+{%- elif nom == "succes" %}<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>
+{%- elif nom == "alerte" %}<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>
+{%- elif nom == "erreur" %}<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>
+{%- elif nom == "info" %}<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>
+{%- elif nom == "retour" %}<path d="m15 18-6-6 6-6"/>
+{%- elif nom == "regenerer" %}<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>
+{%- elif nom == "generer" %}<path d="m13 2-9 12h7l-1 8 9-12h-7z"/>
+{%- elif nom == "fichier" %}<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>
+{%- elif nom == "croix" %}<path d="M6 6l12 12M18 6 6 18"/>
+{%- elif nom == "interdit" %}<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>
+{%- elif nom == "tourne" %}<path d="M21 12a9 9 0 1 1-6.2-8.6"/>
+{%- endif %}
+</svg>
+{%- endmacro %}

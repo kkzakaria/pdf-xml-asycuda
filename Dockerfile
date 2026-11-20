@@ -28,6 +28,18 @@ RUN pip install --upgrade pip setuptools wheel && \
 
 
 # =========================================
+# Stage CSS : Tailwind (CLI autonome épinglé, somme vérifiée) -> src/webapp/static/app.css
+# =========================================
+FROM debian:bookworm-slim AS css
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY scripts/css.sh scripts/css.sh
+COPY src/webapp/ src/webapp/
+RUN bash scripts/css.sh && test -s src/webapp/static/app.css
+
+
+# =========================================
 # Stage 2: Runtime - Minimal image
 # =========================================
 FROM python:3.11-slim-bookworm
@@ -57,6 +69,7 @@ WORKDIR /app
 
 # Copy application code
 COPY --chown=appuser:appuser src/ /app/src/
+COPY --chown=appuser:appuser --from=css /build/src/webapp/static/app.css /app/src/webapp/static/app.css
 COPY --chown=appuser:appuser run_api.py /app/
 COPY --chown=appuser:appuser profils/ /app/profils/
 COPY --chown=appuser:appuser .env.example /app/

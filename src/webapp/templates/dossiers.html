@@ -1,35 +1,69 @@
 {% extends "base.html" %}
-{% block title %}Dossiers · Génération XML & corps{% endblock %}
+{% import "_ui.html" as ui %}
+{% import "_icones.html" as ic %}
+{% block title %}Dossiers{% endblock %}
 {% block content %}
-<h1>Dossiers</h1>
-<form class="recherche" method="get" action="/">
-  <label for="q">N° RFCV ou VIN</label>
-  <input id="q" name="q" type="search" value="{{ q }}">
-  <button type="submit">Rechercher</button>
-  {% if q %}<a href="/">Tout afficher</a>{% endif %}
-</form>
+<header class="flex flex-wrap items-end gap-4">
+  <div class="flex flex-col gap-1">
+    <p class="m-0 text-[13px] text-encre-2">Espace de travail</p>
+    <h1 class="m-0 text-3xl font-extrabold tracking-tight text-karta-nuit">Dossiers</h1>
+  </div>
+  <form class="recherche ml-auto flex flex-wrap items-center gap-2.5" method="get" action="/">
+    <label for="q" class="sr-only">N° RFCV ou VIN</label>
+    <div class="flex items-center gap-2 h-11 px-3.5 rounded-xl border border-bord-champ bg-white min-w-[260px] focus-within:border-karta-bleu focus-within:ring-2 focus-within:ring-karta-bleu">
+      <span class="text-encre-3">{{ ic.icone("recherche", 16) }}</span>
+      <input id="q" name="q" type="search" value="{{ q }}" placeholder="Rechercher un N° RFCV ou un VIN"
+             class="w-full border-0 bg-transparent text-sm">
+    </div>
+    {% if statut %}<input type="hidden" name="statut" value="{{ statut }}">{% endif %}
+    {{ ui.bouton("Rechercher", variante="secondaire") }}
+    {% if q %}<a href="/{% if statut %}?statut={{ statut }}{% endif %}" class="text-sm font-semibold">Tout afficher</a>{% endif %}
+    {{ ui.lien_bouton("/nouveau", "Déposer des RFCV", "primaire", "plus") }}
+  </form>
+</header>
+
+<nav aria-label="Filtrer par statut" class="flex flex-wrap gap-2">
+  {% set suite = ("&q=" ~ q | urlencode) if q else "" %}
+  {% for cle, libelle in [("", "Tous")] + (filtres.items() | list) %}
+  {% set href = "/" ~ (("?statut=" ~ cle ~ suite) if cle else (("?q=" ~ q | urlencode) if q else "")) %}
+  <a href="{{ href }}" class="inline-flex items-center min-h-11 px-4 rounded-full border text-[13px] no-underline {{ 'bg-karta-bleu border-karta-bleu !text-white font-semibold' if statut == cle else 'bg-white border-bord-champ text-[#3A3F66] font-medium hover:border-karta-bleu' }}"{% if statut == cle %} aria-current="true"{% endif %}>{{ libelle }}</a>
+  {% endfor %}
+</nav>
+
 {% if dossiers %}
-<table>
-  <thead><tr><th>RFCV</th><th>Fichier</th><th>Déposé le</th><th>Par</th><th>Statut</th>
-    <th class="nombre">Articles</th><th class="nombre">FOB</th></tr></thead>
+{% call ui.cadre() %}
+<table class="w-full min-w-[860px] border-collapse text-sm">
+  <thead><tr>
+    <th class="{{ ui.TH }} pl-5">RFCV</th><th class="{{ ui.TH }}">Déposé</th><th class="{{ ui.TH }}">Statut</th>
+    <th class="{{ ui.TH }} text-right">Articles</th><th class="{{ ui.TH }} text-right pr-5">FOB</th></tr></thead>
   <tbody>
   {% for d in dossiers %}
-  <tr{% if d.status == "abandonne" %} class="abandonne"{% endif %}>
-    <td><a href="/dossiers/{{ d.id }}">{{ d.rfcv_number or ("Dossier " ~ d.id) }}</a></td>
-    <td>{{ d.filename }}</td>
-    <td>{{ d.created_at[:16] | replace("T", " ") }}</td>
-    <td>{{ d.created_by }}</td>
-    <td><span class="statut statut-{{ d.status }}">{{ STATUTS.get(d.status, d.status) }}</span>
-      {% if d.error %}<span class="alerte-avertissement" title="{{ d.error }}">échec</span>{% endif %}</td>
-    <td class="nombre">{{ d.nb_articles if d.nb_articles is not none else "—" }}</td>
-    <td class="nombre">{% if d.fob_total is not none %}{{ d.fob_total | montant }} {{ d.devise or "" }}{% else %}—{% endif %}</td>
+  {% set clos = d.status in ("abandonne", "annule") %}
+  <tr class="{{ 'abandonne text-encre-2' if d.status == 'abandonne' else ('text-encre-2' if clos else '') }}">
+    <td class="{{ ui.TD }} pl-5">
+      <a href="/dossiers/{{ d.id }}" class="font-bold no-underline {{ 'line-through !text-encre-2' if d.status == 'abandonne' else ('!text-encre-2' if clos else '') }}">{{ d.rfcv_number or ("Dossier " ~ d.id) }}</a>
+      <div class="text-xs text-encre-3 break-all">{{ d.filename }}</div></td>
+    <td class="{{ ui.TD }} whitespace-nowrap">{{ d.created_at[:16] | replace("T", " ") }}
+      <div class="text-xs text-encre-3">{{ d.created_by }}</div></td>
+    <td class="{{ ui.TD }}">{{ ui.pastille(*statut_affiche(d.status, d.has_generation, d.error)) }}
+      {% if d.error %}<span class="sr-only alerte-avertissement" title="{{ d.error }}">échec</span>{% endif %}</td>
+    <td class="{{ ui.TD }} text-right tabular-nums">{{ d.nb_articles if d.nb_articles is not none else "—" }}</td>
+    <td class="{{ ui.TD }} text-right tabular-nums font-semibold pr-5 whitespace-nowrap">{% if d.fob_total is not none %}{{ d.fob_total | montant }} <span class="font-medium text-encre-3">{{ d.devise or "" }}</span>{% else %}—{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
-{% elif q %}
-<p>Aucun dossier pour « {{ q }} ».</p>
+{% endcall %}
 {% else %}
-<p>Aucun dossier. <a href="/nouveau">Déposer des RFCV</a>.</p>
+<div class="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[#C4C7EA] bg-white px-6 py-12 text-center">
+  <span class="flex items-center justify-center size-14 rounded-2xl bg-karta-pale text-karta-bleu">{{ ic.icone("dossier", 26) }}</span>
+  {% if q or statut %}
+  <p class="m-0 font-bold text-karta-nuit">Aucun dossier{% if q %} pour « {{ q }} »{% endif %}{% if statut %} dans « {{ filtres[statut] }} »{% endif %}.</p>
+  <a href="/" class="text-sm font-semibold">Tout afficher</a>
+  {% else %}
+  <p class="m-0 font-bold text-karta-nuit">Aucun dossier.</p>
+  {{ ui.lien_bouton("/nouveau", "Déposer des RFCV", "primaire", "plus") }}
+  {% endif %}
+</div>
 {% endif %}
 {% endblock %}

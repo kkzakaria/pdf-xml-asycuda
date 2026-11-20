@@ -1,53 +1,73 @@
 {% extends "base.html" %}
-{% block title %}{{ dossier.rfcv_number or ("Dossier " ~ dossier.id) }} · Génération XML & corps{% endblock %}
+{% import "_ui.html" as ui %}
+{% import "_icones.html" as ic %}
+{% block title %}{{ dossier.rfcv_number or ("Dossier " ~ dossier.id) }}{% endblock %}
 {% block content %}
-<h1>{{ dossier.rfcv_number or "RFCV non lu" }}
-  <span class="statut statut-{{ dossier.status }}">{{ STATUTS.get(dossier.status, dossier.status) }}</span></h1>
-<p class="meta">Dossier {{ dossier.id }} · {{ dossier.filename }} · déposé le {{ dossier.created_at[:16] | replace("T", " ") }}
-  par {{ dossier.created_by }}
-  {% if dossier.declared_at %} · déclaré dans SYDAM le {{ dossier.declared_at[:16] | replace("T", " ") }}
-  par {{ dossier.declared_by }}{% if dossier.declared_n %} (génération {{ dossier.declared_n }} déclarée){% endif %}{% endif %}
-  · <a href="/dossiers/{{ dossier.id }}/pdf">PDF d'origine</a></p>
+<a href="/" class="inline-flex items-center gap-1.5 text-[13px] font-semibold no-underline !text-encre-2 hover:!text-karta-bleu">{{ ic.icone("retour", 14) }}Tous les dossiers</a>
+
+<header class="flex flex-wrap items-center gap-4">
+  <div class="flex flex-col gap-1.5 min-w-0">
+    <div class="flex flex-wrap items-center gap-3">
+      <h1 class="m-0 text-3xl font-extrabold tracking-tight text-karta-nuit">{{ dossier.rfcv_number or "RFCV non lu" }}</h1>
+      {% include "_statut.html" %}
+    </div>
+    <p class="meta m-0 text-[13px] text-encre-2">Dossier {{ dossier.id }} · {{ dossier.filename }} · déposé le {{ dossier.created_at[:16] | replace("T", " ") }}
+      par {{ dossier.created_by }}
+      {% if dossier.declared_at %} · déclaré dans SYDAM le {{ dossier.declared_at[:16] | replace("T", " ") }}
+      par {{ dossier.declared_by }}{% if dossier.declared_n %} (génération {{ dossier.declared_n }} déclarée){% endif %}{% endif %}
+      · <a href="/dossiers/{{ dossier.id }}/pdf">PDF d'origine</a></p>
+  </div>
+</header>
+
+{% include "_etapes.html" %}
 
 {% if message %}
-<div class="erreur" role="alert">
-  <p>{{ message }}</p>
+{% call ui.alerte("erreur", message) %}
   {% if conflicts %}
-  <ul>{% for c in conflicts %}<li>{{ c.chassis_number }} : RFCV {{ c.rfcv_number or "?" }} ({{ c.filename or "?" }})</li>{% endfor %}</ul>
+  <ul class="m-0 pl-4 font-mono text-[13px]">{% for c in conflicts %}<li>{{ c.chassis_number }} : RFCV {{ c.rfcv_number or "?" }} ({{ c.filename or "?" }})</li>{% endfor %}</ul>
   {% endif %}
+{% endcall %}
+{% endif %}
+
+<div class="flex flex-wrap items-start gap-6">
+  <div class="flex-[1_1_520px] min-w-0 flex flex-col gap-4">
+  {% if fige %}
+    <div class="fige flex flex-col gap-3 rounded-2xl border border-bord bg-white px-6 py-5">
+    {% if dossier.status == "abandonne" %}
+      {% call ui.alerte("neutre", "Brouillon abandonné : il n'est plus généré ni déclaré.") %}{% endcall %}
+      {% if user.is_admin %}
+      <form method="post" action="/dossiers/{{ dossier.id }}/reouvrir"
+            onsubmit="return confirm('Rouvrir ce dossier ? Il redevient un brouillon.')">
+        {{ ui.bouton("Rouvrir le dossier", variante="secondaire", icone="regenerer") }}
+      </form>
+      {% endif %}
+    {% else %}
+      {% call ui.alerte("neutre", "Dossier figé : ses fichiers ne sont plus régénérés.") %}{% endcall %}
+    {% endif %}
+    {% if user.is_admin and dossier.status == "declare" %}
+      <form method="post" action="/dossiers/{{ dossier.id }}/brouillon"
+            onsubmit="return confirm('Remettre ce dossier en brouillon ? Ses châssis seront retirés du registre.')">
+        {{ ui.bouton("Remettre en brouillon", variante="danger") }}
+      </form>
+    {% endif %}
+    </div>
+  {% else %}
+    <section id="reglages" class="rounded-2xl border border-bord bg-white px-6 py-5">
+    {% include "_reglages.html" %}
+    </section>
+  {% endif %}
+  {% if can_abandon and (user.is_admin or user.email == dossier.created_by) %}
+    <form method="post" action="/dossiers/{{ dossier.id }}/abandonner" class="abandonner"
+          onsubmit="return confirm('Abandonner ce brouillon (dépôt erroné ou en double) ? Il restera visible, grisé, mais ne sera plus généré ni déclaré.')">
+      {{ ui.bouton("Abandonner ce brouillon", variante="discret", icone="interdit") }}
+    </form>
+  {% endif %}
+  </div>
+
+  <div class="flex-[1_1_400px] min-w-0">
+  {% include "_recap.html" %}
+  </div>
 </div>
-{% endif %}
 
-{% if fige %}
-{% if dossier.status == "abandonne" %}
-<p class="fige">Brouillon abandonné : il n'est plus généré ni déclaré.</p>
-{% if user.is_admin %}
-<form method="post" action="/dossiers/{{ dossier.id }}/reouvrir"
-      onsubmit="return confirm('Rouvrir ce dossier ? Il redevient un brouillon.')">
-  <button type="submit">Rouvrir le dossier</button>
-</form>
-{% endif %}
-{% else %}
-<p class="fige">Dossier figé : ses fichiers ne sont plus régénérés.</p>
-{% endif %}
-{% if user.is_admin and dossier.status == "declare" %}
-<form method="post" action="/dossiers/{{ dossier.id }}/brouillon"
-      onsubmit="return confirm('Remettre ce dossier en brouillon ? Ses châssis seront retirés du registre.')">
-  <button type="submit">Remettre en brouillon</button>
-</form>
-{% endif %}
-{% else %}
-<section id="reglages">
-{% include "_reglages.html" %}
-</section>
-{% endif %}
-
-{% include "_recap.html" %}
-
-{% if can_abandon and (user.is_admin or user.email == dossier.created_by) %}
-<form method="post" action="/dossiers/{{ dossier.id }}/abandonner" class="abandonner"
-      onsubmit="return confirm('Abandonner ce brouillon (dépôt erroné ou en double) ? Il restera visible, grisé, mais ne sera plus généré ni déclaré.')">
-  <button type="submit">Abandonner ce brouillon</button>
-</form>
-{% endif %}
+{% include "_historique.html" %}
 {% endblock %}

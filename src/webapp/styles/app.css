@@ -1,0 +1,68 @@
+/* Entrée Tailwind de la webapp (compilée vers src/webapp/static/app.css par scripts/css.sh
+   ou par l'étape « css » du Dockerfile). Identité Karta Transit : palette tirée du logo. */
+@import "tailwindcss";
+@source "../templates";
+@source "../static/depot.js";
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/static/fonts/PlusJakartaSans-latin-wght.woff2") format("woff2");
+}
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-karta-bleu: #1B1BA8;
+  --color-karta-bleu-fonce: #11117A;
+  --color-karta-nuit: #12127E;
+  --color-karta-rouge: #FF2B52;
+  --color-karta-rouge-fonce: #C8002E;   /* texte rouge Karta lisible (≥ 4,5:1 sur fond clair) */
+  --color-karta-pale: #ECEDFF;
+
+  --color-fond: #F4F5FB;
+  --color-menu: #F7F8FB;
+  --color-bord: #E4E6F2;
+  --color-bord-champ: #D9DCEE;
+  --color-encre: #161A3A;
+  --color-encre-2: #5B6088;
+  --color-encre-3: #6B7094;
+
+  --color-succes: #0E8A45;
+  --color-succes-texte: #0B5A31;
+  --color-succes-fond: #E6F6EC;
+  --color-succes-bord: #BDE6CC;
+  --color-alerte-texte: #6E3C00;
+  --color-alerte-fond: #FFF6E5;
+  --color-alerte-bord: #F5D9A6;
+  --color-genere-texte: #8A4B00;
+  --color-genere-fond: #FFF3E0;
+  --color-erreur: #A3122E;
+  --color-erreur-texte: #7E0F25;
+  --color-erreur-fond: #FDECEF;
+  --color-erreur-bord: #F3C4CE;
+}
+
+@layer base {
+  body {
+    background: var(--color-fond);
+    color: var(--color-encre);
+    font-family: var(--font-sans);
+  }
+  a { color: var(--color-karta-bleu); }
+  a:hover { color: var(--color-karta-bleu-fonce); }
+  :focus-visible { outline: 3px solid var(--color-karta-bleu); outline-offset: 2px; }
+}
+
+/* Hors couche : l'emporte sur les classes de couleur des boutons */
+button:disabled { cursor: not-allowed; background: #F0F1F6; color: #8A8EAE; border-color: var(--color-bord-champ); }
+
+/* Indicateur htmx : masqué hors requête */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: flex; }
+
+@keyframes karta-avance { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.barre-attente { animation: karta-avance 1.4s ease-in-out infinite; }

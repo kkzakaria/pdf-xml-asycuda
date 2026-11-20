@@ -30,7 +30,9 @@ from generation_summary import FOB_MODES, fmt_montant  # noqa: E402
 
 from . import config, db  # noqa: E402
 from .auth import User, current_user, require_admin  # noqa: E402
-from .dossiers import (RFCV_ILLISIBLE, DeclarationRefusee, DossierFige, DossierIntrouvable,  # noqa: E402
+from .presentation import etapes_dossier, statut_affiche  # noqa: E402
+from .dossiers import (FILTRES_STATUT, RFCV_ILLISIBLE, DeclarationRefusee, DossierFige,  # noqa: E402
+                       DossierIntrouvable,
                        DossierService)
 
 logger = logging.getLogger(__name__)
@@ -52,6 +54,8 @@ def _paire_sh(message: str):
 
 
 _env.filters["paire_sh"] = _paire_sh
+_env.globals["statut_affiche"] = statut_affiche
+_env.globals["etapes_dossier"] = etapes_dossier
 templates = Jinja2Templates(env=_env)
 
 STATUTS = {"brouillon": "Brouillon", "declare": "Déclaré", "annule": "Annulé", "abandonne": "Abandonné"}
@@ -121,8 +125,13 @@ def _get_dossier(svc: DossierService, dossier_id: int) -> dict:
         raise HTTPException(status_code=404, detail=f"Dossier {dossier_id} introuvable")
 
 
+# Entrée de menu active selon l'écran
+_MENU_ACTIF = {"dossiers.html": "dossiers", "dossier.html": "dossiers", "nouveau.html": "nouveau",
+               "chassis.html": "chassis"}
+
+
 def _render(request: Request, name: str, user: User, status_code: int = 200, headers=None, **context):
-    context.update(user=user)
+    context.update(user=user, active=_MENU_ACTIF.get(name))
     return templates.TemplateResponse(request, name, context, status_code=status_code, headers=headers)
 
 
@@ -266,9 +275,11 @@ def _dossier_context(svc: DossierService, dossier_id: int, form: Optional[dict] 
 
 # ------------------------------------------------------------------ Dossiers
 @router.get("/", response_class=HTMLResponse)
-def dossiers(request: Request, q: str = "", user: User = Depends(current_user),
+def dossiers(request: Request, q: str = "", statut: str = "", user: User = Depends(current_user),
              svc: DossierService = Depends(get_service)):
-    return _render(request, "dossiers.html", user, dossiers=svc.list(q), q=q)
+    statut = statut if statut in FILTRES_STATUT else ""
+    return _render(request, "dossiers.html", user, dossiers=svc.list(q, statut=statut or None), q=q,
+                   statut=statut, filtres=FILTRES_STATUT)
 
 
 # ------------------------------------------------------------------ Nouveau

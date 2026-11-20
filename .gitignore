@@ -100,3 +100,7 @@ corps*.txt
 
 # Déploiement serveur : identifiants R2
 deploy/serveur/r2.env
+
+# Webapp : CSS compilé par scripts/css.sh (Tailwind), binaire en cache
+src/webapp/static/app.css
+.cache/
