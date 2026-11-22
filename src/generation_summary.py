@@ -17,6 +17,7 @@ from models import RFCVData
 
 if TYPE_CHECKING:  # pragma: no cover
     from corps_generator import CorpsResult
+    from fdi import ControleFDI
     from generation import GenerationSettings
 
 GENERAL_CASES = ("Fcx_Aa", "Fcx_29a", "Fcx_10", "Fcx_18b", "Fcx_28b")
@@ -280,10 +281,37 @@ def _alertes(d: RFCVData, ref: RFCVData, vins: list[str], conflicts: list[dict],
     return alertes
 
 
+def _ecarts_fdi(c: Optional["ControleFDI"]) -> list[str]:
+    """Écart de date de FDI : date retenue (FDI validée ou saisie) différente de celle du RFCV."""
+    if c is None or c.source not in ("fdi", "saisie") or not c.date_rfcv or c.date == c.date_rfcv:
+        return []
+    origine = "FDI validée" if c.source == "fdi" else "saisie"
+    return [f"Date de FDI : {c.date_rfcv} (RFCV) → {c.date} ({origine})"]
+
+
+def _alertes_fdi(c: Optional["ControleFDI"]) -> list[Alert]:
+    """
+    Date de FDI reprise du RFCV : avertissement (la date de validation fait foi) ;
+    n° de FDI du PDF différent de celui du RFCV : bloquant.
+    """
+    out: list[Alert] = []
+    if c is None:
+        return out
+    if c.source == "rfcv":
+        out.append(Alert("fdi_date_non_verifiee",
+                         f"Date de FDI non vérifiée (date de la RFCV : {c.date_rfcv}) : "
+                         "fournir la FDI ou la date de validation", False))
+    if c.numero_different:
+        out.append(Alert("fdi_numero", f"N° de FDI différent : FDI {c.numero_fdi}, RFCV {c.numero_rfcv}",
+                         True))
+    return out
+
+
 def summarize(rfcv_data: RFCVData, rfcv_reference: RFCVData, corps: "CorpsResult",
               conflicts: list[dict], other_drafts: dict[str, set[str]],
               known_hs: set[tuple[str, str]] | None,
-              settings: Optional["GenerationSettings"] = None) -> Summary:
+              settings: Optional["GenerationSettings"] = None,
+              controle_fdi: Optional["ControleFDI"] = None) -> Summary:
     """
     Résumé d'une génération. rfcv_reference = le même RFCV parsé sans réglage (écarts).
     known_hs None ou vide : pas d'alerte de code SH. settings (facultatif) précise le mode
@@ -306,8 +334,9 @@ def summarize(rfcv_data: RFCVData, rfcv_reference: RFCVData, corps: "CorpsResult
         poids_net=float(val.net_weight or 0) if val else 0.0,
         valeurs_articles=_valeurs_articles(d),
         cases=_cases(corps),
-        ecarts=_ecarts(d, rfcv_reference, settings),
-        alertes=_alertes(d, rfcv_reference, vins, conflicts, other_drafts, known_hs, settings),
+        ecarts=_ecarts(d, rfcv_reference, settings) + _ecarts_fdi(controle_fdi),
+        alertes=_alertes(d, rfcv_reference, vins, conflicts, other_drafts, known_hs, settings)
+        + _alertes_fdi(controle_fdi),
         vins=vins,
         designation=_designation(d),
         codes_sh=codes_sh,

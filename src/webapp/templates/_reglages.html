@@ -22,6 +22,7 @@
 {% endif %}
 </div>
 <form class="reglages flex flex-col gap-5" method="post" action="/dossiers/{{ dossier.id }}/generer"
+      enctype="multipart/form-data" hx-encoding="multipart/form-data"
       hx-post="/dossiers/{{ dossier.id }}/generer" hx-target="#recap" hx-swap="outerHTML"
       hx-indicator="#generation-en-cours" hx-disabled-elt="#generer">
   <fieldset class="m-0 p-0 border-0 flex flex-col gap-3">
@@ -46,6 +47,24 @@
       {{ case("takikro", "Takikro (passage terrestre)", True) }}
       {{ case("disp", "DISP (case 28)", True) }}
     </div>
+  </fieldset>
+
+  <fieldset class="m-0 p-0 border-0 flex flex-col gap-3">
+    <legend class="{{ LEGENDE }}">FDI</legend>
+    <p class="m-0 text-[13px] text-encre-2">La date de <strong>validation</strong> de la FDI fait foi (ligne 6610), pas celle imprimée sur le RFCV.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+      {{ ui.champ("date_fdi", "Date de validation FDI", form.get('date_fdi', ''), hint="(JJ/MM/AAAA, prioritaire)", placeholder="JJ/MM/AAAA") }}
+      <label class="flex flex-col gap-1.5 text-[13px] font-semibold text-[#3A3F66]">
+        <span>PDF de la FDI <small class="font-medium text-encre-3">(lit la date de validation et contrôle le n°)</small></span>
+        <input type="file" name="fdi" accept="application/pdf,.pdf"
+               class="block w-full text-sm text-encre-2 file:mr-3 file:min-h-11 file:px-4 file:rounded-xl file:border file:border-bord-champ file:bg-white file:text-karta-nuit file:font-bold file:cursor-pointer">
+      </label>
+    </div>
+    {% if fdi_jointe %}
+    <p class="m-0 inline-flex flex-wrap items-center gap-2 text-[13px] text-succes-texte">{{ ic.icone("succes", 16) }}
+      FDI jointe : n° {{ fdi_jointe.numero or "illisible" }}{% if fdi_jointe.date %}, validée le {{ fdi_jointe.date }}{% endif %}
+      <span class="text-encre-3">— un nouvel envoi la remplace</span></p>
+    {% endif %}
   </fieldset>
 
   <fieldset class="m-0 p-0 border-0 flex flex-col gap-3">

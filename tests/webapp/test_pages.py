@@ -643,3 +643,64 @@ async def test_menu_lateral_fixe(client, as_user):
     page = (await client.get("/")).text
     aside = re.search(r'<aside class="([^"]*)"', page).group(1).split()
     assert {"md:sticky", "md:top-0", "md:h-screen", "md:overflow-y-auto"} <= set(aside)
+
+
+# ------------------------------------------------------------------ date de FDI (validation)
+from fdi_fictive import ecrire_pdf, fdi_fictive  # noqa: E402
+
+
+async def generer_avec_fdi(client, dossier_id, pdf: Path | None = None, **kw):
+    files = [("fdi", ("fdi.pdf", pdf.read_bytes(), "application/pdf"))] if pdf else None
+    return await client.post(f"/dossiers/{dossier_id}/generer", data=form(**kw), files=files, headers=HX)
+
+
+async def test_reglages_champs_fdi(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert 'name="date_fdi"' in page and 'name="fdi"' in page and 'type="file"' in page
+    assert 'hx-encoding="multipart/form-data"' in page
+
+
+async def test_generation_sans_fdi_avertit(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d)
+    assert "Date de FDI non vérifiée (date de la RFCV : 30/10/2026)" in r.text
+    assert "disabled" not in declare_button(r.text)               # avertissement non bloquant
+
+
+async def test_generation_date_fdi_saisie(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d, date_fdi="02/11/2026")
+    assert "non vérifiée" not in r.text and "02/11/2026 (saisie)" in r.text
+    assert 'name="date_fdi" value="02/11/2026"' in (await client.get(f"/dossiers/{d}")).text
+
+
+async def test_generation_date_fdi_invalide(client, as_user, fake_pdf):
+    d = await new_dossier(client)
+    r = await generate(client, d, date_fdi="2026-11-02")
+    assert r.headers.get("HX-Retarget") == "#reglages" and "JJ/MM/AAAA" in r.text
+
+
+async def test_generation_pdf_fdi_conserve(client, as_user, fake_pdf, tmp_path):
+    d = await new_dossier(client)
+    pdf = fdi_fictive(tmp_path / "fdi.pdf", numero="260200000", date_validation="03/11/2026")
+    r = await generer_avec_fdi(client, d, pdf)
+    assert r.status_code == 200 and "03/11/2026 (FDI validée)" in r.text and "non vérifiée" not in r.text
+    # régénération sans renvoyer le PDF : la FDI jointe reste utilisée
+    r = await generate(client, d)
+    assert "03/11/2026 (FDI validée)" in r.text
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "FDI jointe" in page and "260200000" in page
+
+
+async def test_generation_pdf_fdi_numero_different_bloque(client, as_user, fake_pdf, tmp_path):
+    d = await new_dossier(client)
+    r = await generer_avec_fdi(client, d, fdi_fictive(tmp_path / "fdi.pdf", numero="260299999"))
+    assert "N° de FDI différent" in r.text and "disabled" in declare_button(r.text)
+
+
+async def test_generation_pdf_qui_n_est_pas_une_fdi(client, as_user, fake_pdf, tmp_path):
+    d = await new_dossier(client)
+    autre = ecrire_pdf(tmp_path / "x.pdf", [(50, 50, "AUTRE DOCUMENT")])
+    r = await generer_avec_fdi(client, d, autre)
+    assert r.headers.get("HX-Retarget") == "#reglages" and "pas une FDI lisible" in r.text

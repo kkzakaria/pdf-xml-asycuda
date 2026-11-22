@@ -15,6 +15,7 @@ from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
 from company_profile import apply_profile, load_profile
 from designation import apply_designation
+from fdi import appliquer_fdi
 from corps_generator import write_corps
 from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
@@ -43,7 +44,9 @@ def convert_pdf_to_xml(
     fret_impose: float = None,
     assurance_imposee: float = None,
     designation: str = None,
-    fob_exact: bool = False
+    fob_exact: bool = False,
+    date_fdi: str = None,
+    fdi_pdf: str = None
 ) -> bool:
     """
     Convertit un PDF RFCV en XML ASYCUDA
@@ -67,6 +70,9 @@ def convert_pdf_to_xml(
         designation: désignation courte appliquée à tous les articles (après le profil)
         banque: code banque (case 28) à la place du banque_code du profil (disp prioritaire)
         fob_exact: case 22 au centime ; par défaut FOB arrondi à l'unité supérieure par article
+        date_fdi: date de validation de la FDI (JJ/MM/AAAA), prioritaire sur fdi_pdf et le RFCV
+        fdi_pdf: PDF de la FDI : date de validation (ligne 6610, FDI_date) et contrôle du n° de FDI ;
+                 sans l'un ni l'autre, la date du RFCV est reprise avec un avertissement
 
     Returns:
         True si la conversion a réussi, False sinon
@@ -130,6 +136,18 @@ def convert_pdf_to_xml(
         # Désignation courte (même ordre que generation.generate : après le profil)
         if designation:
             apply_designation(rfcv_data, designation)
+        # Date de FDI : saisie > PDF de la FDI > RFCV (la date de validation fait foi)
+        controle_fdi = appliquer_fdi(rfcv_data, date_fdi=date_fdi, fdi_pdf=fdi_pdf)
+        if controle_fdi.numero_different:
+            print(f"BLOQUANT : N° de FDI différent : FDI {controle_fdi.numero_fdi}, "
+                  f"RFCV {controle_fdi.numero_rfcv}. Vérifier la FDI avant toute déclaration.",
+                  file=sys.stderr)
+        if controle_fdi.source == "rfcv":
+            print(f"Attention : Date de FDI non vérifiée (date de la RFCV : {controle_fdi.date_rfcv}) : "
+                  "fournir la FDI (--fdi) ou la date de validation (--date-fdi).", file=sys.stderr)
+        elif controle_fdi.source and controle_fdi.date != controle_fdi.date_rfcv:
+            print(f"  Date de FDI : {controle_fdi.date} ({'FDI validée' if controle_fdi.source == 'fdi' else 'saisie'}"
+                  f", RFCV : {controle_fdi.date_rfcv})")
 
         if verbose:
             print(f"  ✓ Extraction réussie")
@@ -178,8 +196,8 @@ def convert_pdf_to_xml(
         return False
 
 
-def main():
-    """Point d'entrée principal du script"""
+def build_parser() -> argparse.ArgumentParser:
+    """Options de la ligne de commande."""
     parser = argparse.ArgumentParser(
         description="Convertit les fichiers PDF RFCV en format XML ASYCUDA",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -308,6 +326,12 @@ Exemples d'utilisation:
     profile_group.add_argument('--designation', default=None, metavar='TEXTE',
                                help='Désignation courte de tous les articles (case 31 et marques), ex. MOTO. '
                                     'Un seul fichier.')
+    profile_group.add_argument('--date-fdi', default=None, metavar='JJ/MM/AAAA',
+                               help='Date de VALIDATION de la FDI (ligne 6610 et FDI_date), prioritaire sur '
+                                    '--fdi et sur la date imprimée sur le RFCV. Un seul fichier.')
+    profile_group.add_argument('--fdi', default=None, metavar='FICHIER.pdf', dest='fdi_pdf',
+                               help='PDF de la FDI (DGCE) : sa date de validation remplace celle du RFCV et '
+                                    'son n° est comparé à celui du RFCV. Un seul fichier.')
     profile_group.add_argument('--takikro', action='store_true',
                                help='Dossier terrestre du bureau de Takikro : bureaux CITKK, case 40 = ADM, '
                                     'case 10 (dernière provenance) = GH, case 18 nationalité = 99, case 31 colis = PK')
@@ -383,6 +407,12 @@ Exemples d'utilisation:
         help='Code usine pour VIN (1 caractère, défaut: S pour plant standard)'
     )
 
+    return parser
+
+
+def main():
+    """Point d'entrée principal du script"""
+    parser = build_parser()
     args = parser.parse_args()
 
     # Déterminer le mode d'opération
@@ -456,9 +486,9 @@ Exemples d'utilisation:
         # (n°, manifeste, nationalité) sont propres à chaque fichier : non applicables en batch CLI.
         if (args.dossier or args.manifeste or args.nationalite_transport or args.fob_revise
                 or args.fob_mode != 'prorata' or args.fret_impose is not None
-                or args.assurance_imposee is not None or args.designation):
+                or args.assurance_imposee is not None or args.designation or args.date_fdi or args.fdi_pdf):
             print("Erreur: --dossier, --manifeste, --nationalite-transport, --fob-revise, --fob-mode, "
-                  "--fret-impose, --assurance-imposee et --designation sont propres à un fichier ; "
+                  "--fret-impose, --assurance-imposee, --designation, --date-fdi et --fdi sont propres à un fichier ; "
                   "en batch, utilisez l'API (listes par fichier) ou convertissez fichier par fichier.",
                   file=sys.stderr)
             sys.exit(1)
@@ -577,7 +607,9 @@ Exemples d'utilisation:
             fret_impose=args.fret_impose,
             assurance_imposee=args.assurance_imposee,
             designation=args.designation,
-            fob_exact=args.fob_exact
+            fob_exact=args.fob_exact,
+            date_fdi=args.date_fdi,
+            fdi_pdf=args.fdi_pdf
         )
         sys.exit(0 if success else 1)
 
