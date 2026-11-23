@@ -153,6 +153,8 @@ class ConvertResponse(BaseModel):
     message: str
     metrics: Optional[ConversionMetrics] = None
     processing_time: float
+    # Ex. « Date de FDI non vérifiée (date de la RFCV : …) » : l'API reprend la date du RFCV
+    avertissements: List[str] = Field(default_factory=list)
 
     model_config = ConfigDict(json_schema_extra={
         "example": {

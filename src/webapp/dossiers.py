@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pdf_extractor  # noqa: E402
 import rfcv_format_2026 as fmt  # noqa: E402
+from fdi import lire_fdi  # noqa: E402
 from chassis_registry import ChassisRegistry, normalize_rfcv  # noqa: E402
 from company_profile import load_profile  # noqa: E402
 from designation import suggest_designation  # noqa: E402
@@ -193,6 +194,41 @@ class DossierService:
             i += 1
         logger.warning("Dossier orphelin %s mis de côté sous %s", folder, target.name)
         folder.rename(target)
+
+    # ------------------------------------------------------------------ FDI jointe
+    def _dossier_fdi(self, dossier_id: int) -> Path:
+        return self._root / str(dossier_id) / "fdi"
+
+    def fdi_courante(self, dossier_id: int) -> Optional[Path]:
+        """Dernière FDI jointe au dossier (fdi/fdi-<n>.pdf), ou None."""
+        dossier = self._dossier_fdi(dossier_id)
+        fichiers = sorted(dossier.glob("fdi-*.pdf"), key=lambda f: int(f.stem.split("-")[1])) if dossier.is_dir() else []
+        return fichiers[-1] if fichiers else None
+
+    def joindre_fdi(self, user: User, dossier_id: int, content: bytes) -> Path:
+        """
+        Joint le PDF de la FDI (date de validation, contrôle du n° de FDI). Une nouvelle FDI
+        s'ajoute (fdi-<n+1>.pdf) : les fichiers d'un dossier ne sont jamais réécrits.
+        ValueError si ce n'est pas un PDF ou pas une FDI lisible.
+        """
+        if not content or not content.lstrip()[:5].startswith(b"%PDF"):
+            raise ValueError("Le fichier de la FDI n'est pas un PDF")
+        dossier = self._dossier_fdi(dossier_id)
+        dossier.mkdir(parents=True, exist_ok=True)
+        courante = self.fdi_courante(dossier_id)
+        n = int(courante.stem.split("-")[1]) + 1 if courante else 1
+        cible = dossier / f"fdi-{n}.pdf"
+        cible.write_bytes(content)
+        try:
+            info = lire_fdi(cible)
+        except Exception as exc:
+            cible.unlink(missing_ok=True)
+            raise ValueError(f"FDI : {exc}" if isinstance(exc, ValueError) else
+                             "FDI : PDF illisible") from None
+        self._event(dossier_id, user.email, "fdi_jointe",
+                    f"FDI {info.numero or '?'} validée le {info.date_validation or '?'}")
+        self.conn.commit()
+        return cible
 
     @staticmethod
     def _read_rfcv_number(pdf_path: Path) -> Optional[str]:

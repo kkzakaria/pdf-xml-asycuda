@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from rfcv_parser import RFCVParser
 from company_profile import apply_profile
+from fdi import alertes_fdi, appliquer_fdi
 from xml_generator import XMLGenerator
 from metrics import MetricsCollector
 from chassis_registry import DuplicateChassisError
@@ -71,7 +72,8 @@ class ConversionService:
             'output_file': None,
             'error_message': None,
             'processing_time': 0.0,
-            'metrics': None
+            'metrics': None,
+            'avertissements': [],
         }
 
         try:
@@ -96,6 +98,9 @@ class ConversionService:
             if profile or dossier or manifeste or nationalite_transport or takikro or disp:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
                               nationalite_transport=nationalite_transport, takikro=takikro, disp=disp)
+            # Date de FDI : l'API reprend celle du RFCV et la signale « non vérifiée » (déclarer par
+            # la webapp ou la conversion unitaire avec --fdi / --date-fdi)
+            result['avertissements'] = [m for _, m, _ in alertes_fdi(appliquer_fdi(rfcv_data))]
 
             # Générer le XML
             if verbose:

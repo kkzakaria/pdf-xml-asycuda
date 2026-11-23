@@ -32,6 +32,7 @@ from generation_summary import FOB_MODES, fmt_montant  # noqa: E402
 from . import config, db  # noqa: E402
 from .auth import User, current_user, require_admin  # noqa: E402
 from .presentation import etapes_dossier, statut_affiche  # noqa: E402
+from fdi import lire_fdi, valider_date  # noqa: E402
 from .dossiers import (FILTRES_STATUT, RFCV_ILLISIBLE, DeclarationRefusee, DossierFige,  # noqa: E402
                        DossierIntrouvable,
                        DossierService)
@@ -88,7 +89,8 @@ ACTIONS = {"creation": "Dépôt", "generation": "Génération", "generation_eche
            "generation_abandonnee": "Génération abandonnée", "declaration": "Déclaré dans SYDAM",
            "declaration_refusee": "Déclaration refusée", "retour_brouillon": "Remis en brouillon",
            "abandon": "Abandonné", "reouverture": "Rouvert", "rfcv_annule": "RFCV annulé",
-           "rfcv_restaure": "RFCV restauré", "code_sh_normal": "Code SH habituel"}
+           "rfcv_restaure": "RFCV restauré", "code_sh_normal": "Code SH habituel",
+           "fdi_jointe": "FDI jointe"}
 _env.globals["ACTIONS"] = ACTIONS
 CASES = [("Fcx_Aa", "Bureau (case A)"), ("Fcx_29a", "Bureau d'entrée / sortie (case 29)"),
          ("Fcx_10", "Case 10"), ("Fcx_18b", "Case 18"), ("Fcx_28b", "Case 28 (banque)"),
@@ -192,7 +194,8 @@ def settings_to_form(s: GenerationSettings) -> dict[str, str]:
                 logger.warning("Profil illisible : %s", path)
     values = {"taux_douane": _num(s.taux_douane), "profile": profile, "fob_mode": s.fob_mode,
               "assurance_mode": s.assurance_mode}
-    for key in ("dossier", "manifeste", "nationalite_transport", "rapport_paiement", "designation", "banque"):
+    for key in ("dossier", "manifeste", "nationalite_transport", "rapport_paiement", "designation", "banque",
+                "date_fdi"):
         values[key] = getattr(s, key) or ""
     for key in ("takikro", "disp", "fob_exact"):
         values[key] = "1" if getattr(s, key) else ""
@@ -244,6 +247,13 @@ def form_to_settings(values: dict[str, str]) -> tuple[Optional[GenerationSetting
     elif assurance_mode == "imposee" and assurance is None and not values.get("assurance", "").strip():
         errors.append("Assurance imposée : indiquer le montant de l'assurance (XOF)")
 
+    date_fdi = (values.get("date_fdi") or "").strip() or None
+    if date_fdi:
+        try:
+            date_fdi = valider_date(date_fdi)
+        except ValueError:
+            errors.append(f"Date de validation FDI : « {date_fdi} » invalide, format attendu JJ/MM/AAAA")
+
     profile = None
     name = values.get("profile") or ""
     if name:
@@ -267,7 +277,7 @@ def form_to_settings(values: dict[str, str]) -> tuple[Optional[GenerationSetting
         takikro=bool(values.get("takikro")), disp=bool(values.get("disp")), banque=text("banque"),
         fob_revise=fob, fob_mode=fob_mode, fret=fret,
         assurance_mode=assurance_mode, assurance=assurance if assurance_mode == "imposee" else None,
-        designation=text("designation"), fob_exact=bool(values.get("fob_exact")),
+        designation=text("designation"), fob_exact=bool(values.get("fob_exact")), date_fdi=date_fdi,
     ), []
 
 
@@ -297,7 +307,20 @@ def _dossier_context(svc: DossierService, dossier_id: int, form: Optional[dict] 
         "fob_modes": FOB_MODES, "assurance_modes": ASSURANCE_LIBELLES, "cases": CASES,
         "devise_unite": f"devise du RFCV : {summary.devise}" if summary and summary.devise else "devise du RFCV",
         "nb_articles": summary.nb_articles if summary else None,
+        "fdi_jointe": _fdi_jointe(svc, dossier_id),
     }
+
+
+def _fdi_jointe(svc: DossierService, dossier_id: int) -> Optional[dict]:
+    """FDI jointe au dossier : {nom, numero, date} pour l'affichage des réglages, ou None."""
+    chemin = svc.fdi_courante(dossier_id)
+    if chemin is None:
+        return None
+    try:
+        info = lire_fdi(chemin)
+    except Exception:
+        return {"nom": chemin.name, "numero": None, "date": None}
+    return {"nom": chemin.name, "numero": info.numero, "date": info.date_validation}
 
 
 # ------------------------------------------------------------------ Dossiers
@@ -347,12 +370,24 @@ def dossier(request: Request, dossier_id: int, user: User = Depends(current_user
 
 @router.post("/dossiers/{dossier_id}/generer")
 def generer(request: Request, dossier_id: int, values: dict = Depends(form_data),
+            fdi: Optional[UploadFile] = File(default=None),
             user: User = Depends(current_user), svc: DossierService = Depends(get_service)):
-    _get_dossier(svc, dossier_id)
+    dossier = _get_dossier(svc, dossier_id)
     htmx = _is_htmx(request)
     settings, errors = form_to_settings(values)
     message = None
     if settings is not None:
+        # PDF de la FDI : joint au dossier (envoi facultatif), puis la dernière FDI jointe sert
+        # Dossier figé (déclaré, annulé, abandonné) : rien n'est joint, la génération sera refusée
+        contenu = fdi.file.read() if fdi is not None and fdi.filename else b""
+        if contenu and dossier["status"] == "brouillon":
+            try:
+                svc.joindre_fdi(user, dossier_id, contenu)
+            except ValueError as exc:
+                errors, settings = [str(exc)], None
+    if settings is not None:
+        courante = svc.fdi_courante(dossier_id)
+        settings.fdi_pdf = str(courante) if courante else None
         try:
             svc.generate(user, dossier_id, settings)
         except DossierFige as exc:

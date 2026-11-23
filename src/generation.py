@@ -16,6 +16,7 @@ from chassis_registry import ChassisRegistry
 from company_profile import CompanyProfile, apply_profile
 from corps_generator import write_corps
 from designation import apply_designation
+from fdi import appliquer_fdi
 from generation_summary import Summary, summarize
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
@@ -50,6 +51,8 @@ class GenerationSettings:
     assurance: Optional[Amount] = None  # requis si "imposee"
     designation: Optional[str] = None
     fob_exact: bool = False             # case 22 au centime (défaut : arrondie à l'unité, comme Karta)
+    date_fdi: Optional[str] = None      # date de validation de la FDI saisie (JJ/MM/AAAA), prioritaire
+    fdi_pdf: Optional[str] = None       # PDF de la FDI : date de validation et contrôle du n° de FDI
 
     def to_dict(self) -> dict:
         """Dictionnaire sérialisable en JSON (stockage en base)."""
@@ -124,6 +127,8 @@ def generate(pdf_path: Path, settings: GenerationSettings, out_dir: Path, stem: 
                       banque=s.banque)
     if s.designation:
         apply_designation(rfcv_data, s.designation)
+    # Date de FDI : saisie > PDF de la FDI > RFCV (signalée « non vérifiée »)
+    controle_fdi = appliquer_fdi(rfcv_data, date_fdi=s.date_fdi, fdi_pdf=s.fdi_pdf)
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -134,5 +139,5 @@ def generate(pdf_path: Path, settings: GenerationSettings, out_dir: Path, stem: 
     corps_path, corps = write_corps(xml_path)
 
     summary = summarize(rfcv_data, reference, corps, parser.chassis_conflicts, other_drafts or {},
-                        known_hs, settings=settings)
+                        known_hs, settings=settings, controle_fdi=controle_fdi)
     return GenerationResult(xml_path=xml_path, corps_path=Path(corps_path), summary=summary)
