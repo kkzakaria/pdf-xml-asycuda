@@ -208,7 +208,8 @@ async def convert_pdf(
             output_file=Path(output_path).name,
             message="Conversion réussie",
             metrics=metrics,
-            processing_time=result['processing_time']
+            processing_time=result['processing_time'],
+            avertissements=result.get('avertissements', [])
         )
 
     except DuplicateChassisError as e:
@@ -659,7 +660,8 @@ async def convert_with_payment(
             output_file=Path(output_path).name,
             message="Conversion réussie avec rapport de paiement",
             metrics=metrics,
-            processing_time=result['processing_time']
+            processing_time=result['processing_time'],
+            avertissements=result.get('avertissements', [])
         )
 
     except DuplicateChassisError as e:
@@ -840,7 +842,8 @@ async def convert_with_chassis(
             output_file=Path(output_path).name,
             message=f"Conversion réussie avec génération de {quantity} châssis VIN",
             metrics=metrics,
-            processing_time=result['processing_time']
+            processing_time=result['processing_time'],
+            avertissements=result.get('avertissements', [])
         )
 
     except DuplicateChassisError as e:
@@ -1002,7 +1005,8 @@ async def convert_complete(
             output_file=Path(output_path).name,
             message=f"Conversion complète réussie: rapport {rapport_paiement} + {quantity} châssis VIN",
             metrics=metrics,
-            processing_time=result['processing_time']
+            processing_time=result['processing_time'],
+            avertissements=result.get('avertissements', [])
         )
 
     except DuplicateChassisError as e:

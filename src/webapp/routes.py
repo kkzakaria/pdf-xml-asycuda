@@ -372,14 +372,15 @@ def dossier(request: Request, dossier_id: int, user: User = Depends(current_user
 def generer(request: Request, dossier_id: int, values: dict = Depends(form_data),
             fdi: Optional[UploadFile] = File(default=None),
             user: User = Depends(current_user), svc: DossierService = Depends(get_service)):
-    _get_dossier(svc, dossier_id)
+    dossier = _get_dossier(svc, dossier_id)
     htmx = _is_htmx(request)
     settings, errors = form_to_settings(values)
     message = None
     if settings is not None:
         # PDF de la FDI : joint au dossier (envoi facultatif), puis la dernière FDI jointe sert
+        # Dossier figé (déclaré, annulé, abandonné) : rien n'est joint, la génération sera refusée
         contenu = fdi.file.read() if fdi is not None and fdi.filename else b""
-        if contenu:
+        if contenu and dossier["status"] == "brouillon":
             try:
                 svc.joindre_fdi(user, dossier_id, contenu)
             except ValueError as exc:

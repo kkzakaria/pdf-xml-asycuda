@@ -704,3 +704,23 @@ async def test_generation_pdf_qui_n_est_pas_une_fdi(client, as_user, fake_pdf, t
     autre = ecrire_pdf(tmp_path / "x.pdf", [(50, 50, "AUTRE DOCUMENT")])
     r = await generer_avec_fdi(client, d, autre)
     assert r.headers.get("HX-Retarget") == "#reglages" and "pas une FDI lisible" in r.text
+
+
+async def test_date_saisie_differente_de_la_fdi_bloque(client, as_user, fake_pdf, tmp_path):
+    d = await new_dossier(client)
+    pdf = fdi_fictive(tmp_path / "fdi.pdf", numero="260200000", date_validation="02/11/2026")
+    r = await generer_avec_fdi(client, d, pdf, date_fdi="03/11/2026")
+    assert "Date de FDI saisie (03/11/2026) différente de la date de validation de la FDI (02/11/2026)" in r.text
+    assert "disabled" in declare_button(r.text)
+
+
+async def test_fdi_non_jointe_sur_dossier_declare(client, as_user, fake_pdf, tmp_path):
+    d = await new_dossier(client)
+    await generate(client, d)
+    assert (await client.post(f"/dossiers/{d}/declarer")).status_code == 303
+    pdf = fdi_fictive(tmp_path / "fdi.pdf", numero="260200000")
+    await generer_avec_fdi(client, d, pdf)
+    page = (await client.get(f"/dossiers/{d}")).text
+    assert "FDI jointe" not in page
+    from webapp import config
+    assert not list((config.get_settings().data_dir / "dossiers" / str(d)).glob("fdi/fdi-*.pdf"))

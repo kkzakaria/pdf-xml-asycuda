@@ -290,21 +290,9 @@ def _ecarts_fdi(c: Optional["ControleFDI"]) -> list[str]:
 
 
 def _alertes_fdi(c: Optional["ControleFDI"]) -> list[Alert]:
-    """
-    Date de FDI reprise du RFCV : avertissement (la date de validation fait foi) ;
-    n° de FDI du PDF différent de celui du RFCV : bloquant.
-    """
-    out: list[Alert] = []
-    if c is None:
-        return out
-    if c.source == "rfcv":
-        out.append(Alert("fdi_date_non_verifiee",
-                         f"Date de FDI non vérifiée (date de la RFCV : {c.date_rfcv}) : "
-                         "fournir la FDI ou la date de validation", False))
-    if c.numero_different:
-        out.append(Alert("fdi_numero", f"N° de FDI différent : FDI {c.numero_fdi}, RFCV {c.numero_rfcv}",
-                         True))
-    return out
+    """Alertes de la date de FDI (messages communs : fdi.alertes_fdi)."""
+    from fdi import alertes_fdi
+    return [Alert(code, message, bloquante) for code, message, bloquante in alertes_fdi(c)]
 
 
 def summarize(rfcv_data: RFCVData, rfcv_reference: RFCVData, corps: "CorpsResult",

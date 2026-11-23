@@ -15,7 +15,7 @@ from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
 from company_profile import apply_profile, load_profile
 from designation import apply_designation
-from fdi import appliquer_fdi
+from fdi import alertes_fdi, appliquer_fdi
 from corps_generator import write_corps
 from batch_processor import BatchProcessor, BatchConfig
 from batch_report import BatchReportGenerator
@@ -138,14 +138,13 @@ def convert_pdf_to_xml(
             apply_designation(rfcv_data, designation)
         # Date de FDI : saisie > PDF de la FDI > RFCV (la date de validation fait foi)
         controle_fdi = appliquer_fdi(rfcv_data, date_fdi=date_fdi, fdi_pdf=fdi_pdf)
-        if controle_fdi.numero_different:
-            print(f"BLOQUANT : N° de FDI différent : FDI {controle_fdi.numero_fdi}, "
-                  f"RFCV {controle_fdi.numero_rfcv}. Vérifier la FDI avant toute déclaration.",
-                  file=sys.stderr)
-        if controle_fdi.source == "rfcv":
-            print(f"Attention : Date de FDI non vérifiée (date de la RFCV : {controle_fdi.date_rfcv}) : "
-                  "fournir la FDI (--fdi) ou la date de validation (--date-fdi).", file=sys.stderr)
-        elif controle_fdi.source and controle_fdi.date != controle_fdi.date_rfcv:
+        for _, message, bloquante in alertes_fdi(controle_fdi):
+            if bloquante:
+                print(f"BLOQUANT : {message}. Le XML est écrit pour contrôle mais ne doit pas être déclaré.",
+                      file=sys.stderr)
+            else:
+                print(f"Attention : {message} (--fdi FICHIER.pdf ou --date-fdi JJ/MM/AAAA).", file=sys.stderr)
+        if controle_fdi.source in ("fdi", "saisie") and controle_fdi.date != controle_fdi.date_rfcv:
             print(f"  Date de FDI : {controle_fdi.date} ({'FDI validée' if controle_fdi.source == 'fdi' else 'saisie'}"
                   f", RFCV : {controle_fdi.date_rfcv})")
 
@@ -179,7 +178,8 @@ def convert_pdf_to_xml(
             if verbose:
                 print("  " + corps_result.summary().replace("\n", "\n  "))
 
-        return True
+        # Alerte bloquante de la FDI : fichiers écrits pour contrôle, mais échec (code de sortie 1)
+        return not controle_fdi.bloquant
 
     except DuplicateChassisError as e:
         origins = sorted({d.get("first_rfcv_number") or d.get("first_filename") or "?" for d in e.duplicates})
@@ -529,6 +529,8 @@ def main():
             warning = res.conflict_warning()
             if warning:
                 print(f"Attention : {Path(res.pdf_file).name} : {warning}.", file=sys.stderr)
+            if res.fdi_warning:
+                print(f"Attention : {Path(res.pdf_file).name} : {res.fdi_warning}.", file=sys.stderr)
 
         # Générer les rapports si demandé
         if args.report:

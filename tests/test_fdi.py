@@ -204,3 +204,75 @@ def test_cli_options_fdi():
     import converter
     aide = converter.build_parser().format_help()
     assert "--date-fdi" in aide and "--fdi" in aide
+
+
+# ------------------------------------------------------------------ revue PR #69
+def test_date_saisie_differente_de_la_fdi(rfcv, tmp_path):
+    controle = appliquer_fdi(rfcv, date_fdi="03/11/2026",
+                             fdi_pdf=fdi_fictive(tmp_path / "fdi.pdf", numero=FDI_RFCV, date_validation="02/11/2026"))
+    assert controle.date == "03/11/2026" and controle.date_fdi_pdf == "02/11/2026"
+    assert controle.date_saisie_differente
+
+
+def test_date_saisie_egale_a_la_fdi(rfcv, tmp_path):
+    controle = appliquer_fdi(rfcv, date_fdi="02/11/2026",
+                             fdi_pdf=fdi_fictive(tmp_path / "fdi.pdf", numero=FDI_RFCV, date_validation="02/11/2026"))
+    assert not controle.date_saisie_differente
+
+
+def test_alertes_fdi_messages(rfcv, tmp_path):
+    from fdi import alertes_fdi
+    assert alertes_fdi(appliquer_fdi(rfcv)) == [(
+        "fdi_date_non_verifiee",
+        f"Date de FDI non vérifiée (date de la RFCV : {DATE_RFCV}) : fournir la FDI ou la date de validation",
+        False)]
+    sans_date = ecrire_pdf(tmp_path / "sd.pdf", [(306, 162, "4. N° FDI"), (306, 173.5, FDI_RFCV),
+                                                 (446, 162, "5. Date Validation")])
+    assert alertes_fdi(appliquer_fdi(rfcv, fdi_pdf=sans_date)) == [(
+        "fdi_date_non_verifiee",
+        f"Date de validation illisible sur la FDI : saisir la date de validation (date de la RFCV : {DATE_RFCV} reprise)",
+        False)]
+    pdf = fdi_fictive(tmp_path / "fdi.pdf", numero=FDI_RFCV, date_validation="02/11/2026")
+    assert alertes_fdi(appliquer_fdi(rfcv, date_fdi="03/11/2026", fdi_pdf=pdf)) == [(
+        "fdi_date_differente",
+        "Date de FDI saisie (03/11/2026) différente de la date de validation de la FDI (02/11/2026)",
+        True)]
+
+
+def test_generation_date_saisie_differente_bloque(tmp_path, faux_rfcv):
+    pdf = fdi_fictive(tmp_path / "fdi.pdf", numero="260200000", date_validation="02/11/2026")
+    a = alertes(generer(tmp_path, faux_rfcv, date_fdi="03/11/2026", fdi_pdf=str(pdf)))["fdi_date_differente"]
+    assert a.bloquante
+
+
+def test_cli_numero_different_code_de_sortie(tmp_path, faux_rfcv):
+    from converter import convert_pdf_to_xml
+    faux_rfcv.write_bytes(b"%PDF-1.4\n")
+    pdf = fdi_fictive(tmp_path / "fdi.pdf", numero="260299999")
+    assert convert_pdf_to_xml(str(faux_rfcv), str(tmp_path / "o.xml"), taux_douane=596.302, fdi_pdf=str(pdf)) is False
+
+
+def test_cli_date_saisie_differente_code_de_sortie(tmp_path, faux_rfcv, capsys):
+    from converter import convert_pdf_to_xml
+    faux_rfcv.write_bytes(b"%PDF-1.4\n")
+    pdf = fdi_fictive(tmp_path / "fdi.pdf", numero="260200000", date_validation="02/11/2026")
+    ok = convert_pdf_to_xml(str(faux_rfcv), str(tmp_path / "o.xml"), taux_douane=596.302,
+                            date_fdi="03/11/2026", fdi_pdf=str(pdf))
+    assert ok is False
+    assert "BLOQUANT : Date de FDI saisie (03/11/2026) différente" in capsys.readouterr().err
+
+
+def test_api_avertit_date_fdi(tmp_path, faux_rfcv):
+    sys.path.insert(0, str(ROOT / "src" / "api"))
+    from api.services.conversion_service import ConversionService
+    faux_rfcv.write_bytes(b"%PDF-1.4\n")
+    r = ConversionService.convert_pdf_to_xml(str(faux_rfcv), str(tmp_path / "o.xml"), taux_douane=596.302)
+    assert r["success"]
+    assert any("Date de FDI non vérifiée" in a for a in r["avertissements"])
+
+
+def test_batch_avertit_date_fdi(tmp_path, faux_rfcv):
+    from batch_processor import BatchProcessor
+    faux_rfcv.write_bytes(b"%PDF-1.4\n")
+    res = BatchProcessor._process_single_file(faux_rfcv, str(tmp_path / "out"), taux_douane=596.302)
+    assert res.success and "Date de FDI non vérifiée" in (res.fdi_warning or "")

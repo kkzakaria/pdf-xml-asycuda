@@ -20,6 +20,7 @@ except ImportError:
 from rfcv_parser import RFCVParser
 from xml_generator import XMLGenerator
 from company_profile import apply_profile
+from fdi import alertes_fdi, appliquer_fdi
 from corps_generator import write_corps
 from metrics import ConversionMetrics, MetricsCollector
 
@@ -35,6 +36,8 @@ class BatchResult:
     metrics: Optional[ConversionMetrics] = None
     # Doublons de châssis constatés en contrôle seul : liste de dicts (chassis_number, first_rfcv_number, ...)
     chassis_conflicts: List[Dict[str, Any]] = field(default_factory=list)
+    # Date de FDI reprise du RFCV (le traitement par lots ne prend ni --fdi ni --date-fdi)
+    fdi_warning: Optional[str] = None
 
     def conflict_warning(self) -> Optional[str]:
         """Avertissement français (nombre de châssis + RFCV d'origine), None s'il n'y a pas de doublon."""
@@ -228,6 +231,9 @@ class BatchProcessor:
                 apply_profile(rfcv_data, profile, dossier=dossier, manifeste=manifeste,
                               nationalite_transport=nationalite_transport, takikro=takikro, disp=disp,
                               banque=banque)
+            # Date de FDI : en lot, celle du RFCV, signalée « non vérifiée » (déclarer par la webapp
+            # ou la conversion unitaire avec --fdi / --date-fdi)
+            result.fdi_warning = "; ".join(m for _, m, _ in alertes_fdi(appliquer_fdi(rfcv_data))) or None
 
             # Générer le XML
             generator = XMLGenerator(rfcv_data)

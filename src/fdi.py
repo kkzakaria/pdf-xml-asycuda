@@ -41,10 +41,50 @@ class ControleFDI:
     date_rfcv: Optional[str]
     numero_rfcv: Optional[str]
     numero_fdi: Optional[str]
+    date_fdi_pdf: Optional[str] = None     # date de validation lue dans la FDI jointe
+    fdi_fournie: bool = False              # un PDF de FDI a été fourni
 
     @property
     def numero_different(self) -> bool:
         return bool(self.numero_fdi and self.numero_rfcv and self.numero_fdi != self.numero_rfcv)
+
+    @property
+    def date_saisie_differente(self) -> bool:
+        """Date saisie différente de la date de validation lue dans la FDI jointe (faute de frappe probable)."""
+        return bool(self.source == "saisie" and self.date_fdi_pdf and self.date != self.date_fdi_pdf)
+
+    @property
+    def bloquant(self) -> bool:
+        return any(b for _, _, b in alertes_fdi(self))
+
+
+def alertes_fdi(c: Optional[ControleFDI]) -> list[tuple[str, str, bool]]:
+    """
+    Alertes de la date de FDI : (code, message, bloquante). Communes à la CLI, à l'API, au
+    traitement par lots et au résumé de génération (webapp).
+    - date reprise du RFCV : avertissement (la date de validation de la FDI fait foi) ;
+    - date saisie différente de celle de la FDI jointe : bloquant (décision de l'opérateur) ;
+    - n° de FDI du PDF différent de celui du RFCV : bloquant.
+    """
+    out: list[tuple[str, str, bool]] = []
+    if c is None:
+        return out
+    if c.source == "rfcv":
+        if c.fdi_fournie:
+            out.append(("fdi_date_non_verifiee",
+                        "Date de validation illisible sur la FDI : saisir la date de validation "
+                        f"(date de la RFCV : {c.date_rfcv} reprise)", False))
+        else:
+            out.append(("fdi_date_non_verifiee",
+                        f"Date de FDI non vérifiée (date de la RFCV : {c.date_rfcv}) : "
+                        "fournir la FDI ou la date de validation", False))
+    if c.date_saisie_differente:
+        out.append(("fdi_date_differente",
+                    f"Date de FDI saisie ({c.date}) différente de la date de validation de la FDI "
+                    f"({c.date_fdi_pdf})", True))
+    if c.numero_different:
+        out.append(("fdi_numero", f"N° de FDI différent : FDI {c.numero_fdi}, RFCV {c.numero_rfcv}", True))
+    return out
 
 
 def _norm(texte: str) -> str:
@@ -114,4 +154,5 @@ def appliquer_fdi(rfcv_data, date_fdi: Optional[str] = None, fdi_pdf=None) -> Co
                 if doc.code == "6610":
                     doc.document_date = date
     return ControleFDI(source=source, date=date, date_rfcv=date_rfcv, numero_rfcv=numero_rfcv,
-                       numero_fdi=info.numero if info else None)
+                       numero_fdi=info.numero if info else None,
+                       date_fdi_pdf=info.date_validation if info else None, fdi_fournie=info is not None)
